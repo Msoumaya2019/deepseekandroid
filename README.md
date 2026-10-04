@@ -91,10 +91,16 @@ En détail :
   vérifiées** : si la préparation échoue, la présentation précédente est conservée et un message
   le dit.
 
+Le lecteur est un **carrefour** : le bouton « ⋯ » de sa coquille ouvre une feuille d'options, et
+c'est de là qu'on change de sourate — les 114 sourates, ou une page précise — et qu'on choisit la
+présentation des pages. Une destination dont l'écran n'est pas écrit **n'apparaît pas** dans la
+feuille : une ligne grisée laisserait croire que l'écran existe mais qu'il est indisponible.
+
 Ce qui **reste** : l'écran des réglages d'écoute (récitateur, nombre d'écoutes, silence, vitesse
-— les valeurs existent déjà et sont appliquées), la coquille d'étude (bandeau de séance,
-marqueurs de marge), le mode signet, le sélecteur de sourate, les écrans Programme / Progrès /
-Amis / Quiz / Profil, et les notifications.
+— les valeurs existent déjà et sont appliquées, et c'est la ligne « Réglages audio » de la feuille
+qui l'attend), la traduction française, la coquille d'étude (bandeau de séance, marqueurs de
+marge), le mode signet, les écrans Programme / Progrès / Amis / Quiz / Profil, et les
+notifications.
 
 ---
 
@@ -150,7 +156,7 @@ supposent rien : ils mesurent.
 | Script | Ce qu'il établit |
 |---|---|
 | `compter-tests.py` | le nombre de tests réellement exécutés, lu dans les rapports XML. Ne compte qu'une variante par classe : additionner `**/build/test-results/**` compte chaque test deux fois (debug **et** release) et oublie les modules JVM purs, qui écrivent sous `test-results/test/` |
-| `falsifier.py` | qu'un test **détecte** ce qu'il prétend couvrir. Chaque cas casse volontairement une règle, joue la suite, et vérifie que les tests qui tombent sont ceux prévus — puis **restaure la source** et le prouve par empreinte. Seuls les rapports écrits après le lancement sont lus : un rapport périmé ferait passer un test supprimé pour vert. `--verifier` contrôle que les 18 cas sont encore jouables, sans lancer Gradle |
+| `falsifier.py` | qu'un test **détecte** ce qu'il prétend couvrir. Chaque cas casse volontairement une règle, joue la suite, et vérifie que les tests qui tombent sont ceux prévus — puis **restaure la source** et le prouve par empreinte. Seuls les rapports écrits après le lancement sont lus : un rapport périmé ferait passer un test supprimé pour vert. `--verifier` contrôle que les 22 cas sont encore jouables, sans lancer Gradle |
 | `verifier-parite-donnees.py` | que les **604 pages** et les **11 fichiers de données** embarqués sont **octet pour octet** ceux de `coran-memoire` — et que l'empreinte du manifeste d'import décrit bien les fichiers présents. À lancer avec `--source <copie locale de coran-memoire>`, ouverte en lecture seule |
 | `verifier-jetons-design.py` | que les 48 couleurs et les 5 jeux de pastilles sont **identiques** à ceux de `coran-memoire`. Même `--source`, même lecture seule |
 | `import-quran-assets.mjs` | l'import des données coraniques et des pages du moushaf depuis la même copie en lecture seule |

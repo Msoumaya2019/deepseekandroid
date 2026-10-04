@@ -449,7 +449,7 @@ affiche aussi le **nombre de classes lues** : un relevé vide signalerait que le
 aucun test, et « tout vert » ne voudrait alors rien dire.
 
 **Un test vert ne dit pas qu'il détecte quoi que ce soit.** `tools/falsifier.py` casse
-volontairement une règle — dix-huit fois, chacune sur une règle différente — relance la suite, et
+volontairement une règle — vingt-deux fois, chacune sur une règle différente — relance la suite, et
 vérifie que les tests qui tombent sont **ceux qui devaient tomber**. Il restaure ensuite le fichier
 et le prouve par empreinte, pas par la bonne volonté d'un `finally`. Deux pièges y sont traités
 nommément : les rapports XML restent sur le disque d'une exécution à l'autre, donc seuls ceux

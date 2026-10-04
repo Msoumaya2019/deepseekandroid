@@ -23,6 +23,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -40,10 +41,12 @@ import com.msoumaya.deepseekandroid.core.domain.Quran
 import com.msoumaya.deepseekandroid.core.domain.ReaderData
 import com.msoumaya.deepseekandroid.core.domain.ReaderGesture
 import com.msoumaya.deepseekandroid.core.domain.ReaderLayout
+import com.msoumaya.deepseekandroid.core.domain.ReaderOptionsText
 import com.msoumaya.deepseekandroid.core.domain.ReaderZoomGeometry
 import com.msoumaya.deepseekandroid.core.model.MushafPageSource
 import com.msoumaya.deepseekandroid.core.model.MushafSource
 import com.msoumaya.deepseekandroid.core.model.ReaderZoom
+import com.msoumaya.deepseekandroid.core.model.Surah
 import kotlin.math.roundToInt
 
 /** Le moushaf de Médine compte 604 pages. Sert de repli si le référentiel n'est pas chargé. */
@@ -70,12 +73,19 @@ private const val DEFAULT_TOTAL_PAGES = 604
  * - **Aucun réseau à l'ouverture.** Les 604 pages sont dans l'application : le lecteur s'ouvre
  *   en avion. Seule l'écoute demande une connexion, puisque les versets sont des fichiers
  *   distants — et c'est elle, et elle seule, qui le dit quand elle échoue.
+ * - **Le carrefour des réglages de lecture.** Le bouton « ⋯ » de la coquille ouvre la feuille
+ *   d'options décrite dans `ReaderOptionsSheet`, et c'est de là qu'on change de sourate
+ *   (`SurahPickerScreen`) ou qu'on choisit la présentation des pages. Une destination dont
+ *   l'écran n'est pas écrit **n'apparaît pas** dans la feuille.
  *
  * ## Ce qui viendra, et où
  *
  * Les réglages d'écoute (récitateur, nombre d'écoutes, silence entre deux écoutes, vitesse)
  * sont portés par `AudioSession` et déjà appliqués par le contrôleur ; il manque l'écran qui
- * les modifie. La coquille d'étude et le mode signet appartiennent à la phase C.
+ * les modifie, et c'est la ligne « Réglages audio » de la feuille qui l'attend. La traduction
+ * française, la coquille d'étude et le mode signet appartiennent à la phase C. Chacune de ces
+ * lignes s'ajoutera en passant sa destination à `ReaderOptionsSheet` : tant qu'elle vaut
+ * `null`, la ligne ne s'affiche pas, et rien ne ment à l'écran.
  *
  * @param initialPage page ouverte au lancement. Bornée au moushaf.
  * @param source la source coranique affichée. Elle décide du **découpage** des pages : deux
@@ -112,6 +122,12 @@ fun ReaderScreen(
     val chromeState = rememberSaveable { mutableStateOf(true) }
     val verseState = remember { mutableStateOf<Int?>(null) }
 
+    // Le panneau ouvert, s'il y en a un. Un **seul** à la fois, et c'est le modèle du client
+    // d'origine : sa feuille d'options et son sélecteur de sourate s'excluent, et refermer le
+    // second rouvre la première. Deux fenêtres empilées donneraient deux voiles superposés et
+    // un retour arrière qui ne rendrait pas la main au bon endroit.
+    var panel by rememberSaveable { mutableStateOf(ReaderPanel.NONE) }
+
     // Le lecteur audio vit aussi longtemps que l'écran : c'est la portée qui décide, et
     // `DisposableEffect` libère le lecteur natif quand on quitte. Sans service d'avant-plan,
     // l'écoute s'arrête en quittant le lecteur — c'est honnête, et ce sera l'affaire des
@@ -136,6 +152,41 @@ fun ReaderScreen(
     val zoom = zoomState.value
     val chromeVisible = chromeState.value
     val selectedVerse = verseState.value
+
+    // La sourate au début de la page affichée : c'est ce qu'on cherche en tournant une page, et
+    // c'est aussi ce que le sélecteur surligne à l'ouverture. Elle est lue dans le découpage de
+    // la **source affichée** — la première page du paquet « Coran 1441 » ne porte pas le même
+    // verset que la première page du moushaf de Médine.
+    val surah: Surah? = surahFor(source, page)
+
+    // Les destinations réellement branchées dans la feuille d'options. « Changer de sourate »
+    // l'est toujours : le sélecteur sait gérer un référentiel non chargé et le dit. « Affichage
+    // du Coran » dépend de l'appelant, car le lecteur ne connaît ni les sources ni le stockage.
+    // La traduction et les réglages d'écoute n'y figurent pas encore — leurs écrans ne sont pas
+    // écrits, et une ligne sans destination ne s'affiche pas.
+    val options: Set<ReaderOptionsText.Action> = buildSet {
+        add(ReaderOptionsText.Action.SURAH)
+        if (onOpenSourcePicker != null) add(ReaderOptionsText.Action.DISPLAY)
+    }
+    val openOptions: (() -> Unit)? = if (ReaderOptionsText.isUseful(options)) {
+        { panel = ReaderPanel.OPTIONS }
+    } else {
+        null
+    }
+
+    // Changer de page remet le zoom à la page entière et ferme la fiche du verset : garder
+    // l'agrandissement d'une autre page n'aurait aucun sens, et une fiche ouverte décrirait un
+    // verset qui n'est plus à l'écran. Une seule définition, pour que le curseur de la coquille
+    // et le sélecteur de sourate ne puissent pas diverger.
+    //
+    // Déclarée **avant** la colonne, et non dedans : le sélecteur de sourate s'affiche après
+    // elle, hors de la colonne, et une déclaration faite dans la colonne n'y serait plus
+    // visible.
+    val goToPage: (Int) -> Unit = { target ->
+        pageState.intValue = target.coerceIn(1, totalPages)
+        zoomState.value = ReaderZoom()
+        verseState.value = null
+    }
 
     // La page est rapportée à l'appelant à chaque changement, et non à chaque recomposition :
     // la clé de l'effet est la page elle-même.
@@ -313,19 +364,65 @@ fun ReaderScreen(
             ReaderChrome(
                 page = page,
                 totalPages = totalPages,
-                surahName = surahNameFor(source, page),
+                surahName = surah?.name ?: DEFAULT_SURAH_NAME,
                 zoomed = zoom.scale > ReaderGesture.ZOOMED_THRESHOLD,
-                onPage = { target ->
-                    pageState.intValue = target.coerceIn(1, totalPages)
-                    zoomState.value = ReaderZoom()
-                    verseState.value = null
-                },
+                onPage = goToPage,
                 onClose = onClose,
                 onResetZoom = { zoomState.value = ReaderZoom() },
                 onOpenSourcePicker = onOpenSourcePicker,
                 onListen = listenAction,
+                onOpenOptions = openOptions,
             )
         }
+    }
+
+    // Le panneau ouvert. Un seul à la fois : refermer le sélecteur rend la main à la feuille
+    // d'options, comme dans le client d'origine, et non au lecteur.
+    when (panel) {
+        ReaderPanel.NONE -> Unit
+
+        ReaderPanel.OPTIONS -> ReaderOptionsSheet(
+            onClose = { panel = ReaderPanel.NONE },
+            onSurah = { panel = ReaderPanel.SURAH },
+            // Le client d'origine referme la feuille **puis** ouvre le choix de présentation :
+            // les deux ne s'empilent pas, et deux voiles superposés assombriraient l'écran.
+            onDisplay = onOpenSourcePicker?.let { open ->
+                {
+                    panel = ReaderPanel.NONE
+                    open()
+                }
+            },
+        )
+
+        ReaderPanel.SURAH -> SurahPickerScreen(
+            // Un référentiel non chargé ne fait pas tomber l'écran : la première sourate est
+            // surlignée et la liste est vide, ce que le sélecteur sait déjà montrer.
+            currentSurah = surah?.number ?: 1,
+            currentPage = page,
+            onPage = { target ->
+                goToPage(target)
+                panel = ReaderPanel.NONE
+            },
+            onSelect = { chosen ->
+                // Le client d'origine arrête l'écoute et efface la fiche du verset avant de
+                // changer de sourate : sans cela, on continuerait d'écouter — ou de décrire —
+                // un verset d'une sourate qu'on vient de quitter.
+                val target = runCatching {
+                    MushafSourceNavigation.versePage(source, chosen.start)
+                }.getOrNull()
+                // Une conversion qui échoue laisse le lecteur où il est. Sauter à une page
+                // devinée serait pire : rien ne dirait qu'elle est fausse.
+                if (target != null) {
+                    audio.close()
+                    goToPage(target)
+                }
+                panel = ReaderPanel.NONE
+            },
+            // Refermer le sélecteur rend la main à la feuille d'options, et non au lecteur :
+            // c'est de là qu'on venait.
+            onClose = { panel = ReaderPanel.OPTIONS },
+            totalPages = totalPages,
+        )
     }
 }
 
@@ -375,11 +472,30 @@ private fun VerseCard(verseId: Int) {
 }
 
 /**
- * Nom de la sourate au début d'une page : c'est ce qu'on cherche en tournant une page.
+ * La sourate au début d'une page : c'est ce qu'on cherche en tournant une page.
  *
  * La page est lue dans le découpage de la source affichée : la première page du paquet
  * « Coran 1441 » ne porte pas le même verset que la première page du moushaf de Médine.
+ *
+ * `null` quand elle ne peut pas être déterminée — référentiel non chargé, page hors bornes.
+ * C'est à l'appelant de décider quoi montrer alors ; rendre un nom inventé ferait croire à une
+ * page juste.
  */
-private fun surahNameFor(source: MushafSource, page: Int): String = runCatching {
-    Quran.surahAt(MushafSourceNavigation.pageRange(source, page).start).name
-}.getOrElse { "Le Coran" }
+private fun surahFor(source: MushafSource, page: Int): Surah? = runCatching {
+    Quran.surahAt(MushafSourceNavigation.pageRange(source, page).start)
+}.getOrNull()
+
+/** Ce qu'affiche la coquille quand la sourate n'est pas déterminable. */
+private const val DEFAULT_SURAH_NAME = "Le Coran"
+
+/** Le panneau ouvert par-dessus le lecteur. Un seul à la fois. */
+private enum class ReaderPanel {
+    /** Aucun : le lecteur est nu. */
+    NONE,
+
+    /** La feuille « Plus d'options ». */
+    OPTIONS,
+
+    /** Le sélecteur de sourate. */
+    SURAH,
+}

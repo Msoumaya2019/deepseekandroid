@@ -83,7 +83,8 @@ Elle est en **lecture seule** : elle est lue pour comprendre, jamais modifiée.
 | Sélecteur de présentation | `Modal` de `App.tsx:515` | `feature:sources/QuranSourcePicker.kt` | `user_state` | **Livré**, à deux réserves | les trois présentations simples et le paquet ; il manque les deux boutons qui dépendent de la séance (« Actions de la séance », « Retour aux options »), qui viendront avec la coquille d'étude |
 | Transition de source | `src/core/quranSourceTransition.ts` | `core/domain/QuranSourceTransition.kt` | — | **Porté** | une transition à la fois, **refusée** et non mise en attente ; validation **attendue** (`commit` suspend, parce qu'ici elle écrit l'état) |
 | Source « Coran Test » | `src/coranTest/*` | `core/domain/ZipQuranSource.kt` | — | **Écrite** | le chargeur de pages est prêt, l'écran ne l'est pas |
-| Sélecteur de sourate | `src/SurahPicker.tsx` | `feature:reader` | — | **À faire** | phase B |
+| Sélecteur de sourate | `src/SurahPicker.tsx` | `feature/reader/SurahPickerScreen.kt`, `core/domain/SurahPickerText.kt` | — | **Livré** | les 114 sourates, et l'accès direct à une page. La page demandée est **validée avant d'être suivie** : une saisie refusée laisse la fenêtre ouverte avec sa raison, au lieu de la refermer sur rien. La sourate ne dit pas où aller — la conversion appartient à l'appelant, seul à connaître le découpage de la source affichée |
+| Feuille d'options du lecteur | `src/ui/ReaderMoreSheet.tsx` | `feature/reader/ReaderOptionsSheet.kt`, `core/domain/ReaderOptionsText.kt` | — | **Livré**, deux lignes sur quatre | le carrefour du lecteur, ouvert par le bouton « ⋯ » de la coquille. « Changer de sourate » et « Affichage du Coran » mènent quelque part ; « Traduction française » et « Réglages audio » attendent leurs écrans et **ne s'affichent donc pas** — une ligne grisée laisserait croire que l'écran existe |
 
 ### Un seul gestionnaire de gestes, et une règle unique
 

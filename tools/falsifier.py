@@ -227,6 +227,47 @@ CAS: list[dict] = [
         "tache": ":core:domain:test",
         "attendus": ["ZipQuranSourceTest"],
     },
+    {
+        # La regle existe pour une seule raison : ne pas offrir une ligne dont l'ecran n'est pas
+        # ecrit. Si le filtre ne filtre plus, la feuille propose « Traduction francaise » et
+        # « Reglages audio », on les touche, et rien ne se passe. Le cas mesure exactement ca.
+        "nom": "options : le filtre ne retire plus les destinations absentes",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/ReaderOptionsText.kt",
+        "avant": "fun visible(available: Set<Action>): List<Row> = ALL.filter { it.action in available }",
+        "apres": "fun visible(available: Set<Action>): List<Row> = ALL",
+        "tache": ":core:domain:test",
+        "attendus": ["ReaderOptionsTextTest"],
+    },
+    {
+        # Un `Set` ne promet aucun ordre. Si `visible` suivait celui qu'on lui donne, la feuille
+        # changerait d'ordre selon l'appelant, sans qu'aucun ecran ne le montre.
+        "nom": "options : l'ordre suit l'ensemble recu au lieu de l'ordre d'origine",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/ReaderOptionsText.kt",
+        "avant": "fun visible(available: Set<Action>): List<Row> = ALL.filter { it.action in available }",
+        "apres": "fun visible(available: Set<Action>): List<Row> = available.mapNotNull { action -> ALL.firstOrNull { it.action == action } }",
+        "tache": ":core:domain:test",
+        "attendus": ["ReaderOptionsTextTest"],
+    },
+    {
+        # Sans ce garde-fou, le lecteur ouvrirait une feuille reduite a son titre et a sa
+        # poignee : une impasse.
+        "nom": "options : la feuille s'ouvre meme sans aucune destination",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/ReaderOptionsText.kt",
+        "avant": "fun isUseful(available: Set<Action>): Boolean = visible(available).isNotEmpty()",
+        "apres": "fun isUseful(available: Set<Action>): Boolean = true",
+        "tache": ":core:domain:test",
+        "attendus": ["ReaderOptionsTextTest"],
+    },
+    {
+        # « Corriger » l'apostrophe typographique pour une apostrophe droite : le genre de
+        # retouche qui parait anodine et qui change un texte que l'utilisateur lit.
+        "nom": "options : l'apostrophe du titre est remplacee par une apostrophe droite",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/ReaderOptionsText.kt",
+        "avant": "const val TITLE: String = \"Plus d\u2019options\"",
+        "apres": "const val TITLE: String = \"Plus d'options\"",
+        "tache": ":core:domain:test",
+        "attendus": ["ReaderOptionsTextTest"],
+    },
 ]
 
 

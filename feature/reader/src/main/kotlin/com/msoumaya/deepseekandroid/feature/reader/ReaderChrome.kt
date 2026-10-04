@@ -14,6 +14,7 @@ import androidx.compose.material.icons.outlined.CenterFocusStrong
 import androidx.compose.material.icons.outlined.ChevronLeft
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Headphones
+import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -29,6 +30,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.msoumaya.deepseekandroid.core.design.component.AppIconButton
 import com.msoumaya.deepseekandroid.core.design.theme.AppTheme
+import com.msoumaya.deepseekandroid.core.domain.ReaderOptionsText
 import kotlin.math.roundToInt
 
 /**
@@ -47,6 +49,8 @@ import kotlin.math.roundToInt
  *   bouton est **absent** plutôt que présent et sans effet.
  * @param onOpenSourcePicker ouvre le choix de présentation. `null` quand l'appelant n'en
  *   propose pas : le lecteur ne connaît ni les sources ni le stockage, il demande.
+ * @param onOpenOptions ouvre la feuille « Plus d'options ». `null` quand l'appelant n'a aucune
+ *   destination à y proposer : le bouton est alors absent plutôt que présent et sans effet.
  */
 @Composable
 internal fun ReaderChrome(
@@ -62,6 +66,7 @@ internal fun ReaderChrome(
     modifier: Modifier = Modifier,
     onOpenSourcePicker: (() -> Unit)? = null,
     onListen: (() -> Unit)? = null,
+    onOpenOptions: (() -> Unit)? = null,
 ) {
     val colors = AppTheme.colors
 
@@ -125,6 +130,20 @@ internal fun ReaderChrome(
                     icon = Icons.Outlined.Headphones,
                     label = "Écouter cette page",
                     onClick = onListen,
+                )
+            }
+
+            // Le carrefour du lecteur : sourate, traduction, écoute, présentation. C'est le
+            // seul chemin vers le sélecteur de sourate, comme dans le client d'origine, où
+            // « Plus » est la dernière des cinq actions. Absent quand l'appelant n'a aucune
+            // destination à proposer : une feuille réduite à son titre serait une impasse.
+            if (onOpenOptions != null) {
+                AppIconButton(
+                    icon = Icons.Outlined.MoreHoriz,
+                    // Le libellé est celui de la feuille : c'est le même mot, et deux chaînes
+                    // pour la même chose finiraient par diverger.
+                    label = ReaderOptionsText.TITLE,
+                    onClick = onOpenOptions,
                 )
             }
         }
