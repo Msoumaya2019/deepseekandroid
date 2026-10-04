@@ -20,12 +20,12 @@ libre de conserver l'un, l'autre, ou les deux.
 | **D** | Amis, Quiz, notifications, progrès | à venir |
 | **E** | Hors ligne, optimisation, tests, nettoyage | à venir |
 
-Ce qui est **fait et éprouvé** aujourd'hui — **312 tests**, tous verts :
+Ce qui est **fait et éprouvé** aujourd'hui — **353 tests**, tous verts :
 
 | Module | Tests | Ce qu'ils couvrent |
 |---|---|---|
-| `core:domain` | **211** | le domaine porté de `src/core/*.ts`, exécuté sur les **vraies données** (6 236 versets, 114 sourates, 604 pages) — dont la géométrie du lecteur, les gestes, la fenêtre de préchargement, les règles de silence entre deux versets et la relecture des préférences d'écoute |
-| `core:data` | **26** | le magasin JSON local, la file hors ligne, la fusion à trois voies, la règle du propriétaire — sur de **vrais fichiers** |
+| `core:domain` | **230** | le domaine porté de `src/core/*.ts`, exécuté sur les **vraies données** (6 236 versets, 114 sourates, 604 pages) — dont la géométrie du lecteur, les gestes, la fenêtre de préchargement, les règles de silence entre deux versets, la relecture des préférences d'écoute, et les règles du paquet « Coran 1441 » : décision d'entrée, taille exacte, dimensions d'image, témoin d'installation |
+| `core:data` | **48** | le magasin JSON local, la file hors ligne, la fusion à trois voies, la règle du propriétaire — sur de **vrais fichiers** ; l'installation du paquet 1441 (reprise, témoin écrit en dernier, refus d'une archive douteuse) sur un **vrai ZIP** ; et le transport HTTP contre un **vrai serveur** local, en-tête `Range` compris |
 | `feature:home` | **22** | les règles de l'accueil : point de reprise, `scheduledDate` contre `date`, série de jours, période de chaque bandeau, objectif de la semaine |
 | `core:design` | **19** | les règles du thème : asymétrie de l'accent, fond secondaire, distinction des cinq palettes, résolution des polices |
 | `core:audio` | **14** | l'enchaînement réel d'une séance : silence technique observé, silence choisi sur les reprises seulement, arrêt en fin de passage, répétition illimitée, changement de récitateur, fin oubliée après fermeture — sur une **horloge virtuelle** |
@@ -70,11 +70,17 @@ En détail :
   Le mini-lecteur est **dans le flux**, lui aussi : la page reste entière. La décision
   d'enchaînement est dans le domaine, donc éprouvée ; le silence technique de 200 ms entre deux
   versets est **observé par un test**, pas attendu.
+- **Paquet « Coran 1441 »** : l'archive de **102 608 011 octets** — 9 060 images, 604 pages ×
+  15 lignes — se télécharge, **se reprend** après une coupure et se vérifie avant d'être déclarée
+  installée. Le témoin d'installation est écrit **en dernier**, donc sa présence est une preuve et
+  non une intention. Une reprise qui reçoit une réponse `200` **jette** le partiel au lieu de s'y
+  ajouter : sans cela l'archive aurait la bonne taille et un contenu faux, et rien ne le dirait
+  avant l'écran.
 
-Ce qui **reste** : le téléchargement de la source « Coran 1441 », l'écran des réglages d'écoute
-(récitateur, nombre d'écoutes, silence, vitesse — les valeurs existent déjà et sont appliquées),
-la coquille d'étude (bandeau de séance, marqueurs de marge), le mode signet, le sélecteur de
-sourate, les écrans Programme / Progrès / Amis / Quiz / Profil, et les notifications.
+Ce qui **reste** : l'écran de téléchargement de la source « Coran 1441 », l'écran des réglages
+d'écoute (récitateur, nombre d'écoutes, silence, vitesse — les valeurs existent déjà et sont
+appliquées), la coquille d'étude (bandeau de séance, marqueurs de marge), le mode signet, le
+sélecteur de sourate, les écrans Programme / Progrès / Amis / Quiz / Profil, et les notifications.
 
 ---
 

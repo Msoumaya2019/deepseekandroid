@@ -76,7 +76,8 @@ Elle est en **lecture seule** : elle est lue pour comprendre, jamais modifiée.
 | Coquille du lecteur | `src/ui/ImmersiveReaderChrome.tsx` | `feature/reader/ReaderChrome.kt` | — | **Livré** | **dans le flux**, pas flottante : une barre flottante masquerait le dernier verset de la page |
 | Fiche du verset | `ReaderMoreSheet`, `sessionPanel==='verse'` | `feature/reader/ReaderScreen.kt` (`VerseCard`) | `user_state` | **Livré** | appui long → référence et traduction française du sens |
 | Préchargement des voisins | `Image.prefetch` sur `page-1` / `page+1` | `core/domain/ReaderInteraction.kt` (`ReaderPreload`), `MushafAssets.kt` | — | **Livré** | **trois pages au maximum**, la courante en tête ; borné et éprouvé |
-| Téléchargement de sources | `src/services/quranDownload.ts`, `src/ui/QuranDownload.tsx` | — | — | **À faire** | archive de 102 608 011 octets, reprise et témoin de 9 060 fichiers |
+| Téléchargement de sources | `src/services/quranDownload.ts` | `core/domain/QuranArchive.kt`, `core/data/local/QuranArchiveInstaller.kt` | — | **Porté** | archive de 102 608 011 octets, reprise, témoin de 9 060 fichiers écrit **en dernier** |
+| Écran de téléchargement | `src/ui/QuranDownload.tsx` | — | — | **À faire** | l'avancement est déjà publié (`ArchivePhase`, `ArchiveProgress`) |
 | Source « Coran Test » | `src/coranTest/*` | `core/domain/ZipQuranSource.kt` | — | **Écrite** | le chargeur de pages est prêt, l'écran ne l'est pas |
 | Sélecteur de sourate | `src/SurahPicker.tsx` | `feature:reader` | — | **À faire** | phase B |
 
@@ -138,6 +139,29 @@ Trois conséquences qui décident de l'architecture du lecteur :
 3. **`coranTest` ne se rend pas comme les autres.** C'est une police, pas une image : le même
    écran doit savoir peindre du texte coranique aussi bien qu'une page. C'est la raison pour
    laquelle `feature/reader` ne peut pas être un simple `ImageView` zoomable.
+
+Ce que le portage Android change, et pourquoi :
+
+- **La reprise ne tient pas de fichier annexe.** Le client d'origine écrit un `resume.json` parce
+  que son gestionnaire de fichiers garde les octets repris ailleurs que dans le fichier cible.
+  Ici la **longueur du partiel est la position de reprise** : rien ne peut se désynchroniser.
+- **Une réponse `200` jette le partiel, une `206` s'y ajoute.** Écrire la suite d'un partiel à
+  partir d'un flux qui repart de zéro donnerait une archive de **taille correcte et de contenu
+  faux** : elle passerait tous les contrôles de taille et ne se verrait qu'à l'écran, sur une page
+  décalée. C'est le pire défaut possible ici, et il a son test dédié.
+- **La taille annoncée par le serveur n'est pas lue.** En réponse `206`, un `Content-Length` vaut
+  la longueur du **fragment** : la comparer à la taille de l'archive refuserait chaque reprise,
+  c'est-à-dire exactement le cas qu'on veut rendre possible. Le juge est la longueur du fichier
+  écrit, et elle seule.
+- **Le plafond de 2 Mio par image est appliqué en lisant**, pas en regardant la taille annoncée
+  par l'entrée ZIP : une archive peut annoncer 1 ko et en fournir 200 Mo, et lire d'abord pour
+  vérifier ensuite ne protège de rien.
+- **Une seule installation à la fois.** Deux écritures concurrentes dans le même fichier
+  produiraient une archive que rien ne signalerait comme fausse avant l'affichage.
+- **La règle d'archive est séparée du réseau.** `QuranArchive` ne connaît ni fichier ni socket, et
+  `ArchiveTransport` est une interface : l'installation s'éprouve sans réseau, sans serveur et
+  sans fabriquer 102 Mo — la taille attendue est injectée, et c'est la même valeur qui règle la
+  reprise, l'avancement et le contrôle final.
 
 ---
 

@@ -395,14 +395,14 @@ de tout le domaine — déjà testé — pour un gain nul. Elle n'est donc pas l
 
 | Suite | Nombre | Ce qu'elle couvre |
 |---|---|---|
-| `core:domain` | 211 | Coran, dates, programme, révisions, consolidations, signets, audio, file d'écoute et silences, quiz, lecteur et gestes, fusion hors ligne, file d'attente, composition de synchronisation, décision d'ouverture, messages de connexion |
-| `core:data` | 26 | lecture locale, hors ligne, premier chargement, isolation des comptes, fichier d'état illisible, file, idempotence, remise à zéro, règle du propriétaire |
+| `core:domain` | 230 | Coran, dates, programme, révisions, consolidations, signets, audio, file d'écoute et silences, quiz, lecteur et gestes, fusion hors ligne, file d'attente, composition de synchronisation, décision d'ouverture, messages de connexion, **règles du paquet « Coran 1441 »** (décision d'entrée, taille exacte, dimensions d'image, témoin d'installation) |
+| `core:data` | 48 | lecture locale, hors ligne, premier chargement, isolation des comptes, fichier d'état illisible, file, idempotence, remise à zéro, règle du propriétaire, **installation du paquet 1441** (reprise, témoin écrit en dernier, refus d'une archive douteuse) et **transport HTTP** (en-tête `Range`, `200` contre `206`, refus) |
 | `feature:home` | 22 | point de reprise, `scheduledDate` contre `date`, série de jours, période de chaque bandeau, objectif de la semaine, libellés de repli |
 | `core:design` | 19 | asymétrie de l'accent, fond secondaire, distinction des cinq palettes, échelles de `tokens.ts`, résolution des polices, écran Apparence |
 | `core:audio` | 14 | conduite d'une séance sur horloge virtuelle : silence observé, reprises, arrêt, répétition illimitée, changement de récitateur, fin oubliée après fermeture, fichier illisible |
 | `feature:reader` | 11 | nommage des pages, bornes du geste, repli d'affichage d'une préférence d'écoute illisible |
 | `feature:auth` | 9 | activation du formulaire : adresse, longueur du mot de passe, occupation, libellés |
-| **total** | **312** | 25 classes de test |
+| **total** | **353** | 28 classes de test |
 
 Le domaine est éprouvé sur les **vraies données** — 6 236 versets, 114 sourates, 604 pages — et
 non sur une maquette de trois versets, qui laisserait passer une erreur d'indexation ou une
@@ -418,6 +418,15 @@ plutôt que de lui. Une mesure utile à connaître : `advanceUntilIdle()` **n'ex
 travail d'un `backgroundScope`, où vivent les collecteurs du contrôleur audio. Un test qui s'en
 servirait verrait un enchaînement qui ne se produit jamais — et, pire, il passerait quand on lui
 demande de constater une **absence**. Ces tests avancent donc l'horloge explicitement.
+
+**L'installation du paquet « Coran 1441 » s'éprouve sans réseau et sans fabriquer 102 Mo.** La
+règle d'archive vit dans le domaine, où elle ne connaît ni fichier ni socket ; l'installeur reçoit
+un `ArchiveTransport`, une taille attendue et une horloge. Les tests construisent donc un **vrai
+ZIP** de 9 060 entrées minuscules et injectent sa taille : le chemin éprouvé reste celui de la
+production, puisque c'est **la même valeur** qui règle la reprise, l'avancement et le contrôle
+final. Le transport HTTP, lui, est éprouvé contre un **vrai serveur** sur la boucle locale : ce qui
+peut se tromper à cet endroit est la forme de la requête — l'en-tête `Range` — et la lecture du
+code de réponse, et une doublure qui rendrait directement un flux n'en dirait rien.
 
 **Le total ne se déduit pas d'un `grep @Test`.** `tools/compter-tests.py` lit les rapports XML du
 coureur, et ne retient qu'une variante par classe : additionner `**/build/test-results/**` compte

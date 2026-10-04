@@ -1,3 +1,8 @@
+// L'horloge virtuelle (`advanceTimeBy`, `runCurrent`) est marquée expérimentale par la
+// bibliothèque. L'opt-in est déclaré ici, une fois : sans lui, chaque appel produisait un
+// avertissement, et vingt-cinq avertissements de bruit finissent par masquer celui qui compte.
+@file:OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+
 package com.msoumaya.deepseekandroid.core.audio
 
 import com.msoumaya.deepseekandroid.core.domain.Audio
