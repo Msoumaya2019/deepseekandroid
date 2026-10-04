@@ -13,6 +13,7 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.CenterFocusStrong
 import androidx.compose.material.icons.outlined.ChevronLeft
 import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.Headphones
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
@@ -39,6 +40,10 @@ import kotlin.math.roundToInt
  *
  * Aucun bouton mort : une action dont l'écran n'est pas encore écrit est **absente**, pas
  * grisée. Un bouton qui ne fait rien fait douter du reste de l'écran.
+ *
+ * @param onListen écoute la page affichée. `null` quand elle ne peut pas être écoutée — le
+ *   référentiel n'est pas chargé, ou la page n'a pas de plage de versets : dans ce cas le
+ *   bouton est **absent** plutôt que présent et sans effet.
  */
 @Composable
 internal fun ReaderChrome(
@@ -49,7 +54,10 @@ internal fun ReaderChrome(
     onPage: (Int) -> Unit,
     onClose: () -> Unit,
     onResetZoom: () -> Unit,
+    // `modifier` reste le **premier paramètre optionnel** : sinon `onListen` prendrait sa place,
+    // et le lecteur d'un appelant qui passe sa mise en page au doigt ne s'appliquerait plus.
     modifier: Modifier = Modifier,
+    onListen: (() -> Unit)? = null,
 ) {
     val colors = AppTheme.colors
 
@@ -93,6 +101,16 @@ internal fun ReaderChrome(
                     icon = Icons.Outlined.CenterFocusStrong,
                     label = "Revenir à la page entière",
                     onClick = onResetZoom,
+                )
+            }
+
+            // Écouter la page. Absent quand la page n'a pas de plage connue : un bouton qui ne
+            // peut rien faire vaut moins que pas de bouton.
+            if (onListen != null) {
+                AppIconButton(
+                    icon = Icons.Outlined.Headphones,
+                    label = "Écouter cette page",
+                    onClick = onListen,
                 )
             }
         }

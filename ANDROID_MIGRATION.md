@@ -151,9 +151,11 @@ Trois conséquences qui décident de l'architecture du lecteur :
 | Chronologie de chapitre | `parseChapterAudio`, `src/services/quranAudioTimeline.ts` | `core/domain/Audio.kt` | — | **Porté** | les horodatages sont en **millisecondes**, puis divisés par 1000 — piège vérifié par test |
 | Pause entre versets | `DEFAULT_AYAH_GAP_MS = 200` | `core/domain/Texts.kt` | — | **Porté** | |
 | Cache audio par verset | `src/services/verseAudioCache.ts` | `core/data/local/ResourceFiles.kt` | — | **Écrite** | |
-| Lecture audio | `src/PassageAudioPlayer.tsx` | `feature:reader` + **Media3 / ExoPlayer** | — | **À faire** | phase B |
-| Mini-lecteur | intégré au lecteur | `feature:reader` | — | **À faire** | discret, ne doit pas masquer le moushaf |
-| Répétition 1x/2x/3x/5x, plage X→Y | `audio-repeat-preferences` (local) | réglages locaux | — | **À faire** | phase B |
+| Lecture audio | `src/PassageAudioPlayer.tsx` | `core/audio` — `ExoAudioOutput`, `AudioSessionController` | — | **Livré** | un seul lecteur, focus audio délégué à `ExoPlayer` ; l'écoute s'arrête en quittant le lecteur tant qu'aucun service d'avant-plan n'existe (phase D) |
+| Mini-lecteur | intégré au lecteur | `feature/reader/MiniPlayer.kt` | — | **Livré** | **dans le flux** : il prend sa hauteur au lieu de recouvrir le dernier verset |
+| Silence entre deux écoutes | `settingsRef.current.gap * 1000`, plancher de 200 ms | `core/domain/AudioQueue.kt` | — | **Livré** | le silence choisi ne s'applique **qu'aux reprises** ; entre deux versets voisins, seule la marge technique joue. C'est le plus grand des deux, jamais leur somme — trois mutations le prouvent |
+| Répétition 1x/2x/3x/5x, plage X→Y | `audio-repeat-preferences` (local) | `core/domain/AudioSession.kt` | — | **Livré** | 1/2/3/5/10, « Autre » (1 à 999), « ∞ » ; vitesse 0,75×/1×/1,25×. Un champ enregistré hors bornes est ignoré **sans emporter ses voisins** |
+| Écran des réglages d'écoute | `PassageAudioPlayer.tsx`, panneau avancé | — | — | **À faire** | les valeurs existent et sont appliquées ; il manque l'écran qui les modifie |
 | Enregistrement de récitation | `src/RecitationRecorder.tsx`, `src/services/recitations.ts` | — | `recitations`, `recitation_corrections`, `recitation_feedback` | **À faire** | phase D |
 
 ---

@@ -13,17 +13,25 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.msoumaya.deepseekandroid.core.audio.AudioSessionController
+import com.msoumaya.deepseekandroid.core.audio.ExoAudioOutput
 import com.msoumaya.deepseekandroid.core.design.component.AppCard
 import com.msoumaya.deepseekandroid.core.design.theme.AppTheme
+import com.msoumaya.deepseekandroid.core.domain.Audio
+import com.msoumaya.deepseekandroid.core.domain.AudioSession
 import com.msoumaya.deepseekandroid.core.domain.PageNavigation
 import com.msoumaya.deepseekandroid.core.domain.Quran
 import com.msoumaya.deepseekandroid.core.domain.ReaderData
@@ -51,13 +59,18 @@ private const val DEFAULT_TOTAL_PAGES = 604
  * - **Un seul gestionnaire de gestes**, décrit dans `ReaderGestures` : balayage, pincement,
  *   appui et appui long ne peuvent pas se disputer les mêmes événements.
  * - **Trois pages en mémoire au maximum** — la courante et ses voisines — via `ReaderPreload`.
- * - **Aucun réseau.** Les 604 pages sont dans l'application : le lecteur s'ouvre en avion.
+ * - **L'écoute de la page**, avec le mini-lecteur décrit dans `MiniPlayer`. La coquille et le
+ *   mini-lecteur sont **dans le flux** : ils prennent leur hauteur au lieu de recouvrir la
+ *   page, donc le dernier verset reste lisible sans rien faire disparaître.
+ * - **Aucun réseau à l'ouverture.** Les 604 pages sont dans l'application : le lecteur s'ouvre
+ *   en avion. Seule l'écoute demande une connexion, puisque les versets sont des fichiers
+ *   distants — et c'est elle, et elle seule, qui le dit quand elle échoue.
  *
  * ## Ce qui viendra, et où
  *
- * L'audio verset par verset, la coquille d'étude (bandeau de séance, marqueurs de marge) et
- * le mode signet appartiennent aux phases B et C. La place est faite : ces actions
- * **apparaîtront dans la coquille quand elles existeront**, et n'y figurent pas en attendant.
+ * Les réglages d'écoute (récitateur, nombre d'écoutes, silence entre deux écoutes, vitesse)
+ * sont portés par `AudioSession` et déjà appliqués par le contrôleur ; il manque l'écran qui
+ * les modifie. La coquille d'étude et le mode signet appartiennent à la phase C.
  *
  * @param initialPage page ouverte au lancement. Bornée au moushaf.
  * @param onClose ferme le lecteur. L'écran ne connaît pas la navigation : c'est l'appelant
@@ -80,10 +93,38 @@ fun ReaderScreen(
     val chromeState = rememberSaveable { mutableStateOf(true) }
     val verseState = remember { mutableStateOf<Int?>(null) }
 
+    // Le lecteur audio vit aussi longtemps que l'écran : c'est la portée qui décide, et
+    // `DisposableEffect` libère le lecteur natif quand on quitte. Sans service d'avant-plan,
+    // l'écoute s'arrête en quittant le lecteur — c'est honnête, et ce sera l'affaire des
+    // notifications que de la poursuivre.
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val audio = remember(context) {
+        AudioSessionController(ExoAudioOutput(context.applicationContext), scope)
+    }
+    DisposableEffect(audio) {
+        onDispose { audio.release() }
+    }
+    val audioState by audio.state.collectAsState()
+
+    // Les réglages d'écoute. Ce sont les valeurs du client d'origine ; l'écran qui les modifie
+    // viendra avec le reste de la phase B.
+    val settings = remember { AudioSession() }
+    val reciterName = remember { Audio.defaultReciter.name }
+    val countLabel = remember(settings) { countLabelOf(settings) }
+
     val page by pageState
     val zoom = zoomState.value
     val chromeVisible = chromeState.value
     val selectedVerse = verseState.value
+
+    // `null` quand la page n'a pas de plage connue : l'action est alors absente plutôt que
+    // présente et sans effet.
+    val listenAction: (() -> Unit)? = remember(page, settings) {
+        runCatching { Quran.pageRange(page) }.getOrNull()?.let { range ->
+            { audio.start(range, settings) }
+        }
+    }
 
     Column(
         modifier = modifier
@@ -206,6 +247,18 @@ fun ReaderScreen(
             }
         }
 
+        // Le mini-lecteur prend sa hauteur, comme la coquille : la page reste entière, et le
+        // dernier verset ne passe jamais dessous.
+        if (audioState.isOpen) {
+            MiniPlayer(
+                state = audioState,
+                reciterName = reciterName,
+                countLabel = countLabel,
+                onToggle = { audio.toggle() },
+                onStop = { audio.close() },
+            )
+        }
+
         selectedVerse?.let { verseId ->
             VerseCard(verseId = verseId)
         }
@@ -223,6 +276,7 @@ fun ReaderScreen(
                 },
                 onClose = onClose,
                 onResetZoom = { zoomState.value = ReaderZoom() },
+                onListen = listenAction,
             )
         }
     }

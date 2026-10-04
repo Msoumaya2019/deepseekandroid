@@ -37,9 +37,15 @@ dependencies {
     // `core:domain` porte la géométrie du lecteur, les données de page et les règles de geste.
     //
     // Ni réseau, ni stockage : le lecteur doit s'ouvrir en avion, et il n'a donc rien à
-    // demander à `core:data`. C'est une contrainte, pas une économie.
+    // demander à `core:data`. C'est une contrainte, pas une économie. `core:audio` n'y
+    // contredit rien : il ne se connecte pas, il lit des URL qu'on lui donne.
     api(project(":core:design"))
     implementation(project(":core:domain"))
+
+    // L'écoute. `core:audio` porte le lecteur Media3 et l'enchaînement des versets ; il est
+    // exposé par l'implémentation seule, car aucun type de Media3 ne doit apparaître dans la
+    // signature publique de ce module.
+    implementation(project(":core:audio"))
 
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.compose.material.icons.extended)

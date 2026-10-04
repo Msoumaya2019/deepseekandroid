@@ -28,6 +28,7 @@ données du Coran.
 :core:domain            règles métier — JVM pur
 :core:data              stockage local, chiffrement, Supabase, dépôts (Android)
 :core:design            jetons et composants Compose
+:core:audio             lecture audio (Media3) et enchaînement des versets (Android)
 
 :feature:home           accueil
 :feature:reader         lecteur de moushaf
@@ -48,13 +49,25 @@ type.
 (`AndroidKeyStore`) et d'un `Context` pour localiser les fichiers. Tout le reste du module
 n'en dépend pas : les magasins prennent un `File`, ce qui les rend éprouvables sur la JVM.
 
+**Pourquoi `core:audio` est un module, et pas du code dans le lecteur.** `ExoPlayer` a besoin
+d'un `Context`, donc ce module est Android — mais **la décision d'enchaînement n'y est pas**.
+Elle est dans `core:domain` (`AudioQueue`), où elle s'éprouve sans appareil. Ce qui reste ici
+est le **moment** : attendre le silence, puis demander le verset suivant. Le module ne dépend
+pas de `core:data` : il ne se connecte à rien, il lit des URL qu'on lui donne, et c'est ce qui
+permet au lecteur de s'ouvrir en avion.
+
+`AudioOutput` est une interface pour une raison précise : `ExoPlayer` ne tourne pas sur la JVM.
+Le contrôleur s'éprouve donc contre une doublure, et les règles de silence — les seules qu'on
+peut se tromper à écrire — sont mesurées, pas supposées.
+
 ---
 
 ## Sens des dépendances
 
 ```
 app ─┬─> navigation ──> feature:* ──> core:design
-     │                                 core:data ──> core:domain ──> core:model
+     │                                 core:audio ──> core:domain ──> core:model
+     │                                 core:data  ──> core:domain ──> core:model
      └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -382,12 +395,14 @@ de tout le domaine — déjà testé — pour un gain nul. Elle n'est donc pas l
 
 | Suite | Nombre | Ce qu'elle couvre |
 |---|---|---|
-| `core:domain` | 153 | Coran, dates, programme, révisions, consolidations, signets, audio, quiz, lecteur, fusion hors ligne, file d'attente, composition de synchronisation, décision d'ouverture, messages de connexion |
-| `core:design` | 19 | asymétrie de l'accent, fond secondaire, distinction des cinq palettes, échelles de `tokens.ts`, résolution des polices, écran Apparence |
-| `feature:home` | 22 | point de reprise, `scheduledDate` contre `date`, série de jours, période de chaque bandeau, objectif de la semaine, libellés de repli |
+| `core:domain` | 211 | Coran, dates, programme, révisions, consolidations, signets, audio, file d'écoute et silences, quiz, lecteur et gestes, fusion hors ligne, file d'attente, composition de synchronisation, décision d'ouverture, messages de connexion |
 | `core:data` | 26 | lecture locale, hors ligne, premier chargement, isolation des comptes, fichier d'état illisible, file, idempotence, remise à zéro, règle du propriétaire |
+| `feature:home` | 22 | point de reprise, `scheduledDate` contre `date`, série de jours, période de chaque bandeau, objectif de la semaine, libellés de repli |
+| `core:design` | 19 | asymétrie de l'accent, fond secondaire, distinction des cinq palettes, échelles de `tokens.ts`, résolution des polices, écran Apparence |
+| `core:audio` | 14 | conduite d'une séance sur horloge virtuelle : silence observé, reprises, arrêt, répétition illimitée, changement de récitateur, fin oubliée après fermeture, fichier illisible |
+| `feature:reader` | 11 | nommage des pages, bornes du geste, repli d'affichage d'une préférence d'écoute illisible |
 | `feature:auth` | 9 | activation du formulaire : adresse, longueur du mot de passe, occupation, libellés |
-| **total** | **229** | 19 classes de test |
+| **total** | **312** | 25 classes de test |
 
 Le domaine est éprouvé sur les **vraies données** — 6 236 versets, 114 sourates, 604 pages — et
 non sur une maquette de trois versets, qui laisserait passer une erreur d'indexation ou une
@@ -396,6 +411,13 @@ temporaire et un serveur en mémoire capable de tomber en panne. Les règles de 
 éprouvées sur le **vrai référentiel**, chargé par le même chemin de classes que sur l'appareil :
 un test qui lirait les données depuis un chemin de fichier ne prouverait pas que le chargement
 fonctionne dans l'APK.
+
+**La conduite d'une séance d'écoute s'éprouve sur une horloge virtuelle**, jamais en dormant :
+un test qui attend 200 ms pour de vrai échoue sur une machine chargée, et fait douter du code
+plutôt que de lui. Une mesure utile à connaître : `advanceUntilIdle()` **n'exécute pas** le
+travail d'un `backgroundScope`, où vivent les collecteurs du contrôleur audio. Un test qui s'en
+servirait verrait un enchaînement qui ne se produit jamais — et, pire, il passerait quand on lui
+demande de constater une **absence**. Ces tests avancent donc l'horloge explicitement.
 
 **Le total ne se déduit pas d'un `grep @Test`.** `tools/compter-tests.py` lit les rapports XML du
 coureur, et ne retient qu'une variante par classe : additionner `**/build/test-results/**` compte

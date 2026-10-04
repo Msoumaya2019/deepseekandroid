@@ -23,6 +23,7 @@ rootProject.name = "deepseekandroid"
 //  core:domain    -> logique métier pure (portée depuis src/core/ de coran-memoire)
 //  core:data      -> persistance locale (SQLite, DataStore, Keystore) + Supabase
 //  core:design    -> jetons de design et composants Compose partagés
+//  core:audio     -> lecture audio (Media3) et enchaînement des versets
 //  feature:*      -> un module par domaine fonctionnel
 //  navigation     -> graphe de navigation unique
 //  app            -> point d'entrée, assemblage, DI manuelle
@@ -34,6 +35,7 @@ include(":core:model")
 include(":core:domain")
 include(":core:data")
 include(":core:design")
+include(":core:audio")
 
 include(":navigation")
 

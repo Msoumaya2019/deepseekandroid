@@ -15,21 +15,22 @@ libre de conserver l'un, l'autre, ou les deux.
 | Phase | Contenu | État |
 |---|---|---|
 | **A** | Analyse, architecture, Supabase, authentification, navigation, accueil | livrée — porte d'entrée, coquille de navigation et accueil |
-| **B** | Coran, lecteur, cache, audio | **en cours** — les 604 pages du moushaf sont embarquées, la carte des sources est écrite |
+| **B** | Coran, lecteur, cache, audio | **en cours** — 604 pages embarquées, lecteur complet, **écoute verset par verset** avec mini-lecteur |
 | **C** | Apprentissage, révisions, consolidation, programme | à venir |
 | **D** | Amis, Quiz, notifications, progrès | à venir |
 | **E** | Hors ligne, optimisation, tests, nettoyage | à venir |
 
-Ce qui est **fait et éprouvé** aujourd'hui — **261 tests**, tous verts :
+Ce qui est **fait et éprouvé** aujourd'hui — **312 tests**, tous verts :
 
 | Module | Tests | Ce qu'ils couvrent |
 |---|---|---|
-| `core:domain` | **178** | le domaine porté de `src/core/*.ts`, exécuté sur les **vraies données** (6 236 versets, 114 sourates, 604 pages) — dont la géométrie du lecteur, les gestes et la fenêtre de préchargement |
+| `core:domain` | **211** | le domaine porté de `src/core/*.ts`, exécuté sur les **vraies données** (6 236 versets, 114 sourates, 604 pages) — dont la géométrie du lecteur, les gestes, la fenêtre de préchargement, les règles de silence entre deux versets et la relecture des préférences d'écoute |
 | `core:data` | **26** | le magasin JSON local, la file hors ligne, la fusion à trois voies, la règle du propriétaire — sur de **vrais fichiers** |
 | `feature:home` | **22** | les règles de l'accueil : point de reprise, `scheduledDate` contre `date`, série de jours, période de chaque bandeau, objectif de la semaine |
 | `core:design` | **19** | les règles du thème : asymétrie de l'accent, fond secondaire, distinction des cinq palettes, résolution des polices |
+| `core:audio` | **14** | l'enchaînement réel d'une séance : silence technique observé, silence choisi sur les reprises seulement, arrêt en fin de passage, répétition illimitée, changement de récitateur, fin oubliée après fermeture — sur une **horloge virtuelle** |
+| `feature:reader` | **11** | le nommage des pages (une page blanche est une panne silencieuse), les bornes du geste, et le repli d'affichage quand une préférence d'écoute est illisible |
 | `feature:auth` | **9** | l'activation du formulaire de connexion : adresse, longueur du mot de passe, occupation |
-| `feature:reader` | **7** | le nommage des pages (une page blanche est une panne silencieuse) et les bornes du geste |
 
 En détail :
 
@@ -64,10 +65,16 @@ En détail :
   balayage, pincement, appui et appui long ; **trois pages en mémoire au maximum** ; coquille
   discrète **dans le flux**, qui ne recouvre jamais le dernier verset ; fiche du verset à
   l'appui long, avec la traduction française du sens. Il s'ouvre **en avion**.
+- **Écoute verset par verset** : sept récitateurs, répétition du passage ou de chaque verset,
+  1 à 999 écoutes ou sans fin, silence réglable entre deux écoutes, vitesse 0,75× / 1× / 1,25×.
+  Le mini-lecteur est **dans le flux**, lui aussi : la page reste entière. La décision
+  d'enchaînement est dans le domaine, donc éprouvée ; le silence technique de 200 ms entre deux
+  versets est **observé par un test**, pas attendu.
 
-Ce qui **reste** : le téléchargement de la source « Coran 1441 », l'audio Media3, la coquille
-d'étude (bandeau de séance, marqueurs de marge), le mode signet, le sélecteur de sourate, les
-écrans Programme / Progrès / Amis / Quiz / Profil, et les notifications.
+Ce qui **reste** : le téléchargement de la source « Coran 1441 », l'écran des réglages d'écoute
+(récitateur, nombre d'écoutes, silence, vitesse — les valeurs existent déjà et sont appliquées),
+la coquille d'étude (bandeau de séance, marqueurs de marge), le mode signet, le sélecteur de
+sourate, les écrans Programme / Progrès / Amis / Quiz / Profil, et les notifications.
 
 ---
 
