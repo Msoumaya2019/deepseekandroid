@@ -72,6 +72,15 @@ jobs:
 
       - name: Préparer le SDK Android
         uses: android-actions/setup-android@v3
+        with:
+          # `packages` est **obligatoire** ici, et pas pour la raison habituelle.
+          # L'action installe par défaut `tools platform-tools` ; or le paquet `tools` n'existe
+          # plus dans le dépôt SDK — il a été remplacé par `cmdline-tools`. L'action échoue donc
+          # sur « Warning: Failed to find package 'tools' » puis « exit code 1 », **avant** que
+          # Gradle ne soit appelé : le journal ne parle ni de tests, ni de lint, ni de code.
+          # On demande exactement ce que le projet cible — compileSdk 36, build-tools 36 — et
+          # surtout pas `tools`.
+          packages: "platform-tools platforms;android-36 build-tools;36.0.0"
 
       - name: Rendre le lanceur exécutable
         # Le bit exécutable n'est pas toujours conservé par le dépôt ; sans cela, `./gradlew`

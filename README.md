@@ -124,6 +124,28 @@ supabase.anonKey=<clé anon / publishable>
 > quiconque l'extrairait du binaire aurait un accès total à toutes les données de tous les
 > utilisateurs. Seule la clé `anon` a sa place dans un client.
 
+### Pour l'intégration continue
+
+`local.properties` n'est pas versionné, donc l'exécutant de la CI ne l'a pas. La clé y est fournie
+par un **secret de dépôt** — jamais par un fichier :
+
+```bash
+gh secret set SUPABASE_ANON_KEY --repo Msoumaya2019/deepseekandroid --body "<clé publishable>"
+gh secret set SUPABASE_URL      --repo Msoumaya2019/deepseekandroid --body "https://npbwnvrqmajwqtnncuyv.supabase.co"
+```
+
+Sans ces secrets, le flux reste **vert** : l'APK publié se compile simplement en mode hors ligne.
+Avec eux, il se connecte. Dans les deux cas la clé reste hors de l'historique Git.
+
+### Ce qui a été vérifié contre le serveur
+
+| Contrôle | Résultat |
+|---|---|
+| `/auth/v1/health` avec la clé | `200` — la clé est acceptée |
+| Le même appel **sans** clé | `401` — le refus est bien dû à l'absence de clé |
+| Inscription avec un mot de passe de 3 caractères | `422 weak_password`, « at least 6 characters » — la longueur minimale du serveur est **6**, celle de `AuthInput.MIN_PASSWORD` |
+| `select` sur `user_state` en rôle `anon` | `42501 permission denied` — conforme au schéma d'origine, qui révoque tout à `anon` |
+
 ---
 
 ## Organisation du dépôt

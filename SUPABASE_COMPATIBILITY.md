@@ -128,7 +128,7 @@ modifiées :
 | Élément | État | Remarque |
 |---|---|---|
 | `user_state` (lecture, écriture, fusion) | **fait et éprouvé** | 26 tests sur la couche de données |
-| Authentification (connexion, inscription, déconnexion) | **code écrit**, pas encore exercé contre le serveur | nécessite la clé `anon` |
+| Authentification (connexion, inscription, déconnexion) | **code écrit**, éprouvé contre le serveur pour l'inscription | la clé `publisable` est en place ; reste à exercer une **connexion** avec un compte réel |
 | Réinitialisation du mot de passe par courriel | **code écrit** | `resetPasswordForEmail`, sans `redirectUrl` tant que le lien profond n'existe pas. Le message affiché reste neutre : le serveur répond « succès » même pour une adresse inconnue, pour empêcher l'énumération des comptes |
 | Renvoi du courriel de confirmation | **code écrit** | `resendEmail(OtpType.Email.SIGNUP, …)`, même réserve sur la redirection |
 | Lien profond de confirmation | **à faire** | schéma d'URL à définir et à faire vérifier par le domaine. En attendant, le lien reçu ouvre la page du projet Supabase et non l'application |
@@ -149,6 +149,36 @@ React Native peut **continuer à utiliser son compte** depuis Android :
    vide serait poussée au serveur : `reconcileState` donne raison au local dès que son
    `updatedAt` est le plus récent, ce qui serait le cas. C'est la seule façon connue de perdre
    un compte partagé, et elle est fermée par construction — voir `ARCHITECTURE.md`.
+
+---
+
+## Ce qui a été mesuré contre le serveur
+
+La documentation d'un schéma ne vaut que si on l'a interrogé. Ces quatre appels ont été passés au
+projet `npbwnvrqmajwqtnncuyv` avec la clé publisable, le 4 octobre 2026 :
+
+| Appel | Résultat | Ce qu'il établit |
+|---|---|---|
+| `/auth/v1/health` **avec** la clé | `200` | la clé est acceptée par le projet |
+| le même **sans** clé | `401` | le refus observé ailleurs n'est pas un problème de clé |
+| `POST /auth/v1/signup` avec `"123"` | `422 weak_password` — « at least 6 characters » | la longueur minimale **du serveur** est 6, celle de `AuthInput.MIN_PASSWORD` : les deux seuils coïncident, l'inscription ne peut pas être refusée localement pour une raison que le serveur accepterait |
+| `select user_id from user_state` en rôle `anon` | `42501 permission denied for table user_state` | conforme à `supabase/schema.sql`, qui fait `revoke all … from anon` : la table n'est lisible qu'**authentifié** |
+
+### `account_state` n'est pas une table distante
+
+Le serveur, interrogé sur `account_state`, a répondu `PGRST205` — « Could not find the table
+`public.account_state` » — en suggérant `user_state`. C'est exact, et c'est une confusion facile :
+
+| Nom | Où il vit réellement | Rôle |
+|---|---|---|
+| `account_state` | **SQLite locale** du client React Native (`src/services/storage.ts`) | l'état d'un compte, sur l'appareil, indexé par `user_id` |
+| `app_state` | **SQLite locale** du client React Native, même fichier | l'état **anonyme**, en une seule ligne (`id = 1`) |
+| `user_state` | **Postgres, côté Supabase** | le même état, une ligne par utilisateur, colonne `data` en `jsonb` |
+
+Côté Android, l'équivalent de `account_state` est un fichier JSON par compte
+(`state_account_<jeton>.json`) et l'équivalent de `app_state` est un fichier anonyme. Le seul nom
+qui traverse le réseau est `user_state` — c'est la constante `SupabaseStateSource.TABLE`, et
+aucun autre nom n'est envoyé.
 
 ---
 
