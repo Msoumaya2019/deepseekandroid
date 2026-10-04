@@ -29,9 +29,10 @@ secrets.properties
 
 # --- Ressources coraniques importées ---------------------------------------
 # `tools/import-quran-assets.mjs` copie les pages du moushaf depuis une copie locale
-# de `coran-memoire`. Les images sont volumineuses (≈ 114 Mo pour les 604 pages du
-# Coran de Médine). Elles sont versionnées uniquement si le propriétaire du dépôt le
-# décide explicitement : voir README.md, section « Ressources coraniques ».
+# de `coran-memoire`. Les images sont volumineuses (118,2 Mo mesurés pour les 604 pages
+# du Coran de Médine, soit 118 203 707 octets). Elles sont versionnées uniquement si le
+# propriétaire du dépôt le décide explicitement : voir README.md, section « Ressources
+# coraniques ».
 #
 # Pour les exclure du dépôt, décommenter les deux lignes suivantes :
 # app/src/main/assets/quran/pages/

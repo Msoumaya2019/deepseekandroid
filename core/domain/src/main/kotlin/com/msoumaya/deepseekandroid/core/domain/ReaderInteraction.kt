@@ -58,8 +58,9 @@ object ReaderGesture {
  * Fenêtre de préchargement des pages.
  *
  * **Trois pages au maximum**, jamais plus : la page courante et ses deux voisines. Le moushaf
- * complet pèse 114 Mo, et une page environ 191 Ko une fois décodée bien davantage ; garder
- * tout le moushaf en mémoire fait tomber l'application sur un appareil d'entrée de gamme.
+ * complet pèse 118,2 Mo sur disque (118 203 707 octets mesurés pour 604 pages, 195,7 Ko par
+ * page), et une page décodée bien davantage ; garder tout le moushaf en mémoire fait tomber
+ * l'application sur un appareil d'entrée de gamme.
  *
  * L'ordre compte : la page **courante** d'abord. C'est elle qu'on attend, les voisines ne
  * servent qu'à rendre le glissement suivant instantané.

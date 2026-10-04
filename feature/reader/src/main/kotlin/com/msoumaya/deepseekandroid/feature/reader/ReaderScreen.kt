@@ -14,12 +14,14 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
@@ -32,12 +34,15 @@ import com.msoumaya.deepseekandroid.core.design.component.AppCard
 import com.msoumaya.deepseekandroid.core.design.theme.AppTheme
 import com.msoumaya.deepseekandroid.core.domain.Audio
 import com.msoumaya.deepseekandroid.core.domain.AudioSession
+import com.msoumaya.deepseekandroid.core.domain.MushafSourceNavigation
 import com.msoumaya.deepseekandroid.core.domain.PageNavigation
 import com.msoumaya.deepseekandroid.core.domain.Quran
 import com.msoumaya.deepseekandroid.core.domain.ReaderData
 import com.msoumaya.deepseekandroid.core.domain.ReaderGesture
 import com.msoumaya.deepseekandroid.core.domain.ReaderLayout
 import com.msoumaya.deepseekandroid.core.domain.ReaderZoomGeometry
+import com.msoumaya.deepseekandroid.core.model.MushafPageSource
+import com.msoumaya.deepseekandroid.core.model.MushafSource
 import com.msoumaya.deepseekandroid.core.model.ReaderZoom
 import kotlin.math.roundToInt
 
@@ -73,14 +78,28 @@ private const val DEFAULT_TOTAL_PAGES = 604
  * les modifie. La coquille d'étude et le mode signet appartiennent à la phase C.
  *
  * @param initialPage page ouverte au lancement. Bornée au moushaf.
+ * @param source la source coranique affichée. Elle décide du **découpage** des pages : deux
+ *   sources ne placent pas les mêmes versets sur la page 300. Elle ne décide pas des images,
+ *   qui viennent de [pages].
+ * @param pages où trouver les images. Le lecteur ne le sait pas : il reçoit des chemins déjà
+ *   résolus. C'est ce qui lui permet de n'avoir ni stockage ni réseau.
  * @param onClose ferme le lecteur. L'écran ne connaît pas la navigation : c'est l'appelant
  *   qui décide où l'on retourne.
+ * @param onPageChanged rapporte la page affichée. L'appelant en a besoin pour changer de
+ *   présentation **sans faire perdre sa page** à la personne : c'est la page courante qui est
+ *   vérifiée avant d'adopter une autre source.
+ * @param onOpenSourcePicker ouvre le choix de présentation. `null` quand l'appelant n'en
+ *   propose pas — le bouton est alors absent plutôt que présent et sans effet.
  */
 @Composable
 fun ReaderScreen(
     modifier: Modifier = Modifier,
     initialPage: Int = 1,
+    source: MushafSource = MushafSource.MEDINA,
+    pages: MushafPageSource = EmbeddedMushafPages,
     onClose: () -> Unit = {},
+    onPageChanged: (Int) -> Unit = {},
+    onOpenSourcePicker: (() -> Unit)? = null,
 ) {
     val colors = AppTheme.colors
     val totalPages = remember { Quran.pages.size.takeIf { it > 0 } ?: DEFAULT_TOTAL_PAGES }
@@ -118,10 +137,16 @@ fun ReaderScreen(
     val chromeVisible = chromeState.value
     val selectedVerse = verseState.value
 
+    // La page est rapportée à l'appelant à chaque changement, et non à chaque recomposition :
+    // la clé de l'effet est la page elle-même.
+    LaunchedEffect(page) { onPageChanged(page) }
+
     // `null` quand la page n'a pas de plage connue : l'action est alors absente plutôt que
-    // présente et sans effet.
-    val listenAction: (() -> Unit)? = remember(page, settings) {
-        runCatching { Quran.pageRange(page) }.getOrNull()?.let { range ->
+    // présente et sans effet. La plage est celle du **découpage de la source affichée** : lire
+    // une page du paquet avec la table du moushaf de Médine ferait commencer l'écoute au
+    // mauvais verset.
+    val listenAction: (() -> Unit)? = remember(page, settings, source) {
+        runCatching { MushafSourceNavigation.pageRange(source, page) }.getOrNull()?.let { range ->
             { audio.start(range, settings) }
         }
     }
@@ -142,20 +167,35 @@ fun ReaderScreen(
             val availableWidth = constraints.maxWidth.toFloat()
             val availableHeight = constraints.maxHeight.toFloat()
 
+            // Les images de la page, telles que la source les fournit. `remember` sur la page
+            // et sur la source : relire le référentiel à chaque recomposition ferait sauter
+            // une image sur deux pendant un balayage.
+            val mushafPage = remember(page, pages) { pages.page(page) }
+
+            // Le gestionnaire de gestes est installé **une seule fois** — c'est la raison
+            // d'être des objets d'état déclarés plus haut. Il doit donc relire la page à
+            // chaque appui long : capturer `mushafPage` directement figerait les rectangles
+            // sur la page du premier rendu, et après un balayage l'appui long désignerait un
+            // verset de la page précédente — avec une fiche qui paraîtrait juste.
+            val currentPage = rememberUpdatedState(mushafPage)
+
             val fitted = ReaderLayout.fitMushafPage(
-                availableWidth.toDouble(),
-                availableHeight.toDouble(),
+                availableWidth = availableWidth.toDouble(),
+                availableHeight = availableHeight.toDouble(),
+                // Le rapport de la **source affichée** : la page embarquée et celle du paquet
+                // n'ont pas le même. Utiliser l'un pour l'autre déformerait la page.
+                sourceWidth = mushafPage.sourceWidth,
+                sourceHeight = mushafPage.sourceHeight,
             )
             val pageWidth = fitted.width.toFloat()
             val pageHeight = fitted.height.toFloat()
 
             PreloadMushafPages(
                 page = page,
-                widthPx = pageWidth.roundToInt(),
-                heightPx = pageHeight.roundToInt(),
+                source = pages,
+                widthPx = (pageWidth - ReaderLayout.FRAME).roundToInt(),
+                heightPx = (pageHeight - ReaderLayout.FRAME).roundToInt(),
             )
-
-            val rows = remember(page) { ReaderData.pageRows(page) }
 
             Box(
                 modifier = Modifier
@@ -211,12 +251,18 @@ fun ReaderScreen(
                                 val current = zoomState.value
                                 val unzoomedX = (position.x - current.x) / current.scale
                                 val unzoomedY = (position.y - current.y) / current.scale
+                                val shown = currentPage.value
                                 verseState.value = ReaderData.verseAtImagePoint(
-                                    rows = rows,
+                                    rows = shown.rows,
                                     x = (unzoomedX - (availableWidth - pageWidth) / 2f).toDouble(),
                                     y = (unzoomedY - (availableHeight - pageHeight) / 2f).toDouble(),
                                     width = pageWidth.toDouble(),
                                     height = pageHeight.toDouble(),
+                                    // Les rectangles sont exprimés dans l'espace de la source :
+                                    // les rapporter à celui de l'autre source désignerait un
+                                    // verset voisin, sur une page pourtant correcte.
+                                    sourceWidth = shown.sourceWidth,
+                                    sourceHeight = shown.sourceHeight,
                                 )
                             },
                             onSwipe = { dx, dy ->
@@ -236,10 +282,10 @@ fun ReaderScreen(
                     },
             ) {
                 MushafPageView(
-                    page = page,
+                    page = mushafPage,
                     zoom = zoom,
-                    availableWidth = availableWidth,
-                    availableHeight = availableHeight,
+                    pageWidth = pageWidth,
+                    pageHeight = pageHeight,
                     selectedVerse = selectedVerse,
                     bookmarkIds = emptySet(),
                     difficultIds = emptySet(),
@@ -267,7 +313,7 @@ fun ReaderScreen(
             ReaderChrome(
                 page = page,
                 totalPages = totalPages,
-                surahName = surahNameFor(page),
+                surahName = surahNameFor(source, page),
                 zoomed = zoom.scale > ReaderGesture.ZOOMED_THRESHOLD,
                 onPage = { target ->
                     pageState.intValue = target.coerceIn(1, totalPages)
@@ -276,6 +322,7 @@ fun ReaderScreen(
                 },
                 onClose = onClose,
                 onResetZoom = { zoomState.value = ReaderZoom() },
+                onOpenSourcePicker = onOpenSourcePicker,
                 onListen = listenAction,
             )
         }
@@ -327,7 +374,12 @@ private fun VerseCard(verseId: Int) {
     }
 }
 
-/** Nom de la sourate au début d'une page : c'est ce qu'on cherche en tournant une page. */
-private fun surahNameFor(page: Int): String = runCatching {
-    Quran.surahAt(Quran.pageRange(page).start).name
+/**
+ * Nom de la sourate au début d'une page : c'est ce qu'on cherche en tournant une page.
+ *
+ * La page est lue dans le découpage de la source affichée : la première page du paquet
+ * « Coran 1441 » ne porte pas le même verset que la première page du moushaf de Médine.
+ */
+private fun surahNameFor(source: MushafSource, page: Int): String = runCatching {
+    Quran.surahAt(MushafSourceNavigation.pageRange(source, page).start).name
 }.getOrElse { "Le Coran" }

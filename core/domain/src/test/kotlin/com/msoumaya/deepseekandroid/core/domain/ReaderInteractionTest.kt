@@ -161,8 +161,9 @@ class ReaderInteractionTest {
 
     @Test
     fun `trois pages au maximum, jamais plus`() {
-        // Le moushaf pèse 114 Mo : garder tout le moushaf en mémoire fait tomber
-        // l'application. La borne est la règle, pas une optimisation.
+        // Le moushaf pèse 118,2 Mo sur disque (118 203 707 octets, mesurés) : garder tout le
+        // moushaf en mémoire fait tomber l'application. La borne est la règle, pas une
+        // optimisation.
         for (page in listOf(1, 2, 100, 603, 604)) {
             assertTrue(ReaderPreload.pages(page).size <= ReaderPreload.WINDOW, "page $page")
         }

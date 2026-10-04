@@ -208,4 +208,14 @@ data class ArchiveProgress(
     val phase: ArchivePhase,
     val progress: Float,
     val message: String? = null,
-)
+) {
+    /**
+     * Une phase pendant laquelle un travail est en cours.
+     *
+     * C'est une règle, et non un détail d'affichage : c'est elle qui décide si l'écran propose
+     * d'interrompre ou de lancer, et si le pourcentage a un sens. Écrite ici, elle est la même
+     * pour l'écran et pour tout contrôle qui voudrait la vérifier.
+     */
+    val isBusy: Boolean
+        get() = phase == ArchivePhase.DOWNLOADING || phase == ArchivePhase.EXTRACTING
+}

@@ -38,6 +38,7 @@ dependencies {
 
     implementation(project(":feature:home"))
     implementation(project(":feature:reader"))
+    implementation(project(":feature:sources"))
     implementation(project(":feature:program"))
     implementation(project(":feature:progress"))
     implementation(project(":feature:social"))
@@ -46,5 +47,9 @@ dependencies {
 
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
+    // `collectAsStateWithLifecycle` : la route du lecteur observe la source et l'installation,
+    // et une collecte qui survivrait à l'écran garderait le téléchargement en vie après la
+    // sortie du lecteur.
+    implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.compose.material.icons.extended)
 }

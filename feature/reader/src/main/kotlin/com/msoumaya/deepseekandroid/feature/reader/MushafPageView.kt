@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -23,8 +22,9 @@ import coil.request.ImageRequest
 import com.msoumaya.deepseekandroid.core.design.theme.AppColors
 import com.msoumaya.deepseekandroid.core.design.theme.AppTheme
 import com.msoumaya.deepseekandroid.core.domain.Quran
-import com.msoumaya.deepseekandroid.core.domain.ReaderData
+import com.msoumaya.deepseekandroid.core.domain.QuranArchive
 import com.msoumaya.deepseekandroid.core.domain.ReaderLayout
+import com.msoumaya.deepseekandroid.core.model.MushafPage
 import com.msoumaya.deepseekandroid.core.model.ReaderZoom
 import kotlin.math.roundToInt
 
@@ -38,33 +38,43 @@ import kotlin.math.roundToInt
  * d'écran et de la coquille du lecteur. Aucune marge fixe n'est appliquée : une marge en dur
  * paraît correcte sur l'appareil où elle a été choisie, et décale la page partout ailleurs.
  *
- * Le rapport `(largeur - cadre) / (hauteur - cadre)` reste celui de la source : la page est
- * réduite, jamais étirée. Une page de moushaf déformée est illisible — et le cadre de 4 px
- * est compté dans **les deux** dimensions, ce qui évite la dérive observée quand on enchaîne
- * les changements de page.
+ * Le rapport appliqué est celui de **la source affichée**, porté par [page] : la page
+ * embarquée est en 1920×3106, celle du paquet « Coran 1441 » en 1440×2320. Centrer l'une avec
+ * le rapport de l'autre l'étirerait de plusieurs pour cent — invisible sur une capture, très
+ * visible en lisant.
+ *
+ * La taille ajustée est **reçue** plutôt que recalculée : l'écran en a besoin pour convertir
+ * les coordonnées du doigt, et deux calculs séparés de la même grandeur finissent par diverger
+ * — ce qui donnerait un surlignage décalé exactement quand la page change de taille.
+ *
+ * ## Une image, ou quinze bandes
+ *
+ * Le moushaf embarqué livre une image par page. La source 1441 livre **quinze bandes** de
+ * 1440×232, qui se recouvrent partiellement : elles sont réparties de façon que la première
+ * touche le haut de la page et la dernière son bas. C'est la disposition du client d'origine,
+ * reprise telle quelle — les bandes ne sont pas juxtaposées bout à bout, et les coller l'une
+ * sous l'autre décalerait toutes les lignes suivantes.
  *
  * ## Les surlignages
  *
- * Les rectangles viennent de `bounds.json`, exprimés dans l'espace 1920×3106 de la source, et
- * sont ramenés à l'échelle de l'affichage. Le plus petit rectangle contenant le doigt gagne
- * (voir `ReaderData.verseAtImagePoint`) : sur une page où deux versets se chevauchent
- * visuellement, c'est le plus précis qui doit répondre.
+ * Les rectangles viennent du référentiel de la source — `bounds.json` pour le moushaf de
+ * Médine, `coran_1441-bounds.json` pour le paquet — et sont ramenés à l'échelle de
+ * l'affichage. Le plus petit rectangle contenant le doigt gagne (voir
+ * `ReaderData.verseAtImagePoint`) : sur une page où deux versets se chevauchent visuellement,
+ * c'est le plus précis qui doit répondre.
  */
 @Composable
 internal fun MushafPageView(
-    page: Int,
+    page: MushafPage,
     zoom: ReaderZoom,
-    availableWidth: Float,
-    availableHeight: Float,
+    pageWidth: Float,
+    pageHeight: Float,
     selectedVerse: Int?,
     bookmarkIds: Set<Int>,
     difficultIds: Set<Int>,
     modifier: Modifier = Modifier,
 ) {
     val colors = AppTheme.colors
-    val fitted = ReaderLayout.fitMushafPage(availableWidth.toDouble(), availableHeight.toDouble())
-    val pageWidth = fitted.width.toFloat()
-    val pageHeight = fitted.height.toFloat()
 
     if (pageWidth <= 0f || pageHeight <= 0f) return
 
@@ -72,14 +82,13 @@ internal fun MushafPageView(
     val innerWidth = pageWidth - frame
     val innerHeight = pageHeight - frame
 
-    val rows = remember(page) { ReaderData.pageRows(page) }
     val context = LocalContext.current
 
     Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Box(
             modifier = Modifier
                 .size(pageWidth.dp, pageHeight.dp)
-                // Le zoom s'applique à la page entière : image et surlignages restent
+                // Le zoom s'applique à la page entière : images et surlignages restent
                 // solidaires, sinon les rectangles dériveraient dès le premier agrandissement.
                 .graphicsLayer {
                     scaleX = zoom.scale
@@ -99,34 +108,26 @@ internal fun MushafPageView(
                     .clip(RoundedCornerShape(9.dp))
                     .background(Color.White),
             ) {
-                AsyncImage(
-                    model = ImageRequest.Builder(context)
-                        .data(MushafAssets.uri(page))
-                        // Demandée à la taille affichée : Coil réduit au décodage, ce qui
-                        // divise la mémoire occupée par la page.
-                        .size(innerWidth.roundToInt(), innerHeight.roundToInt())
-                        .crossfade(false)
-                        .build(),
-                    contentDescription = "Page $page du moushaf",
-                    // `Fit` et non `FillBounds` : une page ne se déforme pas, même si la
-                    // mesure et l'image divergent d'un pixel.
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier.fillMaxSize(),
+                PageImages(
+                    page = page,
+                    innerWidth = innerWidth,
+                    innerHeight = innerHeight,
+                    context = context,
                 )
             }
 
-            for (row in rows) {
+            for (row in page.rows) {
                 val verseId = Quran.verseId(row.surah, row.ayah) ?: continue
                 val tint = tintFor(verseId, selectedVerse, bookmarkIds, difficultIds, colors) ?: continue
                 Box(
                     modifier = Modifier
                         .offset(
-                            x = (frame / 2f + row.left / ReaderLayout.PAGE_WIDTH.toFloat() * innerWidth).dp,
-                            y = (frame / 2f + row.top / ReaderLayout.PAGE_HEIGHT.toFloat() * innerHeight).dp,
+                            x = (frame / 2f + row.left / page.sourceWidth.toFloat() * innerWidth).dp,
+                            y = (frame / 2f + row.top / page.sourceHeight.toFloat() * innerHeight).dp,
                         )
                         .size(
-                            ((row.right - row.left) / ReaderLayout.PAGE_WIDTH.toFloat() * innerWidth).dp,
-                            ((row.bottom - row.top) / ReaderLayout.PAGE_HEIGHT.toFloat() * innerHeight).dp,
+                            ((row.right - row.left) / page.sourceWidth.toFloat() * innerWidth).dp,
+                            ((row.bottom - row.top) / page.sourceHeight.toFloat() * innerHeight).dp,
                         )
                         .clip(RoundedCornerShape(4.dp))
                         .background(tint),
@@ -135,6 +136,69 @@ internal fun MushafPageView(
         }
     }
 }
+
+/**
+ * Les images d'une page, dans le cadre blanc.
+ *
+ * Le cas d'une seule image est celui de toutes les sources embarquées : l'image occupe la page
+ * entière. Le cas de plusieurs bandes est celui du paquet « Coran 1441 ».
+ */
+@Composable
+private fun PageImages(
+    page: MushafPage,
+    innerWidth: Float,
+    innerHeight: Float,
+    context: android.content.Context,
+) {
+    if (page.isSingleImage) {
+        AsyncImage(
+            model = ImageRequest.Builder(context)
+                .data(page.lines.first())
+                // Demandée à la taille affichée : Coil réduit au décodage, ce qui divise
+                // la mémoire occupée par la page.
+                .size(innerWidth.roundToInt(), innerHeight.roundToInt())
+                .crossfade(false)
+                .build(),
+            contentDescription = "Page du moushaf",
+            // `Fit` et non `FillBounds` : une page ne se déforme pas, même si la mesure et
+            // l'image divergent d'un pixel.
+            contentScale = ContentScale.Fit,
+            modifier = Modifier.fillMaxSize(),
+        )
+        return
+    }
+
+    val lineHeight = MushafPageGeometry.bandHeight(innerWidth)
+    val count = page.lines.size
+
+    for ((index, uri) in page.lines.withIndex()) {
+        AsyncImage(
+            model = ImageRequest.Builder(context)
+                .data(uri)
+                .size(innerWidth.roundToInt(), lineHeight.roundToInt())
+                .crossfade(false)
+                .build(),
+            contentDescription = null,
+            contentScale = ContentScale.Fit,
+            modifier = Modifier
+                // La position vient de `MushafPageGeometry`, et non d'un calcul refait ici :
+                // c'est ce qui permet de l'éprouver sans dessiner, et de garantir que la
+                // première bande touche le haut de la page et la dernière son bas.
+                .offset(y = MushafPageGeometry.bandTop(index, count, innerHeight, lineHeight).dp)
+                .size(innerWidth.dp, lineHeight.dp),
+        )
+    }
+}
+
+/**
+ * Rapport d'une bande de ligne : 1440 sur 232, mesuré sur le paquet.
+ *
+ * Écrit à partir des constantes du paquet et non en dur : c'est la même mesure qui décide de
+ * la validité d'une image pendant l'installation. Deux valeurs séparées finiraient par
+ * diverger, et l'installation accepterait alors des images que l'affichage étire.
+ */
+internal val LINE_ASPECT: Float =
+    QuranArchive.IMAGE_HEIGHT.toFloat() / QuranArchive.IMAGE_WIDTH.toFloat()
 
 /**
  * Couleur d'un surlignage, et son ordre de priorité.

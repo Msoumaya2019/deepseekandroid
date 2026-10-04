@@ -21,17 +21,39 @@ class QuranSourceTransition {
     /**
      * Prépare puis valide un changement de source.
      *
+     * Générique sur le type de la source, comme l'original TypeScript l'était : la transition
+     * ne fait que **transporter** la valeur de `prepare` vers `commit`. La typer en chaîne
+     * aurait obligé les appelants à convertir une énumération en texte pour la reconvertir
+     * aussitôt — deux endroits de plus où se tromper, pour aucun gain.
+     *
+     * ## Pourquoi `commit` suspend
+     *
+     * Dans le client d'origine, `commit` est synchrone : il appelle `update()`, qui réécrit
+     * l'état en mémoire et le programme en écriture. Ici, valider la source passe par
+     * `UserRepository.mutate`, qui **écrit sur le disque** — donc suspend. Typer `commit` en
+     * `(S, Int) -> Unit` obligeait l'appelant à lancer une coroutine depuis un rappel non
+     * suspendu, c'est-à-dire à rendre la validation asynchrone par rapport à la transition :
+     * `change` aurait rendu `true` avant que l'état soit écrit, et un échec d'écriture serait
+     * passé inaperçu.
+     *
+     * La validation reste donc **dans** le verrou, et c'est voulu : deux transitions ne doivent
+     * pas pouvoir s'entrelacer entre la préparation et l'écriture.
+     *
      * @return `true` si le changement a été validé, `false` s'il a été abandonné (transition
-     *   déjà en cours, composant détruit, ou page invalide).
+     *   déjà en cours, ou composant détruit). Une exception de `prepare` ou de `commit` remonte
+     *   à l'appelant : rien n'a été validé.
      */
-    suspend fun change(
-        source: String,
+    suspend fun <S> change(
+        source: S,
         page: Int,
-        prepare: suspend (String, Int) -> Unit,
-        commit: (String, Int) -> Unit,
+        prepare: suspend (S, Int) -> Unit,
+        commit: suspend (S, Int) -> Unit,
     ): Boolean {
         if (disposed) return false
         require(page in 1..TOTAL_PAGES) { "Page du Coran invalide." }
+        // `tryLock` et non `lock` : une seconde demande pendant une transition ne doit pas
+        // **attendre** puis s'appliquer, elle doit être refusée. Deux préparations concurrentes
+        // se disputeraient les mêmes fichiers, et la seconde écraserait la première.
         if (!mutex.tryLock()) return false
         try {
             prepare(source, page)

@@ -13,7 +13,7 @@ vérité de l'affichage, et le réseau n'est jamais sur le chemin critique.**
 
 Concrètement, cela veut dire que ni `core/model` ni `core/domain` ne connaissent Android,
 Supabase, le réseau ou le disque. Ils manipulent des valeurs et des règles. C'est ce qui rend
-les 132 tests du domaine exécutables en quelques secondes, sans émulateur, sur les vraies
+les 292 tests du domaine exécutables en quelques secondes, sans émulateur, sur les vraies
 données du Coran.
 
 ---
@@ -32,6 +32,7 @@ données du Coran.
 
 :feature:home           accueil
 :feature:reader         lecteur de moushaf
+:feature:sources        téléchargement du paquet « Coran 1441 » et choix de présentation
 :feature:program        programme et séances
 :feature:progress       progrès, révisions, consolidations
 :feature:social         amis et messagerie
@@ -59,6 +60,18 @@ permet au lecteur de s'ouvrir en avion.
 `AudioOutput` est une interface pour une raison précise : `ExoPlayer` ne tourne pas sur la JVM.
 Le contrôleur s'éprouve donc contre une doublure, et les règles de silence — les seules qu'on
 peut se tromper à écrire — sont mesurées, pas supposées.
+
+**Pourquoi `feature:sources` existe, alors que `feature:reader` porte déjà le Coran.** Le
+lecteur a une contrainte écrite dans son propre `build.gradle.kts` : **ni réseau, ni stockage**.
+C'est ce qui garantit qu'il s'ouvre en avion. Or télécharger 102 Mo, écrire 9 060 fichiers et
+choisir une présentation demande les deux. Mettre cela dans le lecteur aurait défait la
+contrainte qui fait sa raison d'être ; le laisser dans `navigation` aurait chargé le graphe de
+navigation d'un travail de fond. Le partage est donc : le lecteur **affiche** une page qu'on lui
+décrit, `feature:sources` **obtient** ce qu'il faut pour la décrire.
+
+`navigation` porte la **porte** — la décision de montrer le panneau plutôt que la page — et non
+le panneau lui-même. Une décision de trois lignes se relit là où elle est prise ; un écran de
+téléchargement, non.
 
 ---
 
@@ -395,14 +408,14 @@ de tout le domaine — déjà testé — pour un gain nul. Elle n'est donc pas l
 
 | Suite | Nombre | Ce qu'elle couvre |
 |---|---|---|
-| `core:domain` | 230 | Coran, dates, programme, révisions, consolidations, signets, audio, file d'écoute et silences, quiz, lecteur et gestes, fusion hors ligne, file d'attente, composition de synchronisation, décision d'ouverture, messages de connexion, **règles du paquet « Coran 1441 »** (décision d'entrée, taille exacte, dimensions d'image, témoin d'installation) |
-| `core:data` | 48 | lecture locale, hors ligne, premier chargement, isolation des comptes, fichier d'état illisible, file, idempotence, remise à zéro, règle du propriétaire, **installation du paquet 1441** (reprise, témoin écrit en dernier, refus d'une archive douteuse) et **transport HTTP** (en-tête `Range`, `200` contre `206`, refus) |
+| `core:domain` | 292 | Coran, dates, programme, révisions, consolidations, signets, audio, file d'écoute et silences, quiz, lecteur et gestes, fusion hors ligne, file d'attente, composition de synchronisation, décision d'ouverture, messages de connexion, **règles du paquet « Coran 1441 »** (décision d'entrée, taille exacte, dimensions d'image, témoin d'installation, forme de la page selon la source, rectangles des versets, transition de source, mots du panneau) |
+| `core:data` | 57 | lecture locale, hors ligne, premier chargement, isolation des comptes, fichier d'état illisible, file, idempotence, remise à zéro, règle du propriétaire, **installation du paquet 1441** (reprise, témoin écrit en dernier, refus d'une archive douteuse) et **transport HTTP** (en-tête `Range`, `200` contre `206`, refus) |
 | `feature:home` | 22 | point de reprise, `scheduledDate` contre `date`, série de jours, période de chaque bandeau, objectif de la semaine, libellés de repli |
 | `core:design` | 19 | asymétrie de l'accent, fond secondaire, distinction des cinq palettes, échelles de `tokens.ts`, résolution des polices, écran Apparence |
+| `feature:reader` | 17 | nommage des pages, bornes du geste, repli d'affichage d'une préférence d'écoute illisible, **pose des quinze bandes** d'une page du paquet (hauteur, premier et dernière bande, chevauchement) |
 | `core:audio` | 14 | conduite d'une séance sur horloge virtuelle : silence observé, reprises, arrêt, répétition illimitée, changement de récitateur, fin oubliée après fermeture, fichier illisible |
-| `feature:reader` | 11 | nommage des pages, bornes du geste, repli d'affichage d'une préférence d'écoute illisible |
 | `feature:auth` | 9 | activation du formulaire : adresse, longueur du mot de passe, occupation, libellés |
-| **total** | **353** | 28 classes de test |
+| **total** | **430** | 36 classes de test |
 
 Le domaine est éprouvé sur les **vraies données** — 6 236 versets, 114 sourates, 604 pages — et
 non sur une maquette de trois versets, qui laisserait passer une erreur d'indexation ou une
@@ -434,6 +447,26 @@ chaque test deux fois (debug **et** release) et oublie les modules JVM purs, qui
 `test-results/test/`. Ce piège a réellement fait publier « 171 » au lieu de « 161 ». Le script
 affiche aussi le **nombre de classes lues** : un relevé vide signalerait que le motif n'a désigné
 aucun test, et « tout vert » ne voudrait alors rien dire.
+
+**Un test vert ne dit pas qu'il détecte quoi que ce soit.** `tools/falsifier.py` casse
+volontairement une règle — dix-huit fois, chacune sur une règle différente — relance la suite, et
+vérifie que les tests qui tombent sont **ceux qui devaient tomber**. Il restaure ensuite le fichier
+et le prouve par empreinte, pas par la bonne volonté d'un `finally`. Deux pièges y sont traités
+nommément : les rapports XML restent sur le disque d'une exécution à l'autre, donc seuls ceux
+**écrits après le lancement** sont lus — sinon un test supprimé continuerait de paraître vert ; et
+un filtre Gradle trop étroit donne un « BUILD SUCCESSFUL » sans avoir rien joué, donc un résultat
+vide est un échec et non un succès. Ce harnais a réellement servi : il a montré qu'une classe de
+tests ne passait que **parce qu'une autre avait installé le référentiel avant elle**, et que deux
+garde-fous de `MushafPageShape` se recouvraient si exactement qu'aucun n'était éprouvable seul.
+Les deux constats sont écrits dans le code concerné, pas seulement dans ce document.
+
+**Les données embarquées se prouvent, elles aussi.** `tools/verifier-parite-donnees.py` recalcule
+l'empreinte des 11 fichiers de données et des 604 pages, la confronte à celle que le manifeste
+d'import a enregistrée, et retrouve chaque fichier dans une copie locale de `coran-memoire` en
+lecture seule. Il a servi dès sa première exécution : le manifeste portait une entrée pour
+**lui-même**, héritée d'un second import, et cette entrée désignait l'empreinte du manifeste
+**précédent**. Un fichier ne peut pas porter sa propre empreinte — la liste vient maintenant de ce
+qui a été importé, et non d'un `readdirSync` sur le dossier.
 
 **Ce qui a été appris en écrivant ces tests mérite d'être noté** : sur les dix premiers échecs
 du domaine, huit étaient des **attentes de test fausses**, pas des défauts du portage. Le

@@ -77,7 +77,11 @@ Elle est en **lecture seule** : elle est lue pour comprendre, jamais modifiée.
 | Fiche du verset | `ReaderMoreSheet`, `sessionPanel==='verse'` | `feature/reader/ReaderScreen.kt` (`VerseCard`) | `user_state` | **Livré** | appui long → référence et traduction française du sens |
 | Préchargement des voisins | `Image.prefetch` sur `page-1` / `page+1` | `core/domain/ReaderInteraction.kt` (`ReaderPreload`), `MushafAssets.kt` | — | **Livré** | **trois pages au maximum**, la courante en tête ; borné et éprouvé |
 | Téléchargement de sources | `src/services/quranDownload.ts` | `core/domain/QuranArchive.kt`, `core/data/local/QuranArchiveInstaller.kt` | — | **Porté** | archive de 102 608 011 octets, reprise, témoin de 9 060 fichiers écrit **en dernier** |
-| Écran de téléchargement | `src/ui/QuranDownload.tsx` | — | — | **À faire** | l'avancement est déjà publié (`ArchivePhase`, `ArchiveProgress`) |
+| Écran de téléchargement | `src/ui/QuranDownload.tsx` | `feature:sources/QuranDownloadPanel.kt`, `core/domain/QuranDownloadText.kt` | `user_state` | **Livré** | titre, sous-titre, phase et pourcentage, **un seul bouton à la fois** et **aucun pendant l'écriture des pages** — trois règles éprouvées, pas trois choix d'affichage. La pause est posée à l'arrière-plan **et** au démontage, comme l'original |
+| Choix de la source « Coran 1441 » | `DownloadSourceChoice` (`QuranDownload.tsx`) | `feature:sources/QuranSourceChoice.kt` | `user_state` | **Livré** | paquet installé → la source est adoptée ; sinon le panneau se déplie, et c'est **la fin de l'installation** qui adopte |
+| Porte du lecteur | `App.tsx:491` | `navigation/ReaderRoute.kt` | `user_state` | **Livré** | une source en paquet non installée **remplace la page** par le panneau. Limite dite : comme l'original, la porte ne vérifie que le **témoin**, pas le contenu installé |
+| Sélecteur de présentation | `Modal` de `App.tsx:515` | `feature:sources/QuranSourcePicker.kt` | `user_state` | **Livré**, à deux réserves | les trois présentations simples et le paquet ; il manque les deux boutons qui dépendent de la séance (« Actions de la séance », « Retour aux options »), qui viendront avec la coquille d'étude |
+| Transition de source | `src/core/quranSourceTransition.ts` | `core/domain/QuranSourceTransition.kt` | — | **Porté** | une transition à la fois, **refusée** et non mise en attente ; validation **attendue** (`commit` suspend, parce qu'ici elle écrit l'état) |
 | Source « Coran Test » | `src/coranTest/*` | `core/domain/ZipQuranSource.kt` | — | **Écrite** | le chargeur de pages est prêt, l'écran ne l'est pas |
 | Sélecteur de sourate | `src/SurahPicker.tsx` | `feature:reader` | — | **À faire** | phase B |
 
@@ -106,12 +110,20 @@ la première version de `dragIntent` inversait le sens par rapport à `pageAfter
 le portage fidèle du client d'origine et qui était déjà éprouvé. Sans ce test, l'intention
 aurait annoncé « suivante » pendant que le numéro calculé disait « précédente ».
 
-**Données déjà importées :** 12 fichiers JSON (8,4 Mo) dans `core/domain/src/main/resources/quran/`
-et **les 604 pages du moushaf** (114 Mo, 191 Ko en moyenne) dans `app/src/main/assets/quran/pages/`,
+**Données déjà importées :** 11 fichiers JSON (8,7 Mo) dans `core/domain/src/main/resources/quran/`
+et **les 604 pages du moushaf** (118,2 Mo, 195,7 Ko en moyenne) dans `app/src/main/assets/quran/pages/`,
 copiées par `tools/import-quran-assets.mjs --all-pages`.
 
+> **Les poids de ce document sont mesurés, et « Mo » y vaut 10⁶ octets.** Les chiffres annoncés
+> plus tôt — « 114 Mo » pour les pages, « 12 fichiers JSON », « 134 Mo » pour le Tajweed — ne
+> correspondaient à aucune mesure : la somme réelle est **118 203 707 octets** pour les 604 pages,
+> **8 725 535** pour le dossier de données, et **138 546 362** pour le Tajweed.
+> `tools/verifier-parite-donnees.py` les recalcule à chaque exécution plutôt que de les recopier.
+> En unités binaires — celles que montre l'Explorateur Windows — cela fait 112,7 Mio, 8,3 Mio
+> et 132,1 Mio.
+
 Le client React Native **versionne** ces 604 pages et **télécharge** l'archive 1441 : la même
-règle est suivie ici. Les 604 pages du Tajweed (134 Mo) ne sont pas importées — elles
+règle est suivie ici. Les 604 pages du Tajweed (138,6 Mo) ne sont pas importées — elles
 s'ajoutent avec `--with-tajweed` le jour où la source « Tawjeed » sera ouverte.
 
 ### Les quatre sources de lecture, telles que la source les définit
@@ -121,9 +133,9 @@ n'ont ni le même support, ni le même coût :
 
 | Source | Support réel | Où vivent les images | Coût |
 |---|---|---|---|
-| **Coran de Médine** (défaut) | 604 PNG, une par page | `assets/mushaf/pageXXX.png`, **versionnées** | 114 Mo dans le dépôt |
+| **Coran de Médine** (défaut) | 604 PNG, une par page | `assets/mushaf/pageXXX.png`, **versionnées** | 118,2 Mo dans le dépôt |
 | **Coran 1441** (`coran_1441`) | 9 060 PNG, **15 lignes par page** | `https://files.quran.app/hafs/madani_1441/zips/images_1440.zip`, **téléchargées** | archive de **102 608 011 octets** |
-| **Tajweed** (`tajweedPages`) | 604 PNG, une par page | `assets/mushaf-tajweed/`, non importées | 134 Mo |
+| **Tajweed** (`tajweedPages`) | 604 PNG, une par page | `assets/mushaf-tajweed/`, non importées | 138,5 Mo, non repris |
 | **Coran Test** (`coranTest`) | 608 **polices `.woff2`** | `assets/coran-test/`, non importées | rendu par police, pas par image |
 
 Trois conséquences qui décident de l'architecture du lecteur :
@@ -162,6 +174,38 @@ Ce que le portage Android change, et pourquoi :
   `ArchiveTransport` est une interface : l'installation s'éprouve sans réseau, sans serveur et
   sans fabriquer 102 Mo — la taille attendue est injectée, et c'est la même valeur qui règle la
   reprise, l'avancement et le contrôle final.
+
+### Deux référentiels, deux espaces — mesuré, pas supposé
+
+Les deux fichiers de bornes de versets ne se lisent pas de la même façon, et le croire coûte un
+surlignage décalé que rien ne signale. Mesuré sur les fichiers livrés :
+
+| | `bounds.json` (Médine) | `coran_1441-bounds.json` (paquet) |
+|---|---|---|
+| Espace des coordonnées | 1920 × 3106 | 1440 × 2320 |
+| Bornes observées | x 25…1887, y 42…3068 | x 0…1440, y 0…2320 |
+| **Index de ligne** | **1 à 15** | **0 à 14** |
+| Lignes de versets | 13 766 | 13 273 |
+| Format d'une ligne | entiers | décimaux (`352.08`) |
+
+Les deux espaces sont **ceux de leur propre page** : diviser un rectangle par la largeur de la
+page affichée est donc juste pour l'un comme pour l'autre, et c'est ce que fait
+`MushafPageView`. Ce qui ne se transpose pas, c'est l'**index de ligne** — 1-based d'un côté,
+0-based de l'autre. Aucun code ne s'en sert pour positionner, et c'est délibéré : la position
+verticale vient de `y1`/`y2`, et la position de la **bande** vient du rang de l'image, pas de
+l'index du référentiel.
+
+Le même contrôle a montré que le **maximum de l'index n'est pas le nombre de lignes** : la page 1
+a pour maximum 11 et ne porte que **sept** lignes distinctes ; une page complète a pour maximum
+14 pour **quinze** bandes. Deux pages seulement (la 1 et la 2) ont un maximum de 11, les 602
+autres de 14. C'est ce qui a fait renommer `lineCount` — qui rendait le maximum en promettant le
+nombre — en `lastLineIndex`, avec `null` pour une page sans ligne : zéro est un index valide.
+
+Enfin, les coordonnées du paquet **confirment la géométrie d'affichage au pixel** : la bande 0
+occupe `y 0…232`, la bande 3 `y 447,43…679,43`, la bande 11 `y 1640,57…1872,57`. Le pas mesuré
+est `(2320 − 232) / 14 = 149,142857`, soit exactement la formule de `MushafPageGeometry`. Les
+bandes se **recouvrent** — quinze bandes de 232 pixels en couvrent 3 480 sur une page qui en
+mesure 2 320 — et c'est la disposition d'origine, pas une erreur d'assemblage.
 
 ---
 

@@ -14,6 +14,7 @@ import androidx.compose.material.icons.outlined.CenterFocusStrong
 import androidx.compose.material.icons.outlined.ChevronLeft
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Headphones
+import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
@@ -44,6 +45,8 @@ import kotlin.math.roundToInt
  * @param onListen écoute la page affichée. `null` quand elle ne peut pas être écoutée — le
  *   référentiel n'est pas chargé, ou la page n'a pas de plage de versets : dans ce cas le
  *   bouton est **absent** plutôt que présent et sans effet.
+ * @param onOpenSourcePicker ouvre le choix de présentation. `null` quand l'appelant n'en
+ *   propose pas : le lecteur ne connaît ni les sources ni le stockage, il demande.
  */
 @Composable
 internal fun ReaderChrome(
@@ -57,6 +60,7 @@ internal fun ReaderChrome(
     // `modifier` reste le **premier paramètre optionnel** : sinon `onListen` prendrait sa place,
     // et le lecteur d'un appelant qui passe sa mise en page au doigt ne s'appliquerait plus.
     modifier: Modifier = Modifier,
+    onOpenSourcePicker: (() -> Unit)? = null,
     onListen: (() -> Unit)? = null,
 ) {
     val colors = AppTheme.colors
@@ -101,6 +105,16 @@ internal fun ReaderChrome(
                     icon = Icons.Outlined.CenterFocusStrong,
                     label = "Revenir à la page entière",
                     onClick = onResetZoom,
+                )
+            }
+
+            // Choisir la présentation des pages. Absent quand l'appelant n'en propose pas : le
+            // lecteur ne connaît ni les sources ni le paquet, c'est lui qui demande.
+            if (onOpenSourcePicker != null) {
+                AppIconButton(
+                    icon = Icons.Outlined.Palette,
+                    label = "Affichage du Coran",
+                    onClick = onOpenSourcePicker,
                 )
             }
 

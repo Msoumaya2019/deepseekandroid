@@ -6,10 +6,12 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
 import com.msoumaya.deepseekandroid.core.data.local.BlobFile
+import com.msoumaya.deepseekandroid.core.data.local.HttpArchiveTransport
 import com.msoumaya.deepseekandroid.core.data.local.JsonFileStore
 import com.msoumaya.deepseekandroid.core.data.local.LocalStateStore
 import com.msoumaya.deepseekandroid.core.data.local.Outbox
 import com.msoumaya.deepseekandroid.core.data.local.OutboxStore
+import com.msoumaya.deepseekandroid.core.data.local.QuranArchiveInstaller
 import com.msoumaya.deepseekandroid.core.data.remote.AuthGateway
 import com.msoumaya.deepseekandroid.core.data.remote.OwnerStore
 import com.msoumaya.deepseekandroid.core.data.remote.RemoteStateSource
@@ -21,10 +23,12 @@ import com.msoumaya.deepseekandroid.core.data.remote.SupabaseStateSource
 import com.msoumaya.deepseekandroid.core.data.remote.UnavailableAuthGateway
 import com.msoumaya.deepseekandroid.core.data.remote.VaultSessionManager
 import com.msoumaya.deepseekandroid.core.data.repository.AuthRepository
+import com.msoumaya.deepseekandroid.core.data.repository.QuranArchiveStore
 import com.msoumaya.deepseekandroid.core.data.repository.UserRepository
 import com.msoumaya.deepseekandroid.core.data.security.SecretVault
 import com.msoumaya.deepseekandroid.core.domain.Dates
 import com.msoumaya.deepseekandroid.core.domain.Quran
+import com.msoumaya.deepseekandroid.core.domain.QuranArchive
 import com.msoumaya.deepseekandroid.core.domain.QuranDataLoader
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -184,6 +188,25 @@ class AppContainer(
                 .fold(onSuccess = { QuranState.Ready }, onFailure = { QuranState.Failed(it) })
         }
     }
+
+    // -----------------------------------------------------------------------
+    // Paquet « Coran 1441 »
+    // -----------------------------------------------------------------------
+
+    /**
+     * Le paquet de la source « Coran 1441 », téléchargé à la demande.
+     *
+     * Le dossier est sous la même racine que les autres ressources — `quran/coran_1441` à côté
+     * de `quran/pages` — et le transport réel est branché **ici, et nulle part ailleurs** :
+     * c'est ce qui permet d'éprouver toute l'installation sans réseau, avec une doublure.
+     */
+    val archive: QuranArchiveStore = QuranArchiveStore(
+        installer = QuranArchiveInstaller(
+            directory = File(root, QuranArchive.DIRECTORY),
+            transport = HttpArchiveTransport(),
+        ),
+        scope = scope,
+    )
 
     private companion object {
         /**

@@ -24,7 +24,6 @@ import com.msoumaya.deepseekandroid.feature.program.ProgramScreen
 import com.msoumaya.deepseekandroid.feature.progress.ProgressScreen
 import com.msoumaya.deepseekandroid.feature.quiz.QuizScreen
 import com.msoumaya.deepseekandroid.feature.reader.QuranScreen
-import com.msoumaya.deepseekandroid.feature.reader.ReaderScreen
 import com.msoumaya.deepseekandroid.feature.social.SocialScreen
 
 // ---------------------------------------------------------------------------
@@ -158,7 +157,12 @@ private fun AppNavHost(
         // Le lecteur ne connaît pas la navigation : il demande à fermer, et c'est la coquille
         // qui décide où l'on retourne. Un écran qui appelle `popBackStack` lui-même ne peut
         // plus être ouvert autrement que depuis la pile.
-        composable(AppRoutes.READER) { ReaderScreen(onClose = { navController.popBackStack() }) }
+        //
+        // La route — et non l'écran — porte la **porte** : une source en paquet dont
+        // l'installation n'est pas en place remplace la page par le panneau de téléchargement,
+        // et le choix de présentation se fait par-dessus. Le lecteur, lui, ne sait ni ce qu'est
+        // un paquet ni où il est stocké.
+        composable(AppRoutes.READER) { ReaderRoute(onClose = { navController.popBackStack() }) }
         composable(AppRoutes.QUIZ) { QuizScreen() }
 
         composable(AppRoutes.PROFILE) { ProfileScreen(mode = ProfileMode.PROFILE) }

@@ -16,7 +16,8 @@
  *   node tools/import-quran-assets.mjs --source <...> --all-pages
  *
  * Par défaut, seules les données JSON et un jeu réduit de pages (utile au développement)
- * sont copiés : les 604 pages complètes pèsent environ 114 Mo.
+ * sont copiés : les 604 pages complètes pèsent 118,2 Mo — mesuré sur les fichiers livrés, et
+ * non « environ 114 Mo » comme l'annonçait une première estimation.
  */
 
 import { createHash } from 'node:crypto';
@@ -89,7 +90,7 @@ function printUsage() {
       '',
       '  --source <dossier>   copie locale de coran-memoire (obligatoire)',
       '  --pages 1-3,580-604  pages du moushaf à copier (défaut : 1-3 et 580-604)',
-      '  --all-pages          copier les 604 pages (≈ 114 Mo)',
+      '  --all-pages          copier les 604 pages (118,2 Mo)',
       '  --data-only          ne copier que les données JSON',
       '  --with-tajweed       copier aussi les pages Tajweed (images)',
       '',
@@ -173,13 +174,21 @@ function main() {
   }
 
   // --- 4. Empreintes -------------------------------------------------------
+  //
+  // La liste vient de DATA_FILES — ce qui a été **importé** — et non d'un `readdirSync` sur le
+  // dossier. La différence n'est pas cosmétique : au deuxième import, `readdirSync` trouve
+  // `import-manifest.json` écrit par le premier, et enregistre donc l'empreinte du manifeste
+  // **précédent**. L'entrée est alors fausse à jamais — un fichier ne peut pas porter sa propre
+  // empreinte — et elle donne à un contrôleur l'illusion d'avoir vérifié quelque chose. Mesuré :
+  // `8437f2daae05` déclarée pour un fichier qui donne `fab6e4bd3e48`. Le dossier peut aussi
+  // contenir un JSON qu'aucun import n'a posé ; il n'a rien à faire dans le manifeste.
   const manifest = {
     importedAt: new Date().toISOString(),
     source,
     dataFiles: Object.fromEntries(
-      fs
-        .readdirSync(DATA_TARGET)
+      DATA_FILES.map(([, target]) => target)
         .filter((name) => name.endsWith('.json'))
+        .filter((name) => fs.existsSync(path.join(DATA_TARGET, name)))
         .map((name) => [name, sha256(path.join(DATA_TARGET, name))]),
     ),
     pages: fs.existsSync(PAGES_TARGET) ? fs.readdirSync(PAGES_TARGET).length : 0,

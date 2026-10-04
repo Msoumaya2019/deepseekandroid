@@ -8,6 +8,7 @@ import com.msoumaya.deepseekandroid.core.domain.ZIP_ARCHIVE_BYTES
 import com.msoumaya.deepseekandroid.core.domain.ZIP_LINES_PER_PAGE
 import com.msoumaya.deepseekandroid.core.domain.ZIP_TOTAL_FILES
 import com.msoumaya.deepseekandroid.core.domain.zipLineFileName
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Mutex
@@ -152,6 +153,11 @@ class QuranArchiveInstaller(
             completeMarker.delete()
             onProgress(ArchiveProgress(ArchivePhase.READY, 1f))
         } catch (error: Throwable) {
+            // Une annulation n'est pas un échec : c'est une pause demandée. La rapporter comme
+            // une erreur ferait afficher « Le téléchargement a été interrompu. Vérifie ta
+            // connexion et réessaie » à quelqu'un qui vient d'appuyer sur « Mettre en pause » —
+            // et l'enverrait chercher une panne de réseau qui n'existe pas.
+            if (error is CancellationException) throw error
             onProgress(
                 ArchiveProgress(
                     phase = ArchivePhase.ERROR,

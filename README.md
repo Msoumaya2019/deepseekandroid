@@ -15,22 +15,24 @@ libre de conserver l'un, l'autre, ou les deux.
 | Phase | Contenu | État |
 |---|---|---|
 | **A** | Analyse, architecture, Supabase, authentification, navigation, accueil | livrée — porte d'entrée, coquille de navigation et accueil |
-| **B** | Coran, lecteur, cache, audio | **en cours** — 604 pages embarquées, lecteur complet, **écoute verset par verset** avec mini-lecteur |
+| **B** | Coran, lecteur, cache, audio | **en cours** — 604 pages embarquées, lecteur complet, **écoute verset par verset** avec mini-lecteur, **paquet « Coran 1441 »** (téléchargement, reprise, installation) et son panneau |
 | **C** | Apprentissage, révisions, consolidation, programme | à venir |
 | **D** | Amis, Quiz, notifications, progrès | à venir |
 | **E** | Hors ligne, optimisation, tests, nettoyage | à venir |
 
-Ce qui est **fait et éprouvé** aujourd'hui — **353 tests**, tous verts :
+Ce qui est **fait et éprouvé** aujourd'hui — **430 tests**, tous verts :
 
 | Module | Tests | Ce qu'ils couvrent |
 |---|---|---|
-| `core:domain` | **230** | le domaine porté de `src/core/*.ts`, exécuté sur les **vraies données** (6 236 versets, 114 sourates, 604 pages) — dont la géométrie du lecteur, les gestes, la fenêtre de préchargement, les règles de silence entre deux versets, la relecture des préférences d'écoute, et les règles du paquet « Coran 1441 » : décision d'entrée, taille exacte, dimensions d'image, témoin d'installation |
-| `core:data` | **48** | le magasin JSON local, la file hors ligne, la fusion à trois voies, la règle du propriétaire — sur de **vrais fichiers** ; l'installation du paquet 1441 (reprise, témoin écrit en dernier, refus d'une archive douteuse) sur un **vrai ZIP** ; et le transport HTTP contre un **vrai serveur** local, en-tête `Range` compris |
+| `core:domain` | **292** | le domaine porté de `src/core/*.ts`, exécuté sur les **vraies données** (6 236 versets, 114 sourates, 604 pages) — dont la géométrie du lecteur, les gestes, la fenêtre de préchargement, les règles de silence entre deux versets, la relecture des préférences d'écoute, et les règles du paquet « Coran 1441 » : décision d'entrée, taille exacte, dimensions d'image, témoin d'installation, **forme de la page selon la source**, **rectangles des versets**, **transition de source**, et **les mots du panneau** |
+| `core:data` | **57** | le magasin JSON local, la file hors ligne, la fusion à trois voies, la règle du propriétaire — sur de **vrais fichiers** ; l'installation du paquet 1441 (reprise, témoin écrit en dernier, refus d'une archive douteuse) sur un **vrai ZIP** ; et le transport HTTP contre un **vrai serveur** local, en-tête `Range` compris |
 | `feature:home` | **22** | les règles de l'accueil : point de reprise, `scheduledDate` contre `date`, série de jours, période de chaque bandeau, objectif de la semaine |
 | `core:design` | **19** | les règles du thème : asymétrie de l'accent, fond secondaire, distinction des cinq palettes, résolution des polices |
+| `feature:reader` | **17** | le nommage des pages (une page blanche est une panne silencieuse), les bornes du geste, le repli d'affichage quand une préférence d'écoute est illisible, et **la pose des quinze bandes** d'une page du paquet |
 | `core:audio` | **14** | l'enchaînement réel d'une séance : silence technique observé, silence choisi sur les reprises seulement, arrêt en fin de passage, répétition illimitée, changement de récitateur, fin oubliée après fermeture — sur une **horloge virtuelle** |
-| `feature:reader` | **11** | le nommage des pages (une page blanche est une panne silencieuse), les bornes du geste, et le repli d'affichage quand une préférence d'écoute est illisible |
 | `feature:auth` | **9** | l'activation du formulaire de connexion : adresse, longueur du mot de passe, occupation |
+
+`feature:sources` — le module qui porte le téléchargement, le panneau et le choix de présentation — n'a **pas** de tests à lui : il ne fait que disposer à l'écran des règles qui vivent dans `core:domain`, où elles sont éprouvées. C'est le même partage que pour les autres écrans.
 
 En détail :
 
@@ -58,8 +60,12 @@ En détail :
 - **Intégration continue** : `.github/workflows/android.yml` — tests, lint et APK de test. Elle
   reste **verte sans aucun secret** ; si le dépôt porte `SUPABASE_ANON_KEY`, l'APK publié se
   connecte au projet, et la clé ne passe jamais par l'historique Git.
-- **Corpus coranique complet** : les **604 pages** du Coran de Médine (114 Mo) sont embarquées
-  dans `app/src/main/assets/quran/pages/`, à côté des 12 fichiers JSON du référentiel.
+- **Corpus coranique complet** : les **604 pages** du Coran de Médine (118,2 Mo, mesurés) sont
+  embarquées dans `app/src/main/assets/quran/pages/`, à côté des **11 fichiers JSON** du
+  référentiel et de la licence TANZIL — le dossier en compte 13, mais `import-manifest.json`
+  décrit les autres, il n'en fait pas partie. Les pages sont **octet pour octet** celles de
+  `coran-memoire` ; `tools/verifier-parite-donnees.py` le mesure sur les 604 pages et sur chaque
+  fichier de données, en lecture seule.
 - **Lecteur de moushaf** : page centrée dans l'espace sûr (barres système, découpes, navigation
   par geste), jamais déformée ; **un seul** gestionnaire de gestes, donc aucun conflit entre
   balayage, pincement, appui et appui long ; **trois pages en mémoire au maximum** ; coquille
@@ -76,11 +82,19 @@ En détail :
   non une intention. Une reprise qui reçoit une réponse `200` **jette** le partiel au lieu de s'y
   ajouter : sans cela l'archive aurait la bonne taille et un contenu faux, et rien ne le dirait
   avant l'écran.
+- **Panneau de téléchargement et choix de présentation** : le paquet se télécharge depuis un
+  panneau qui annonce la phase et le pourcentage, propose **un seul** bouton à la fois, et met
+  l'installation en pause dès que l'écran disparaît — un partiel reste lisible, une écriture
+  interrompue au milieu d'un fichier non. Le choix de présentation est **gardé par une porte** :
+  une source en paquet dont l'installation n'est pas en place **remplace la page** par le panneau
+  au lieu d'afficher une page blanche. Et une source n'est **adoptée qu'une fois ses images
+  vérifiées** : si la préparation échoue, la présentation précédente est conservée et un message
+  le dit.
 
-Ce qui **reste** : l'écran de téléchargement de la source « Coran 1441 », l'écran des réglages
-d'écoute (récitateur, nombre d'écoutes, silence, vitesse — les valeurs existent déjà et sont
-appliquées), la coquille d'étude (bandeau de séance, marqueurs de marge), le mode signet, le
-sélecteur de sourate, les écrans Programme / Progrès / Amis / Quiz / Profil, et les notifications.
+Ce qui **reste** : l'écran des réglages d'écoute (récitateur, nombre d'écoutes, silence, vitesse
+— les valeurs existent déjà et sont appliquées), la coquille d'étude (bandeau de séance,
+marqueurs de marge), le mode signet, le sélecteur de sourate, les écrans Programme / Progrès /
+Amis / Quiz / Profil, et les notifications.
 
 ---
 
@@ -95,16 +109,26 @@ export JAVA_HOME="/c/Program Files/Android/Android Studio/jbr"
 
 ./gradlew test                                   # toute la suite, toutes variantes
 python tools/compter-tests.py                    # le total, lu dans les rapports du coureur
+python tools/falsifier.py                        # les tests détectent-ils ce qu'ils annoncent ?
+python tools/falsifier.py --verifier             # les cas sont-ils encore jouables ? (sans Gradle)
 ./gradlew lint                                   # ce que les tests ne voient pas
 ./gradlew :app:assembleDebug                     # l'APK de test
 ./gradlew :app:assembleRelease                   # l'APK de version (minifié)
 ```
 
 `test` et non `testDebugUnitTest` : `core:domain` est un module Kotlin/JVM pur, il n'a pas de
-variante Android et sa tâche s'appelle `test`. Lancer la seconde laissait ses 153 tests hors de
+variante Android et sa tâche s'appelle `test`. Lancer la seconde laisse ses 292 tests hors de
 la mesure.
 
 Le chemin du SDK se règle dans `local.properties` (`sdk.dir=...`).
+
+> **Le lint sort en `BUILD SUCCESSFUL` avec 22 avertissements, et il faut le savoir avant de
+> croire à un zéro.** Mesuré sur les 14 rapports `build/reports/lint-results-*.xml` : 22
+> avertissements, **tous** de la famille « une version plus récente est disponible » — 3 sur le
+> plugin Android et le lanceur Gradle, 19 sur les dépendances du catalogue. **Aucun** ne porte sur
+> du code. Ils sont laissés en place volontairement : passer à AGP 9.4.1 est une migration, pas
+> une mise à jour. Le chiffre est noté ici pour qu'un relevé **supérieur** se remarque : sans
+> repère, vingt-deux avertissements de bruit finissent par cacher le vingt-troisième.
 
 > **Un build vert ne prouve pas que les tests ont tourné.** Le compte se lit dans les rapports
 > XML du coureur, pas dans la sortie de Gradle : `tools/compter-tests.py` existe pour cela, et il
@@ -120,13 +144,15 @@ l'application se compile en mode hors ligne.
 
 ## Outils de vérification
 
-Trois scripts, dans `tools/`, servent à **prouver** ce que la documentation affirme. Ils ne
+Cinq scripts, dans `tools/`, servent à **prouver** ce que la documentation affirme. Ils ne
 supposent rien : ils mesurent.
 
 | Script | Ce qu'il établit |
 |---|---|
 | `compter-tests.py` | le nombre de tests réellement exécutés, lu dans les rapports XML. Ne compte qu'une variante par classe : additionner `**/build/test-results/**` compte chaque test deux fois (debug **et** release) et oublie les modules JVM purs, qui écrivent sous `test-results/test/` |
-| `verifier-jetons-design.py` | que les 48 couleurs et les 5 jeux de pastilles sont **identiques** à ceux de `coran-memoire`. À lancer avec `--source <copie locale de coran-memoire>`, ouverte en lecture seule |
+| `falsifier.py` | qu'un test **détecte** ce qu'il prétend couvrir. Chaque cas casse volontairement une règle, joue la suite, et vérifie que les tests qui tombent sont ceux prévus — puis **restaure la source** et le prouve par empreinte. Seuls les rapports écrits après le lancement sont lus : un rapport périmé ferait passer un test supprimé pour vert. `--verifier` contrôle que les 18 cas sont encore jouables, sans lancer Gradle |
+| `verifier-parite-donnees.py` | que les **604 pages** et les **11 fichiers de données** embarqués sont **octet pour octet** ceux de `coran-memoire` — et que l'empreinte du manifeste d'import décrit bien les fichiers présents. À lancer avec `--source <copie locale de coran-memoire>`, ouverte en lecture seule |
+| `verifier-jetons-design.py` | que les 48 couleurs et les 5 jeux de pastilles sont **identiques** à ceux de `coran-memoire`. Même `--source`, même lecture seule |
 | `import-quran-assets.mjs` | l'import des données coraniques et des pages du moushaf depuis la même copie en lecture seule |
 
 ---

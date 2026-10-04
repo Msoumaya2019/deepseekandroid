@@ -2,6 +2,7 @@ package com.msoumaya.deepseekandroid.core.domain
 
 import com.msoumaya.deepseekandroid.core.model.AppJson
 import com.msoumaya.deepseekandroid.core.model.Range
+import com.msoumaya.deepseekandroid.core.model.VerseBoundsRow
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
@@ -58,9 +59,25 @@ object ZipQuranSource {
         return if (current != null && pages.contains(current)) current else pages.firstOrNull() ?: 1
     }
 
+    /**
+     * La plage des versets d'une page.
+     *
+     * ## Deux vides qui n'ont rien à voir, et un message qui les distingue
+     *
+     * L'identifiant d'un verset vient de `Quran.verseId`, donc d'un objet **global** rempli par
+     * `Quran.initialize`. Une page dont les lignes existent mais dont aucun identifiant ne se
+     * résout ne dit pas que les données sont fausses : elle dit que le référentiel coranique
+     * n'est pas chargé. Les deux cas rendaient le même message — « page sans coordonnées de
+     * verset » — et ce message a envoyé chercher un défaut dans `coran_1441-bounds.json` là où
+     * il n'y avait qu'une initialisation manquante. Le message nomme donc la cause.
+     */
     fun pageRange(page: Int): Range {
-        val ids = pageData(page).rows.mapNotNull { it.verseId }
-        if (ids.isEmpty()) throw IllegalArgumentException("Page $page sans coordonnées de verset")
+        val rows = pageData(page).rows
+        val ids = rows.mapNotNull { it.verseId }
+        if (ids.isEmpty()) {
+            val cause = if (rows.isEmpty()) "la page ne porte aucune ligne" else "référentiel coranique non chargé"
+            throw IllegalArgumentException("Page $page sans coordonnées de verset ($cause)")
+        }
         return Range(ids.min(), ids.max())
     }
 
@@ -134,8 +151,50 @@ object ZipQuranSource {
         return out
     }
 
-    /** Nombre de lignes d'une page, utilisé pour dimensionner la grille de rendu. */
-    fun lineCount(page: Int): Int = (bounds[page] ?: emptyList()).maxOfOrNull { it.line } ?: 0
+    /**
+     * Les rectangles des versets d'une page, dans l'espace de la source (1440×2320).
+     *
+     * Rendus dans le **même type** que `ReaderData.pageRows`, pour que le lecteur n'ait qu'un
+     * seul chemin de code : ce qui change d'une source à l'autre est l'espace de coordonnées et
+     * les images, pas la façon de trouver le verset sous le doigt.
+     *
+     * Les coordonnées du référentiel sont décimales (`352.08`), celles du type sont entières.
+     * La troncature vaut moins d'un pixel sur 1440 — la même que celle appliquée aux
+     * coordonnées du moushaf de Médine, qui sont décimales elles aussi. Arrondir autrement ici
+     * ferait diverger les deux sources pour un gain invisible.
+     */
+    fun verseRows(page: Int): List<VerseBoundsRow> =
+        (bounds[page] ?: emptyList()).map { row ->
+            VerseBoundsRow(
+                surah = row.surah,
+                ayah = row.ayah,
+                line = row.line,
+                x1 = row.x1.toInt(),
+                x2 = row.x2.toInt(),
+                y1 = row.y1.toInt(),
+                y2 = row.y2.toInt(),
+            )
+        }
+
+    /**
+     * L'index de la **dernière** ligne portant un verset sur [page], ou `null` si la page n'en
+     * porte aucun.
+     *
+     * ## Ce que cette fonction ne dit pas
+     *
+     * Elle ne dit **pas** combien de lignes porte la page, et le nom précédent — `lineCount` —
+     * promettait le contraire. L'index du référentiel est **0-based** : une page complète porte
+     * les index 0 à 14, soit quinze lignes, alors que son maximum vaut 14. Mesuré sur le
+     * référentiel livré : 602 pages ont pour maximum 14, deux l'ont à 11 — et la page 1 n'a que
+     * **sept** lignes distinctes pour un maximum de 11, parce que les lignes 0 à 11 d'Al-Fâtiha
+     * n'en portent pas toutes un verset.
+     *
+     * Trois nombres différents, donc, et les confondre se paie : dessiner quatorze bandes sur
+     * une page qui en compte quinze fait disparaître la dernière ligne du moushaf sans que rien
+     * ne le signale. Le nombre de bandes d'une page est **constant** et se lit dans
+     * `MushafPageShape.lines` ; ce qui se lit ici est la dernière ligne **utilisée**.
+     */
+    fun lastLineIndex(page: Int): Int? = (bounds[page] ?: emptyList()).maxOfOrNull { it.line }
 
     fun isAvailable(): Boolean = bounds.isNotEmpty()
 }

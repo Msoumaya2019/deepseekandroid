@@ -6,18 +6,19 @@ import com.msoumaya.deepseekandroid.core.domain.QuranArchive
 import com.msoumaya.deepseekandroid.core.domain.ZIP_LINES_PER_PAGE
 import com.msoumaya.deepseekandroid.core.domain.zipLineFileName
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import java.io.ByteArrayInputStream
-import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
 import java.net.UnknownHostException
 import java.nio.file.Files
+import java.util.Collections
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
-import java.util.zip.ZipEntry
-import java.util.zip.ZipOutputStream
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -76,61 +77,6 @@ class QuranArchiveInstallerTest {
             }
             return ArchiveStream(code, ByteArrayInputStream(body))
         }
-    }
-
-    // ---------------------------------------------------------------- fabriques
-
-    /** Une image de ligne valide : signature PNG sur deux octets et dimensions 1440×232. */
-    private fun png(
-        width: Int = QuranArchive.IMAGE_WIDTH,
-        height: Int = QuranArchive.IMAGE_HEIGHT,
-        extra: Int = 0,
-    ): ByteArray {
-        val bytes = ByteArray(24 + extra)
-        bytes[0] = 137.toByte()
-        bytes[1] = 80.toByte()
-        writeUint32(bytes, 16, width)
-        writeUint32(bytes, 20, height)
-        return bytes
-    }
-
-    private fun writeUint32(bytes: ByteArray, at: Int, value: Int) {
-        bytes[at] = (value ushr 24).toByte()
-        bytes[at + 1] = (value ushr 16).toByte()
-        bytes[at + 2] = (value ushr 8).toByte()
-        bytes[at + 3] = value.toByte()
-    }
-
-    private fun archive(vararg entries: Pair<String, ByteArray>): ByteArray {
-        val out = ByteArrayOutputStream()
-        ZipOutputStream(out).use { zip ->
-            entries.forEach { (name, bytes) ->
-                zip.putNextEntry(ZipEntry(name))
-                zip.write(bytes)
-                zip.closeEntry()
-            }
-        }
-        return out.toByteArray()
-    }
-
-    /**
-     * Le paquet complet, construit une fois : 9 060 pages **plus** des entrées sans rapport.
-     *
-     * Les entrées parasites sont là exprès : une archive réelle en contient — fichiers de
-     * description, dossiers — et une installation qui les refuserait échouerait sur une archive
-     * parfaitement valide.
-     */
-    private val fullArchive: ByteArray by lazy {
-        val entries = mutableListOf<Pair<String, ByteArray>>()
-        entries += "readme.txt" to "coran 1441".toByteArray()
-        entries += "width_1440/" to ByteArray(0)
-        entries += "width_1440/7/12.jpg" to ByteArray(0)
-        for (page in 1..604) {
-            for (line in 1..ZIP_LINES_PER_PAGE) {
-                entries += "width_1440/$page/$line.png" to png()
-            }
-        }
-        archive(*entries.toTypedArray())
     }
 
     private fun temp(): File =
@@ -278,8 +224,8 @@ class QuranArchiveInstallerTest {
     @Test
     fun `une installation complete ecrit les 9060 lignes et le temoin en dernier`() = runTest {
         val directory = temp()
-        val transport = FakeTransport(fullArchive, status = { 200 })
-        val archive = installer(directory, transport, fullArchive.size.toLong())
+        val transport = FakeTransport(TestArchives.full, status = { 200 })
+        val archive = installer(directory, transport, TestArchives.full.size.toLong())
         val states = mutableListOf<ArchiveProgress>()
 
         archive.install { states += it }
@@ -325,7 +271,7 @@ class QuranArchiveInstallerTest {
     @Test
     fun `une entree qui sort du moushaf fait echouer l'installation`() = runTest {
         val directory = temp()
-        val payload = archive("width_1440/605/1.png" to png())
+        val payload = TestArchives.archive("width_1440/605/1.png" to TestArchives.png())
 
         val error = assertFailsWith<IOException> {
             installer(directory, FakeTransport(payload, { 200 }), payload.size.toLong()).install()
@@ -338,7 +284,7 @@ class QuranArchiveInstallerTest {
     @Test
     fun `une image de mauvaise dimension fait echouer l'installation`() = runTest {
         val directory = temp()
-        val payload = archive("width_1440/7/12.png" to png(height = QuranArchive.IMAGE_HEIGHT - 1))
+        val payload = TestArchives.archive("width_1440/7/12.png" to TestArchives.png(height = QuranArchive.IMAGE_HEIGHT - 1))
 
         val error = assertFailsWith<IOException> {
             installer(directory, FakeTransport(payload, { 200 }), payload.size.toLong()).install()
@@ -351,7 +297,7 @@ class QuranArchiveInstallerTest {
     @Test
     fun `une image trop volumineuse est refusee pendant la lecture`() = runTest {
         val directory = temp()
-        val payload = archive("width_1440/7/12.png" to png(extra = QuranArchive.MAX_IMAGE_BYTES))
+        val payload = TestArchives.archive("width_1440/7/12.png" to TestArchives.png(extra = QuranArchive.MAX_IMAGE_BYTES))
 
         val error = assertFailsWith<IOException> {
             installer(directory, FakeTransport(payload, { 200 }), payload.size.toLong()).install()
@@ -363,7 +309,7 @@ class QuranArchiveInstallerTest {
     @Test
     fun `une archive incomplete est refusee`() = runTest {
         val directory = temp()
-        val payload = archive("width_1440/1/1.png" to png())
+        val payload = TestArchives.archive("width_1440/1/1.png" to TestArchives.png())
 
         val error = assertFailsWith<IOException> {
             installer(directory, FakeTransport(payload, { 200 }), payload.size.toLong()).install()
@@ -418,9 +364,9 @@ class QuranArchiveInstallerTest {
             opens.incrementAndGet()
             entered.complete(Unit)
             gate.await()
-            ArchiveStream(200, ByteArrayInputStream(fullArchive))
+            ArchiveStream(200, ByteArrayInputStream(TestArchives.full))
         }
-        val archive = installer(directory, transport, fullArchive.size.toLong())
+        val archive = installer(directory, transport, TestArchives.full.size.toLong())
 
         val first = launch { archive.install() }
         entered.await()
@@ -440,5 +386,58 @@ class QuranArchiveInstallerTest {
             "deux écritures dans le même fichier donneraient une archive fausse",
         )
         assertTrue(archive.isInstalled())
+    }
+
+    @Test
+    fun `une annulation ne publie pas d'erreur`() = runTest {
+        val directory = temp()
+        val engage = CountDownLatch(1)
+        val peutContinuer = CountDownLatch(1)
+        val transport = ArchiveTransport {
+            ArchiveStream(
+                200,
+                object : InputStream() {
+                    private var at = 0
+
+                    override fun read(): Int {
+                        val un = ByteArray(1)
+                        val n = read(un, 0, 1)
+                        return if (n < 0) -1 else un[0].toInt() and 0xFF
+                    }
+
+                    override fun read(b: ByteArray, off: Int, len: Int): Int {
+                        if (at == 0) {
+                            // Point d'arrêt explicite : sans lui, la boucle d'écriture pourrait
+                            // finir avant que l'annulation n'arrive, et le test passerait sans
+                            // avoir rien éprouvé.
+                            engage.countDown()
+                            peutContinuer.await()
+                        }
+                        if (at >= 400_000) return -1
+                        val n = minOf(len, 4096)
+                        at += n
+                        return n
+                    }
+                },
+            )
+        }
+        val installer = QuranArchiveInstaller(directory, transport, expectedBytes = 4000L)
+        val etats = Collections.synchronizedList(mutableListOf<ArchiveProgress>())
+
+        // `Dispatchers.Default` et non le répartiteur du test : celui-ci est mono-thread, et
+        // attendre sur le loquet depuis le fil de test empêcherait la coroutine de démarrer —
+        // le test échouerait sur « l'installation n'a pas démarré », sans rien dire du code.
+        val job = launch(Dispatchers.Default) { runCatching { installer.install { etats += it } } }
+        assertTrue(engage.await(5, TimeUnit.SECONDS), "l'installation n'a pas démarré")
+        job.cancel()
+        peutContinuer.countDown()
+        job.join()
+
+        // Une pause est une annulation, pas une panne : publier une erreur ferait afficher
+        // « Vérifie ta connexion et réessaie » à quelqu'un qui a appuyé sur « Mettre en pause ».
+        assertTrue(
+            etats.none { it.phase == ArchivePhase.ERROR },
+            "une pause n'est pas une erreur : ${etats.map { it.phase }}",
+        )
     }
 }
