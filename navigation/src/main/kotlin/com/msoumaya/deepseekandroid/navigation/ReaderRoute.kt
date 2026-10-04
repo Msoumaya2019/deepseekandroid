@@ -5,6 +5,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -19,6 +20,7 @@ import com.msoumaya.deepseekandroid.feature.sources.QuranDownloadPanel
 import com.msoumaya.deepseekandroid.feature.sources.QuranSourcePickerDialog
 import com.msoumaya.deepseekandroid.feature.sources.QuranSourceViewModel
 import com.msoumaya.deepseekandroid.feature.sources.archiveMushafPages
+import kotlinx.coroutines.launch
 
 /**
  * La route du lecteur : la porte, le lecteur, et le choix de présentation.
@@ -47,6 +49,17 @@ import com.msoumaya.deepseekandroid.feature.sources.archiveMushafPages
  * « réinstaller » qui n'existe dans aucun des deux clients. `QuranSourceReady` sait le dire —
  * la vérification existe et est éprouvée — mais aucun écran ne le lui demande encore.
  *
+ * ## Les réglages d'écoute
+ *
+ * Ils sont relus du disque par le conteneur au démarrage, et cette route les **observe** : la
+ * lecture peut aboutir après l'ouverture du lecteur, et la valeur publiée est alors adoptée —
+ * voir `ReaderScreen`, qui cesse de l'adopter dès que la personne règle quelque chose.
+ *
+ * Chaque changement est écrit ici, et non dans le lecteur : c'est le seul endroit qui connaisse
+ * le conteneur. L'écriture est lancée sur la portée de la route, donc elle meurt avec l'écran —
+ * ce qui est le bon comportement pour un geste : elle ne doit pas survivre à ce qui l'a
+ * déclenchée.
+ *
  * @param onClose ferme le lecteur. La route ne décide pas où l'on retourne : elle le demande à
  *   la coquille, qui seule connaît la pile.
  */
@@ -64,6 +77,13 @@ fun ReaderRoute(
 ) {
     val source by viewModel.source.collectAsStateWithLifecycle()
     val downloaded by viewModel.downloaded.collectAsStateWithLifecycle()
+
+    // Observés, et non lus une fois : la relecture du document se termine peut-être après
+    // l'ouverture du lecteur. Le lecteur adopte alors la valeur publiée tant que rien n'a été
+    // réglé à la main — le comportement ne dépend donc pas d'une course.
+    val storedSettings by container.audioSettings.settings.collectAsStateWithLifecycle()
+    val storedReciterId by container.audioSettings.reciterId.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
 
     // La page est tenue ici, et non dans le lecteur : le choix de présentation en a besoin pour
     // vérifier que la page affichée existera encore dans l'autre source. Changer de
@@ -97,6 +117,17 @@ fun ReaderRoute(
         onClose = onClose,
         onPageChanged = { page = it },
         onOpenSourcePicker = { pickerOpen = true },
+        initialSettings = storedSettings,
+        initialReciterId = storedReciterId,
+        onAudioSettingsChanged = { settings, reciterId ->
+            scope.launch {
+                // Un disque plein ne doit pas emporter le lecteur : le réglage est **déjà**
+                // appliqué à la séance, et c'est ce que la personne voit. Seul son
+                // enregistrement échoue, et le lecteur n'a rien à en faire — l'annoncer
+                // supposerait un endroit où le dire, qui n'existe pas encore.
+                runCatching { container.audioSettings.save(settings, reciterId) }
+            }
+        },
     )
 
     if (pickerOpen) {

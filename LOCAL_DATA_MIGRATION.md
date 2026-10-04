@@ -59,18 +59,28 @@ même (`Program.isValidPersistedState`), et **archive** le fichier refusé au li
 
 | Clé React Native | Ce qu'elle porte | Équivalent Android | Synchronisée ? |
 |---|---|---|---|
-| `audio-reciter-hafs` | le récitant choisi | `AppState.audioPreferences.reciterId` | **oui**, via `user_state` |
-| `audio-repeat-preferences` | répétition (1x/2x/3x/5x), plage X→Y, pause entre versets | réglages locaux (`DataStore`) | **non** — comme dans le client d'origine |
+| `audio-reciter-hafs` | le récitant choisi | `state/audio.json` (local) — `AppState.audioPreferences.reciterId` une fois le chemin branché | **pas encore** |
+| `audio-repeat-preferences` | répétition (1x/2x/3x/5x), plage X→Y, pause entre versets | `state/audio.json` (local) | **non** — comme dans le client d'origine |
 | `guest-content-favorites` | favoris de contenus créés sans compte | `content_favorites` (Supabase) une fois connecté | non en mode invité |
 | `notification-installation-id` | identifiant d'installation pour les notifications | **recréé** sur Android | non — il est propre à l'installation |
 | `notifications-requested-on-device` | « a-t-on déjà demandé l'autorisation sur cet appareil ? » | indicateur local | non — propre à l'appareil |
 | `audio-reciter-legacy-owner` | marqueur de migration d'un ancien format | sans objet | — |
 
+**Les deux clés d'écoute tiennent dans un seul document.** `audio-repeat-preferences` et
+`audio-reciter-hafs` sont réunies dans `state/audio.json`, et non dans deux fichiers : elles
+répondent à la même question — comment j'écoute — et deux fichiers écrits au même moment
+finiraient par diverger sur l'appareil de quelqu'un qui change souvent de récitateur. Ce document
+n'est **pas** par compte, comme les clés d'origine : la façon d'écouter tient à l'appareil et à
+l'oreille de celui qui le tient. Un récitateur enregistré puis retiré des récitateurs disponibles
+retombe sur le défaut, et un champ hors bornes ne fait pas perdre ses voisins.
+
 Deux points méritent d'être notés.
 
-**Le récitant est déjà synchronisé.** Il fait partie de `AppState.audioPreferences`, donc il
-voyage avec l'état. Un utilisateur qui choisit `ar.shaatree` sur React Native le retrouve sur
-Android, et réciproquement.
+**Le récitant a sa place dans l'état synchronisé, mais Android ne l'y écrit pas encore.** Il fait
+partie de `AppState.audioPreferences`, donc il peut voyager avec l'état : un utilisateur qui
+choisit `ar.shaatree` sur React Native le retrouve dans l'état rapatrié. Ce qui manque côté
+Android, c'est le **chemin inverse** — le choix fait dans le lecteur est enregistré localement,
+mais pas encore rapporté à l'état synchronisé. C'est une ligne de la phase B.
 
 **Les réglages de répétition ne le sont pas** — ni dans un sens ni dans l'autre, puisque le
 client d'origine les garde en local. Android reproduit ce comportement plutôt que d'inventer

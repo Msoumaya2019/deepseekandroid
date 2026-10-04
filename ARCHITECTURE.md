@@ -225,6 +225,7 @@ inconnus — c'est-à-dire précisément le travail de la version la plus récen
 | `state_account_<jeton>.json` | l'état d'un compte, avec son `userId` à l'intérieur. **Un fichier par compte**, comme la table `account_state` du client d'origine |
 | `state_base_anonymous.json`, `state_base_<jeton>.json` | l'état serveur de référence, base de la fusion à trois voies |
 | `outbox.json` | les opérations en attente d'envoi |
+| `audio.json` | les réglages d'écoute — répétitions et récitateur, réunis dans un seul document. **Hors des comptes** : la façon d'écouter tient à l'appareil |
 | `session.preferences_pb` | l'identifiant du propriétaire courant, en clair et sans plus |
 | `session.bin` | le jeton de session, **chiffré** par le magasin de clés |
 
@@ -409,13 +410,13 @@ de tout le domaine — déjà testé — pour un gain nul. Elle n'est donc pas l
 | Suite | Nombre | Ce qu'elle couvre |
 |---|---|---|
 | `core:domain` | 326 | Coran, dates, programme, révisions, consolidations, signets, audio, file d'écoute et silences, quiz, lecteur et gestes, fusion hors ligne, file d'attente, composition de synchronisation, décision d'ouverture, messages de connexion, **libellés des écrans du lecteur** (feuille d'options, sélecteur de sourate, réglages d'écoute : titre aligné sur la ligne qui l'ouvre, vitesses en virgule française, note de marge technique, refus de la saisie libre), **règles du paquet « Coran 1441 »** (décision d'entrée, taille exacte, dimensions d'image, témoin d'installation, forme de la page selon la source, rectangles des versets, transition de source, mots du panneau) |
-| `core:data` | 57 | lecture locale, hors ligne, premier chargement, isolation des comptes, fichier d'état illisible, file, idempotence, remise à zéro, règle du propriétaire, **installation du paquet 1441** (reprise, témoin écrit en dernier, refus d'une archive douteuse) et **transport HTTP** (en-tête `Range`, `200` contre `206`, refus) |
+| `core:data` | 67 | lecture locale, hors ligne, premier chargement, isolation des comptes, fichier d'état illisible, file, idempotence, remise à zéro, règle du propriétaire, **dépôt des réglages d'écoute** (premier démarrage, document complet, champ hors bornes isolé, document illisible mis de côté, relecture depuis le disque, échec d'écriture qui ne publie rien), **branchement du conteneur** (contrôle de forme : la relecture au démarrage et l'emplacement du document), **installation du paquet 1441** (reprise, témoin écrit en dernier, refus d'une archive douteuse) et **transport HTTP** (en-tête `Range`, `200` contre `206`, refus) |
 | `feature:home` | 22 | point de reprise, `scheduledDate` contre `date`, série de jours, période de chaque bandeau, objectif de la semaine, libellés de repli |
 | `core:design` | 19 | asymétrie de l'accent, fond secondaire, distinction des cinq palettes, échelles de `tokens.ts`, résolution des polices, écran Apparence |
 | `feature:reader` | 18 | nommage des pages, bornes du geste, **affichage du nombre d'écoutes** (ce que le moteur jouera, saisie abîmée comprise), **pose des quinze bandes** d'une page du paquet (hauteur, premier et dernière bande, chevauchement) |
 | `core:audio` | 16 | conduite d'une séance sur horloge virtuelle : silence observé, reprises, arrêt, répétition illimitée, changement de récitateur, fin oubliée après fermeture, fichier illisible, **réglages appliqués à la séance en cours**, et **saisie d'écoutes illisible qui ne fige pas la séance** |
 | `feature:auth` | 9 | activation du formulaire : adresse, longueur du mot de passe, occupation, libellés |
-| **total** | **467** | 39 classes de test |
+| **total** | **477** | 41 classes de test |
 
 Le domaine est éprouvé sur les **vraies données** — 6 236 versets, 114 sourates, 604 pages — et
 non sur une maquette de trois versets, qui laisserait passer une erreur d'indexation ou une
@@ -454,7 +455,7 @@ affiche aussi le **nombre de classes lues** : un relevé vide signalerait que le
 aucun test, et « tout vert » ne voudrait alors rien dire.
 
 **Un test vert ne dit pas qu'il détecte quoi que ce soit.** `tools/falsifier.py` casse
-volontairement une règle — vingt-huit fois, chacune sur une règle différente — relance la suite, et
+volontairement une règle — trente-quatre fois, chacune sur une règle différente — relance la suite, et
 vérifie que les tests qui tombent sont **ceux qui devaient tomber**. Il restaure ensuite le fichier
 et le prouve par empreinte, pas par la bonne volonté d'un `finally`. Deux pièges y sont traités
 nommément : les rapports XML restent sur le disque d'une exécution à l'autre, donc seuls ceux
@@ -470,6 +471,22 @@ leçon se figeait, et rien ne le disait — ni message, ni erreur, ni test rouge
 établi qu'en écrivant un test qui demande explicitement à la séance de **survivre** : après une fin
 de verset sur des réglages abîmés, il faut qu'une séance neuve enchaîne encore. Un test qui se
 serait contenté de constater l'absence d'erreur serait passé au vert sur le code fautif.
+
+**Tout ne s'éprouve pas par le comportement.** Le conteneur ne se construit qu'avec un `Context`
+Android : dans une épreuve JVM, rien de ce qu'il fait au démarrage ne peut être exécuté. Or deux
+choses y sont invisibles à l'exécution — **la relecture des réglages d'écoute au démarrage**, et
+**l'emplacement de leur document**. Si la première disparaît, le lecteur part des valeurs par
+défaut et le premier réglage **écrase le choix enregistré sans que rien ne le dise**. C'est
+pourquoi `AppContainerWiringTest` lit le source du conteneur et vérifie que l'appel est écrit. Ce
+contrôle est **de forme** : il dit que le branchement existe, pas que la relecture aboutit — le
+comportement, lui, est éprouvé par `AudioSettingsRepositoryTest`, sur de vrais fichiers.
+
+**Ce qui reste hors de tout contrôle automatique, et qu'il faut donc lire dans un diff** : le
+lecteur adopte la valeur relue tant que rien n'a été réglé à la main, et il rapporte chaque
+changement à la route, qui l'écrit. Aucune épreuve ne traverse ce trajet — le lecteur est un
+`@Composable`, et le projet n'a pas d'outillage de test d'interface. Les deux bouts sont tenus
+(la règle d'adoption est dans `ReaderScreen`, l'écriture est éprouvée), le fil qui les relie ne
+l'est pas.
 Les deux constats sont écrits dans le code concerné, pas seulement dans ce document.
 
 **Les données embarquées se prouvent, elles aussi.** `tools/verifier-parite-donnees.py` recalcule

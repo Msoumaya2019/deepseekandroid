@@ -141,6 +141,29 @@ data class StoredAudioPreferences(
 )
 
 /**
+ * Les réglages d'écoute tels qu'ils sont enregistrés sur l'appareil.
+ *
+ * Le client d'origine les range dans **deux clés** d'`AsyncStorage` distinctes : les répétitions
+ * dans `audio-repeat-preferences`, le récitateur dans `audio-reciter-hafs`. Ils sont réunis ici
+ * dans un seul document, parce qu'ils répondent à la même question — comment j'écoute — et que
+ * deux fichiers écrits au même moment finiraient par diverger sur l'appareil de quelqu'un qui
+ * change souvent de récitateur.
+ *
+ * Ce que ce document **n'est pas** : un état par compte. Le client d'origine range ces deux clés
+ * hors de toute notion d'utilisateur, et c'est le bon choix — la façon d'écouter tient à
+ * l'appareil et aux oreilles de celui qui le tient, pas au compte ouvert.
+ *
+ * Le récitateur est **facultatif**, et `null` veut dire « jamais choisi » et non « le premier de
+ * la liste ». La distinction compte : un identifiant enregistré puis retiré des récitateurs
+ * disponibles doit retomber sur le défaut, et non faire échouer l'ouverture du lecteur.
+ */
+@Serializable
+data class StoredAudioSettings(
+    val repeat: StoredAudioPreferences = StoredAudioPreferences(),
+    val reciterId: String? = null,
+)
+
+/**
  * Les réglages effectifs d'une séance d'écoute.
  *
  * Volontairement **non sérialisable** : ce qui s'enregistre est [StoredAudioPreferences], dont

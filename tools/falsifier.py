@@ -331,6 +331,69 @@ CAS: list[dict] = [
         "tache": ":core:audio:testDebugUnitTest",
         "attendus": ["AudioSessionControllerTest"],
     },
+    {
+        # La relecture n'est plus branchee au demarrage : le lecteur part des valeurs par defaut,
+        # et le premier reglage ecrase le choix enregistre sans que rien ne le dise. Aucun banc de
+        # comportement ne peut le voir — le conteneur ne se construit qu'avec un `Context`
+        # Android — c'est donc le controle de forme qui porte cette regle.
+        "nom": "reglages : la relecture au demarrage n'est plus branchee",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/AppContainer.kt",
+        "avant": "        scope.launch { audioSettings.prime() }",
+        "apres": "        scope.launch { }",
+        "tache": ":core:data:testDebugUnitTest",
+        "attendus": ["AppContainerWiringTest"],
+    },
+    {
+        # Le document repasse dans un dossier de compte : changer de compte changerait de facon
+        # d'ecouter, alors qu'elle tient a l'appareil et a l'oreille de celui qui le tient.
+        "nom": "reglages : le document repasse dans un dossier de compte",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/AppContainer.kt",
+        "avant": "File(root, \"audio.json\")",
+        "apres": "File(root, \"accounts/audio.json\")",
+        "tache": ":core:data:testDebugUnitTest",
+        "attendus": ["AppContainerWiringTest"],
+    },
+    {
+        # Le recitateur enregistre n'est plus relu : le lecteur repart du premier de la liste, et
+        # le prochain reglage enregistre ce defaut a la place du choix.
+        "nom": "reglages : le recitateur enregistre n'est plus relu",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/AudioSettingsRepository.kt",
+        "avant": "_reciterId.value = stored.reciterId",
+        "apres": "_reciterId.value = null",
+        "tache": ":core:data:testDebugUnitTest",
+        "attendus": ["AudioSettingsRepositoryTest"],
+    },
+    {
+        # Une seule ecriture pour les deux morceaux, et le recitateur est oublie : un changement
+        # de recitateur ne survit plus au redemarrage.
+        "nom": "reglages : l'ecriture n'emporte plus le recitateur",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/AudioSettingsRepository.kt",
+        "avant": "it.copy(repeat = session.stored(), reciterId = reciterId)",
+        "apres": "it.copy(repeat = session.stored())",
+        "tache": ":core:data:testDebugUnitTest",
+        "attendus": ["AudioSettingsRepositoryTest"],
+    },
+    {
+        # L'echec d'ecriture est avale et l'etat est publie quand meme : la feuille annonce
+        # « enregistre » pour un document qui n'existe pas.
+        "nom": "reglages : un echec d'ecriture est avale et l'etat publie quand meme",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/AudioSettingsRepository.kt",
+        "avant": "        store.update { it.copy(repeat = session.stored(), reciterId = reciterId) }",
+        "apres": "        runCatching { store.update { it.copy(repeat = session.stored(), reciterId = reciterId) } }",
+        "tache": ":core:data:testDebugUnitTest",
+        "attendus": ["AudioSettingsRepositoryTest"],
+    },
+    {
+        # La relecture ne tolere plus un champ hors bornes : une seule valeur abimee emporte tout
+        # le document, et la personne perd ses reglages sans comprendre pourquoi. Le banc du
+        # domaine le voit aussi ; c'est celui du depot qui est eprouve ici.
+        "nom": "reglages : la relecture ne tolere plus un champ hors bornes",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/AudioSession.kt",
+        "avant": "gapSeconds = stored.gap?.takeIf { it in AudioSettings.GAP_CHOICES }",
+        "apres": "gapSeconds = stored.gap",
+        "tache": ":core:data:testDebugUnitTest",
+        "attendus": ["AudioSettingsRepositoryTest"],
+    },
 ]
 
 

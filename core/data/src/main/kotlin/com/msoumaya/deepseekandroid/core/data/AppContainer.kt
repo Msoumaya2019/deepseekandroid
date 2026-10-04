@@ -22,6 +22,7 @@ import com.msoumaya.deepseekandroid.core.data.remote.SupabaseProvider
 import com.msoumaya.deepseekandroid.core.data.remote.SupabaseStateSource
 import com.msoumaya.deepseekandroid.core.data.remote.UnavailableAuthGateway
 import com.msoumaya.deepseekandroid.core.data.remote.VaultSessionManager
+import com.msoumaya.deepseekandroid.core.data.repository.AudioSettingsRepository
 import com.msoumaya.deepseekandroid.core.data.repository.AuthRepository
 import com.msoumaya.deepseekandroid.core.data.repository.QuranArchiveStore
 import com.msoumaya.deepseekandroid.core.data.repository.UserRepository
@@ -30,6 +31,7 @@ import com.msoumaya.deepseekandroid.core.domain.Dates
 import com.msoumaya.deepseekandroid.core.domain.Quran
 import com.msoumaya.deepseekandroid.core.domain.QuranArchive
 import com.msoumaya.deepseekandroid.core.domain.QuranDataLoader
+import com.msoumaya.deepseekandroid.core.domain.StoredAudioSettings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -159,6 +161,22 @@ class AppContainer(
         remote = remoteState,
     )
 
+    /**
+     * Les réglages d'écoute de l'appareil.
+     *
+     * Ils ne sont **pas** par compte, et le fichier est donc à la racine de l'état plutôt que
+     * dans un dossier de compte : la façon d'écouter tient à l'appareil et à l'oreille de celui
+     * qui le tient, pas au compte ouvert. C'est aussi ce que fait le client d'origine, qui range
+     * ces clés hors de toute notion d'utilisateur.
+     */
+    val audioSettings: AudioSettingsRepository = AudioSettingsRepository(
+        store = JsonFileStore(
+            file = File(root, "audio.json"),
+            serializer = StoredAudioSettings.serializer(),
+            default = { StoredAudioSettings() },
+        ),
+    )
+
     // -----------------------------------------------------------------------
     // Référentiel coranique
     // -----------------------------------------------------------------------
@@ -187,6 +205,13 @@ class AppContainer(
             _quranState.value = runCatching { Quran.initialize(QuranDataLoader.loadFromClasspath()) }
                 .fold(onSuccess = { QuranState.Ready }, onFailure = { QuranState.Failed(it) })
         }
+
+        // Les réglages d'écoute sont relus **au démarrage**, et non à l'ouverture du lecteur :
+        // le lecteur doit pouvoir partir des valeurs enregistrées sans attendre le disque, et le
+        // premier réglage de la personne ne doit pas écraser un choix antérieur — ce qu'un
+        // départ sur les valeurs par défaut ferait sans le dire. Le document fait quelques
+        // centaines d'octets, et la lecture ne touche pas le fil principal.
+        scope.launch { audioSettings.prime() }
     }
 
     // -----------------------------------------------------------------------

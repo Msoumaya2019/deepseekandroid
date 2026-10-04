@@ -86,13 +86,15 @@ private const val DEFAULT_TOTAL_PAGES = 604
  *   nombre d'écoutes, de mode ou de silence vaut pour la séance ouverte, sans avoir à la
  *   relancer : c'est le comportement du client d'origine, où les réglages sont relus à chaque
  *   rendu. Le verset en train de jouer n'est jamais coupé.
+ * - **Les réglages d'écoute sont enregistrés sur l'appareil.** Chaque changement est écrit dans
+ *   un document unique qui porte aussi le récitateur, et relu au démarrage de l'application.
+ *   La relecture pouvant aboutir après l'ouverture du lecteur, la valeur publiée est adoptée
+ *   **tant que la personne n'a rien réglé ici** : son premier geste prime sur la lecture. Ces
+ *   réglages ne sont pas par compte — la façon d'écouter tient à l'appareil, comme dans le
+ *   client d'origine, qui range ces deux clés hors de toute notion d'utilisateur.
  *
  * ## Ce qui viendra, et où
  *
- * Les réglages d'écoute **ne sont pas encore enregistrés** : ils vivent le temps de la session,
- * et un redémarrage de l'application ramène les valeurs par défaut. Le magasin local existe
- * (`JsonFileStore`), et `AudioSession.stored()` / `AudioSession.fromStored` sont écrits et
- * éprouvés ; il manque le raccordement au conteneur, et c'est la prochaine ligne de la phase B.
  * La traduction française, la coquille d'étude et le mode signet appartiennent à la phase C.
  * Chacune de ces lignes s'ajoutera en passant sa destination à `ReaderOptionsSheet` : tant
  * qu'elle vaut `null`, la ligne ne s'affiche pas, et rien ne ment à l'écran.
@@ -110,6 +112,11 @@ private const val DEFAULT_TOTAL_PAGES = 604
  *   vérifiée avant d'adopter une autre source.
  * @param onOpenSourcePicker ouvre le choix de présentation. `null` quand l'appelant n'en
  *   propose pas — le bouton est alors absent plutôt que présent et sans effet.
+ * @param initialSettings les réglages d'écoute relus du disque. Valeur de **départ**, adoptée
+ *   tant que la personne n'a rien réglé ici.
+ * @param initialReciterId le récitateur enregistré, ou `null` s'il n'a jamais été choisi.
+ * @param onAudioSettingsChanged rapporte chaque changement, avec le récitateur courant, pour
+ *   qu'il soit écrit. Les deux partent ensemble : c'est un seul document.
  */
 @Composable
 fun ReaderScreen(
@@ -120,6 +127,9 @@ fun ReaderScreen(
     onClose: () -> Unit = {},
     onPageChanged: (Int) -> Unit = {},
     onOpenSourcePicker: (() -> Unit)? = null,
+    initialSettings: AudioSession = AudioSession(),
+    initialReciterId: String? = null,
+    onAudioSettingsChanged: (AudioSession, String) -> Unit = { _, _ -> },
 ) {
     val colors = AppTheme.colors
     val totalPages = remember { Quran.pages.size.takeIf { it > 0 } ?: DEFAULT_TOTAL_PAGES }
@@ -157,9 +167,25 @@ fun ReaderScreen(
     // Sauvegardés, ils survivent à une rotation — sans quoi tourner le téléphone ramènerait le
     // premier récitateur de la liste, alors que la page, elle, est conservée.
     var settings by rememberSaveable(stateSaver = AudioSessionSaver) {
-        mutableStateOf(AudioSession())
+        mutableStateOf(initialSettings)
     }
-    var reciterId by rememberSaveable { mutableStateOf(Audio.defaultReciter.id) }
+    var reciterId by rememberSaveable { mutableStateOf(initialReciterId ?: Audio.defaultReciter.id) }
+
+    // Le disque est relu au démarrage de l'application, et rien ne garantit que la lecture ait
+    // abouti quand le lecteur s'ouvre. Tant que la personne n'a rien réglé **ici**, la valeur
+    // publiée remplace donc celle du premier rendu ; dès qu'elle a touché un réglage, sa
+    // décision prime — la relire écraserait son geste. Le comportement ne dépend ainsi pas d'une
+    // course entre une lecture de fichier et un appui.
+    var regleParLaPersonne by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(initialSettings, initialReciterId) {
+        if (!regleParLaPersonne) {
+            settings = initialSettings
+            // `null` veut dire « jamais choisi » : le défaut affiché n'est pas un choix, et
+            // l'écrire en serait un.
+            initialReciterId?.let { reciterId = it }
+        }
+    }
+
     // Un identifiant inconnu retombe sur le récitateur par défaut, comme une préférence
     // enregistrée par une version antérieure : mieux vaut écouter le mauvais récitateur que
     // rien du tout, et la liste des récitateurs est visible deux appuis plus loin.
@@ -428,10 +454,16 @@ fun ReaderScreen(
             // chaque rendu. Un réglage qui ne vaudrait qu'après avoir relancé la séance serait
             // un piège, puisque rien à l'écran ne le dirait.
             onSettings = {
+                regleParLaPersonne = true
                 settings = it
                 audio.updateSettings(it)
+                onAudioSettingsChanged(it, reciterId)
             },
-            onReciter = { reciterId = it.id },
+            onReciter = {
+                regleParLaPersonne = true
+                reciterId = it.id
+                onAudioSettingsChanged(settings, it.id)
+            },
             // Lancer part de la plage de la **page** affichée : c'est ce qu'on voit, et c'est ce
             // que le bouton annonce. `null` quand la plage n'est pas connue — le bouton est
             // alors absent, plutôt que présent et sans effet.
