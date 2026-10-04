@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Theme de la fenetre, avant que Compose ne prenne la main.
+
+  Deux choix a justifier :
+
+  - Le parent est `Theme.Material.Light.NoActionBar` et non un theme Material 3 : le projet
+    n'embarque pas `com.google.android.material`, et l'ajouter pour un fond de fenetre et une
+    barre d'etat serait une dependance de plus a suivre. Compose fournit tout le reste.
+
+  - Le fond de fenetre est le creme du theme, pas du blanc. Au lancement, avant le premier
+    rendu Compose, une fenetre blanche produirait un eclair blanc — tres visible sur le theme
+    « Bleu Nuit ». Le creme est la couleur du depot d'origine.
+
+  Le fond de fenetre suit le theme clair uniquement. `app.json` declare
+  `userInterfaceStyle: "light"` : l'application ne bascule pas en sombre avec le systeme, elle a
+  ses propres themes choisis par l'utilisateur. Le theme sombre de l'application est donc
+  « Bleu Nuit », pas le mode sombre du systeme, et la fenetre de lancement ne peut pas le savoir
+  avant d'avoir lu les preferences. Un eclair creme sur fond sombre est moins genant qu'un
+  eclair blanc, et c'est le compromis retenu.
+-->
+<resources>
+    <style name="Theme.DeepSeekAndroid" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/app_cream</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+</resources>

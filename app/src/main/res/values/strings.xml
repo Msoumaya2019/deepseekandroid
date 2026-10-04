@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Nom affiche, repris de `app.json` du depot d'origine (`expo.name`). L'application Android
+      et l'application React Native portent donc le meme nom : sur un appareil ou les deux sont
+      installees, c'est le suffixe `.debug` de l'identifiant qui les distingue, et l'utilisateur
+      peut comparer avant de basculer.
+    -->
+    <string name="app_name">Apprendre le Coran</string>
+</resources>

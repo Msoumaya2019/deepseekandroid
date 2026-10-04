@@ -1,0 +1,41 @@
+# ---------------------------------------------------------------------------
+# Fins de ligne
+# ---------------------------------------------------------------------------
+# Sans ce fichier, `core.autocrlf` — activé par défaut sous Windows — fait sortir `gradlew`
+# avec des fins de ligne CRLF au moment du clone. Le shebang devient alors `#!/bin/sh\r`, que
+# Linux comme Git Bash refusent : `./gradlew` échoue sur un « No such file or directory », et
+# l'intégration continue tombe pour une raison qui n'a rien à voir avec le code.
+#
+# `eol=lf` fige donc la fin de ligne **dans le dépôt**, indépendamment de la configuration
+# locale de chacun. C'est le seul moyen d'obtenir le même contenu sur un poste Windows, sur un
+# poste Linux et sur un exécutant d'intégration continue.
+#
+# Vérification : `git check-attr -a gradlew` doit répondre `text: set` et `eol: lf`.
+# ---------------------------------------------------------------------------
+
+# Par défaut, git décide seul, et normalise vers LF dans le dépôt.
+* text=auto
+
+# Les scripts restent en LF, quoi qu'en dise la configuration locale.
+*.sh text eol=lf
+gradlew text eol=lf
+
+# Les fichiers de configuration aussi. Un YAML en CRLF n'est pas faux, mais un dépôt qui
+# mélange les deux rend chaque différence illisible et chaque revue pénible.
+*.yml text eol=lf
+*.yaml text eol=lf
+*.properties text eol=lf
+
+# Binaires : ni conversion, ni détection de texte. Un `.jar` dont les octets changent ne
+# démarre plus, et une page de moushaf retouchée devient illisible.
+*.jar binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.ttf binary
+*.otf binary
+*.apk binary
+*.aab binary
+*.keystore binary
+*.jks binary

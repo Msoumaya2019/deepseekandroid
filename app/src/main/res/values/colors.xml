@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Couleurs de l'application, telles qu'elles apparaissent **avant** que Compose ne prenne la
+  main : fond de fenetre et icone de lanceur.
+
+  Elles viennent du theme « classique » (`Palettes.kt`, palette `Classic`), pas du theme
+  « blanc ». Le theme blanc est celui de l'application, mais son accent par defaut est le
+  prune : l'identite visuelle verte et doree du projet est portee par le theme classique, et
+  c'est elle qui doit se voir sur l'ecran d'accueil du telephone.
+
+  Seules les deux couleurs reellement employees sont gardees. Trois autres (vert, vert clair,
+  or) figuraient ici sans etre referencees par quoi que ce soit : les jetons de Compose sont
+  resolus en Kotlin, pas par une ressource Android, donc une couleur d'interface n'a rien a
+  faire dans ce fichier.
+-->
+<resources>
+    <color name="app_cream">#FFF7F5EE</color>
+
+    <color name="ic_launcher_background">#FF153F36</color>
+</resources>

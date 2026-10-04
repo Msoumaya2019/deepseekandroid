@@ -1,0 +1,24 @@
+## Fichier de configuration local — NE PAS VERSIONNER.
+##
+## Copier ce fichier en `local.properties` et renseigner les valeurs.
+## `local.properties` est listé dans `.gitignore`.
+
+# Chemin du SDK Android.
+#
+# Le deux-points du lecteur de disque est échappé par une barre oblique inverse, et ce n'est
+# pas une coquetterie : dans un fichier `.properties`, `:` est un séparateur de clé et de
+# valeur. Écrit sans échappement, le chemin est bien lu par Gradle mais `./gradlew lint`
+# refuse le projet entier avec `PropertyEscape`. L'échappement est la seule forme qui contente
+# les deux.
+sdk.dir=C\:/Users/<votre-compte>/AppData/Local/Android/Sdk
+
+# --- Supabase -----------------------------------------------------------------
+# Le projet est CELUI DE L'APPLICATION EXISTANTE : aucun nouveau projet n'est créé.
+# Récupérer ces deux valeurs dans le tableau de bord Supabase :
+#   Project Settings → API
+#   - Project URL          -> supabase.url
+#   - anon / publishable   -> supabase.anonKey
+#
+# La clé `service_role` ne doit JAMAIS apparaître ici ni dans l'application.
+supabase.url=https://npbwnvrqmajwqtnncuyv.supabase.co
+supabase.anonKey=

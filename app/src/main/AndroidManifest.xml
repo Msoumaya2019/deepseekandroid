@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Point d'entree de l'application.
+
+  Deux points meritent une justification :
+
+  - `allowBackup="true"` avec des regles d'exclusion. La progression d'apprentissage represente
+    des mois de travail : la perdre en changeant d'appareil serait la pire regression possible.
+    En revanche le jeton de session est **chiffre par une cle qui vit dans le magasin de cles du
+    systeme**, et cette cle ne suit pas une sauvegarde. Le restaurer sur un autre appareil
+    produirait un fichier indechiffrable — sans danger, mais inutile. Il est donc exclu.
+
+  - `android:configChanges` inclut `uiMode` et `screenSize`. Sans cela, un changement de theme
+    systeme ou un passage en ecran partage reconstruirait l'activite : le lecteur de moushaf
+    reviendrait a la premiere page au lieu de rester ou l'utilisateur en etait.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Synchronisation de l'etat avec Supabase. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Detection de la connectivite : l'application doit dire « hors connexion » plutot que
+         d'echouer silencieusement. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Rappel de 19 h et notifications de messages. Demandee a partir d'Android 13. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <application
+        android:name=".DeepSeekApplication"
+        android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.DeepSeekAndroid"
+        tools:targetApi="34">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode|density"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

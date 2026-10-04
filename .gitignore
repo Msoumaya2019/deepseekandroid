@@ -1,0 +1,44 @@
+# --- Gradle / Android Studio -----------------------------------------------
+.gradle/
+build/
+captures/
+.externalNativeBuild/
+.cxx/
+*.iml
+.idea/
+local.properties
+
+# --- Artefacts de build ----------------------------------------------------
+*.apk
+*.aab
+*.ap_
+*.dex
+output.json
+
+# --- Secrets : jamais dans le dépôt ----------------------------------------
+# Clé de signature, keystore, configuration Firebase, et toute copie locale de
+# `local.properties` (qui porte l'URL Supabase et la clé publishable).
+*.jks
+*.keystore
+*.p12
+*.pem
+*.cer
+*.mobileprovision
+google-services.json
+secrets.properties
+
+# --- Ressources coraniques importées ---------------------------------------
+# `tools/import-quran-assets.mjs` copie les pages du moushaf depuis une copie locale
+# de `coran-memoire`. Les images sont volumineuses (≈ 114 Mo pour les 604 pages du
+# Coran de Médine). Elles sont versionnées uniquement si le propriétaire du dépôt le
+# décide explicitement : voir README.md, section « Ressources coraniques ».
+#
+# Pour les exclure du dépôt, décommenter les deux lignes suivantes :
+# app/src/main/assets/quran/pages/
+# app/src/main/assets/quran/tajweed/
+
+# --- Divers -----------------------------------------------------------------
+.DS_Store
+Thumbs.db
+*.log
+.kotlin/

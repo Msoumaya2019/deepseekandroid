@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Regles de sauvegarde et de transfert pour Android 12 et suivants.
+
+  Memes choix que `backup_rules.xml` : la progression suit l'utilisateur, le jeton de session
+  non. `device-transfer` est declare separement parce qu'Android ne l'applique pas
+  automatiquement quand `cloud-backup` est present — un transfert direct d'appareil a appareil
+  emprunte l'autre chemin, et l'exclusion doit y etre repetee.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="file" path="state/session.bin" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="file" path="state/session.bin" />
+    </device-transfer>
+</data-extraction-rules>

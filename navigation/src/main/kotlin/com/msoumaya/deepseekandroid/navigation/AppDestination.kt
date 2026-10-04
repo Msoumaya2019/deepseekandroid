@@ -1,0 +1,126 @@
+package com.msoumaya.deepseekandroid.navigation
+
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.MenuBook
+import androidx.compose.material.icons.outlined.BarChart
+import androidx.compose.material.icons.outlined.EventAvailable
+import androidx.compose.material.icons.outlined.Groups
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.ui.graphics.vector.ImageVector
+
+// ---------------------------------------------------------------------------
+// Destinations
+// ---------------------------------------------------------------------------
+// Portage de `mainTabs` et de `BottomNavigation` (`src/ui/Premium.tsx`).
+//
+// Le dépôt d'origine declarait :
+//
+//   mainTabs = ['Accueil','Coran','Programme','Progrès','Amis']
+//   icons    = ['home-outline','book-open-outline','calendar-check-outline','chart-bar',
+//               'account-group-outline']
+//
+// Ces icônes sont des noms MaterialCommunityIcons. La correspondance retenue est celle de
+// Material Icons, qui est le jeu natif d'Android :
+//
+//   home-outline           -> Home
+//   book-open-outline      -> MenuBook          (livre ouvert)
+//   calendar-check-outline -> EventAvailable    (calendrier avec une coche)
+//   chart-bar              -> BarChart
+//   account-group-outline  -> Groups
+//
+// **Cinq onglets, et aucun autre.** Le cahier des charges est explicite : ni réglages, ni
+// profil, ni quiz n'ont d'onglet ; ces écrans s'ouvrent depuis l'en-tête ou depuis le contenu.
+// ---------------------------------------------------------------------------
+
+/**
+ * Une destination de premier niveau.
+ *
+ * @param route identifiant technique de la route de navigation.
+ * @param label libellé affiché sous l'icône — celui du dépôt d'origine, accents compris.
+ * @param icon icône de la barre basse et de l'en-tête.
+ */
+enum class AppDestination(
+    val route: String,
+    val label: String,
+    val icon: ImageVector,
+) {
+    HOME("accueil", "Accueil", Icons.Outlined.Home),
+    QURAN("coran", "Coran", Icons.AutoMirrored.Outlined.MenuBook),
+    PROGRAM("programme", "Programme", Icons.Outlined.EventAvailable),
+    PROGRESS("progres", "Progrès", Icons.Outlined.BarChart),
+    FRIENDS("amis", "Amis", Icons.Outlined.Groups),
+    ;
+
+    companion object {
+        val start: AppDestination = HOME
+
+        /** Retrouve une destination depuis une route, ou `null` si la route n'est pas un onglet. */
+        fun fromRoute(route: String?): AppDestination? =
+            entries.firstOrNull { it.route == route }
+    }
+}
+
+/** Routes qui ne sont pas des onglets : elles s'empilent par-dessus la barre basse. */
+object AppRoutes {
+    /** Le lecteur de moushaf occupe tout l'écran : ni onglets, ni barre basse. */
+    const val READER = "lecteur"
+
+    /** Le défi de quiz, ouvert depuis l'accueil ou depuis un défi d'ami. */
+    const val QUIZ = "quiz"
+
+    /** Les contenus du jour : invocation, hadith, verset à méditer. */
+    const val DAILY = "quotidien"
+
+    /** Les récitations partagées avec les amis. */
+    const val RECITATIONS = "recitations"
+
+    /** Le tableau de bord des révisions. */
+    const val REVIEW = "revision"
+
+    /** L'administration, réservée aux comptes qui y ont droit. */
+    const val ADMIN = "admin"
+
+    /** Le profil, ouvert depuis l'en-tête. */
+    const val PROFILE = "profil"
+
+    /** Les réglages, ouverts depuis l'en-tête. */
+    const val SETTINGS = "reglages"
+
+    /** L'apparence : thème, accent, police d'interface. */
+    const val APPEARANCE = "apparence"
+
+    /** L'objectif d'apprentissage. */
+    const val GOAL = "objectif"
+
+    /**
+     * Écrans qui occupent tout l'écran : **ni** barre supérieure, **ni** barre basse.
+     *
+     * Le dépôt d'origine les excluait tous les deux de la même façon — c'était la condition
+     * `!reader && ... && !reviewOpen && !recitationsOpen && !dailyOpen && !quizOpen` répétée
+     * devant l'en-tête et devant la barre basse.
+     */
+    val fullScreen: Set<String> = setOf(READER, QUIZ, DAILY, RECITATIONS, REVIEW, ADMIN)
+
+    /**
+     * Écrans d'outil : barre supérieure **avec un retour**, et **pas** de barre basse.
+     *
+     * La valeur est le titre affiché. L'ordre suit celui du ternaire d'origine dans `App.tsx` :
+     * `utilityView==='goal' ? 'Mon objectif' : utilityView==='appearance' ? 'Apparence' :
+     * utilityView==='profile' ? 'Profil' : utilityView==='settings' ? 'Réglages' : …`.
+     *
+     * C'est une distinction qu'il ne faut pas confondre avec [fullScreen] : un écran d'outil
+     * garde son en-tête, sinon il n'aurait plus aucun moyen de revenir en arrière.
+     */
+    val utility: Map<String, String> = linkedMapOf(
+        GOAL to "Mon objectif",
+        APPEARANCE to "Apparence",
+        PROFILE to "Profil",
+        SETTINGS to "Réglages",
+    )
+
+    /** Titre de l'écran d'outil, ou `null` si la route n'est pas un écran d'outil. */
+    fun utilityTitle(route: String?): String? = utility[route]
+
+    /** Vrai si la route masque la barre basse. */
+    fun hidesBottomBar(route: String?): Boolean = route in fullScreen || route in utility
+}

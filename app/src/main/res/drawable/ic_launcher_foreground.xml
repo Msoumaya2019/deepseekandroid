@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Avant-plan de l'icone adaptative : un livre ouvert, en or, sur le vert du theme classique.
+
+  Le dessin est geometrique et non calligraphie : a 48 px, un motif fin devient une tache. Les
+  deux pages montent vers la reliure et le pli central est d'un or plus sombre, ce qui suffit a
+  lire « livre ouvert » a toutes les tailles.
+
+  Le contenu tient dans la zone sure de 66 x 66 centree : Android rogne l'avant-plan selon la
+  forme du lanceur (cercle, carre arrondi, goutte), et un dessin qui deborde se retrouve ampute.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Page gauche -->
+    <path
+        android:fillColor="#FFB39559"
+        android:pathData="M32,40 L52,34 L52,72 L32,78 Z" />
+
+    <!-- Page droite -->
+    <path
+        android:fillColor="#FFB39559"
+        android:pathData="M56,34 L76,40 L76,78 L56,72 Z" />
+
+    <!-- Reliure -->
+    <path
+        android:fillColor="#FF8C7038"
+        android:pathData="M52,34 L56,34 L56,72 L52,72 Z" />
+</vector>

@@ -1,0 +1,287 @@
+# Migration React Native → Android natif
+
+Tableau de correspondance, fonctionnalité par fonctionnalité.
+
+**Statuts utilisés**
+
+| Statut | Signification |
+|---|---|
+| **Porté** | la logique existe en Kotlin et est couverte par des tests |
+| **Écrite** | le code existe, compile, mais n'a pas encore été exercé contre le serveur ni à l'écran |
+| **À faire** | identifié, non commencé |
+| **Hors périmètre** | volontairement exclu de l'application Android |
+
+Source analysée : `Msoumaya2019/coran-memoire`, version **0.9.38**, paquet `fr.coranmemoire.app`.
+Elle est en **lecture seule** : elle est lue pour comprendre, jamais modifiée.
+
+---
+
+## 1. Socle
+
+| Fonctionnalité RN | Source RN | Équivalent Android | Tables | Statut | Points d'attention |
+|---|---|---|---|---|---|
+| État applicatif complet | `src/core/program.ts` (`AppState`, `defaultState`) | `core/model/AppState.kt` | `user_state.data` | **Porté** | champs optionnels rendus **nullables** : un `null` du serveur ne doit jamais écraser une valeur locale |
+| Sérialisation compatible | `JSON.stringify` / `JSON.parse` | `core/model/AppJson.kt` | — | **Porté** | `ignoreUnknownKeys`, `explicitNulls = false`, `encodeDefaults = true` : sans quoi un aller-retour serveur perdrait des champs |
+| Dates locales | `dateKey`, `addDays`, `dayOf`, `todayLocal` | `core/domain/Dates.kt` | — | **Porté** | arithmétique ancrée à midi, pour survivre aux changements d'heure |
+| Stockage local | `src/services/storage.ts` (SQLite) | `core/data/local/*` | — | **Porté** | voir [LOCAL_DATA_MIGRATION.md](LOCAL_DATA_MIGRATION.md) |
+| File d'attente | `src/services/storage.ts`, `src/core/offlineQueue.ts` | `core/data/local/OutboxStore.kt`, `core/domain/OfflineQueue.kt` | — | **Porté** | une seule entrée par type et par compte ; acquittement après confirmation |
+| Fusion hors ligne | `src/core/offlineMerge.ts` | `core/domain/OfflineMerge.kt` | — | **Porté** | fusion sur l'**arbre JSON** pour préserver les champs inconnus |
+| Synchronisation | `src/services/sync.ts` | `core/data/repository/UserRepository.kt`, `core/domain/AccountSync.kt` | `user_state` | **Écrite** | on ne pousse jamais sans avoir lu |
+| Session chiffrée | `src/services/authStorage.ts` (SecureStore par fragments) | `core/data/security/SecretVault.kt`, `remote/VaultSessionManager.kt` | — | **Porté** | AES/GCM, clé dans `AndroidKeyStore` |
+| Détection de connectivité | `src/services/connectivity.ts` | — | — | **À faire** | phase E |
+| Remise à zéro | `resetAllProgress` | `Program.resetAllProgress`, `UserRepository.resetProgress` | `user_state` | **Porté** | conserve identité, signets, profil, apparence |
+| Assemblage et injection | `App.tsx` + variables d'environnement | `core/data/AppContainer.kt` + `app/DeepSeekApplication.kt` | — | **Porté** | conteneur écrit à la main, publié par `CompositionLocal`. Construit une fois, dans `Application.onCreate` : une rotation ne doit pas relire le référentiel coranique |
+| Chargement du référentiel coranique | import statique des données | `core/data/AppContainer.kt` (`QuranState`) | — | **Porté** | **asynchrone** : lire 6 236 versets sur le fil principal retarderait la première image. Trois états — en cours, prêt, échoué — et non un booléen, pour que l'échec ne s'affiche pas comme une attente sans fin |
+| Thème appliqué au démarrage | `applyTheme()` (mutation d'un objet global) | `app/MainActivity.kt` + `DeepSeekTheme` | — | **Porté** | les couleurs sont fournies par l'environnement Compose, pas mutées : un composant mémoïsé voit le changement, ce que la mutation globale ne permettait pas |
+| Couleur des icônes système | `<StatusBar barStyle="dark-content" />` | `MainActivity.SystemBars` | — | **Écart assumé** | l'original imposait des icônes sombres en toutes circonstances, ce qui les rend invisibles sur le thème « Bleu Nuit ». Ici elles suivent la clarté du thème. Seul endroit où le portage corrige un défaut visible plutôt que de le reproduire |
+| Sauvegarde système | — | `res/xml/backup_rules.xml`, `data_extraction_rules.xml` | — | **Ajout Android** | la progression suit l'utilisateur (mois de travail), le jeton de session non : il est chiffré par une clé qui ne quitte pas l'appareil |
+
+### Compte et connexion
+
+| Fonctionnalité RN | Source RN | Équivalent Android | Tables | Statut | Points d'attention |
+|---|---|---|---|---|---|
+| Décision d'ouverture | `initialAccountAccess`, `accountIntro` dans `src/App.tsx` | `core/domain/AccountAccess.kt` | — | **Porté** | trois états comme l'original (`checking` / `show` / `done`), mais **tous atteignables** : `setAccountIntro('checking')` n'est écrit nulle part côté React Native, où `loadState()` lit le disque de façon synchrone. Ici la lecture est asynchrone, et un second cas s'y ajoute — un compte connu dont l'état n'a pas encore été rapatrié |
+| Témoin d'état local | `loadAccountState(user.id)` rend `null` | `LocalStateStore.hasStoredStateFor`, `UserRepository.hasStoredState` | — | **Ajout Android** | le magasin rend **toujours** un document : rien, dans la valeur, ne distingue « compte jamais rapatrié » de « progression vide ». Seul le fichier témoigne. Sans lui, la porte ouvrirait un programme vide, et la première séance validée dedans écraserait le vrai compte |
+| Lecture du serveur avant d'ouvrir | `pullState()` dans `activateAccount` | `AuthViewModel.fetch`, `UserRepository.sync` | `user_state` | **Porté** | un tirage réussi écrit l'état local, donc la porte se rouvre d'elle-même ; un échec laisse l'écran de bienvenue affiché **avec la raison**, au lieu d'ouvrir sur du vide |
+| Propriétaire courant | `state.userId` du fichier d'état | `AuthRepository` + `SessionPreferences` (DataStore) | — | **Écart assumé** | une session **absente** n'efface pas le propriétaire : un jeton expiré, un téléphone sans réseau et un projet injoignable produisent tous « pas de session », et l'original les traitait comme une déconnexion. Seul `signOut()` efface, explicitement |
+| Écran d'attente | `accountIntro === 'checking'` | `feature/auth/AccountGate.kt` | — | **Porté** | fond peint explicitement : le fond de fenêtre Android est fixé en clair, et un lancement en thème sombre commencerait sinon par un écran crème |
+| Écran de bienvenue | `AccountWelcome` dans `src/App.tsx` | `feature/auth/AccountWelcomeScreen.kt` | — | **Porté** | les trois choix, puis le formulaire. Le glyphe ۞ est rendu avec la police arabe embarquée (Amiri) et non avec la police d'interface, qui n'a pas de couverture arabe |
+| Formulaire de connexion / inscription | `AccountWelcome`, `submit()` | `feature/auth/AuthViewModel.kt`, `AuthUiState.kt` | `auth.users` | **Porté** | l'activation des boutons reprend la règle de l'original, **volontairement lâche** (présence d'un `@`) : un bouton grisé n'explique pas ce qui manque, alors qu'un appui déclenche le contrôle complet |
+| Connexion avec un mot de passe court | `signIn(email, password)` | `AuthInput.emptyPasswordProblem` | `auth.users` | **Écart assumé** | la connexion ne juge **pas** la longueur : le serveur partagé est seul juge, et un compte créé sous une politique plus permissive doit pouvoir se connecter, comme il le fait encore côté React Native. Seul le vide est refusé localement |
+| Messages d'échec | deux phrases seulement | `core/domain/AuthFeedback.kt` | — | **Écart assumé** | l'original répondait « Connexion impossible. Vérifie ton adresse et ton mot de passe. » à **toutes** les causes, y compris une absence de réseau. Chaque cause a désormais sa phrase ; les deux phrases d'origine sont conservées mot pour mot là où elles étaient justes, et un test vérifie qu'aucune cause ne partage son message avec une autre |
+| « Mot de passe oublié » | `requestPasswordLink(email)` | `AuthRepository.requestPasswordReset` | `auth.users` | **Porté** | `resetPasswordForEmail` du SDK. Le message reste neutre : le serveur répond « succès » même pour une adresse inconnue, pour empêcher l'énumération des comptes |
+| « Renvoyer la confirmation » | `resendSignupConfirmation(email)` | `AuthRepository.resendSignUpConfirmation` | `auth.users` | **Porté** | `resendEmail(OtpType.Email.SIGNUP, …)`. Le bouton n'apparaît qu'après un premier message, comme dans l'original |
+| Photo de profil à l'inscription | `chooseAvatar()` + `stageAvatar()` | — | `storage.objects` | **À faire** | phase D. Demande un sélecteur d'images et un envoi vers le stockage ; un bouton inerte serait pire que son absence |
+| Lien profond du courriel | `consumeAuthLink`, schéma `coranmemoire://` | — | — | **À faire** | phase D. Sans schéma vérifié, le lien envoyé ouvre la page du projet Supabase et non l'application ; `redirectUrl` est donc laissé nul |
+| Récupération du mot de passe | `passwordRecovery`, `changePassword` | — | `auth.users` | **À faire** | phase D, dépend du lien profond ci-dessus |
+
+---
+
+## 2. Coran
+
+| Fonctionnalité RN | Source RN | Équivalent Android | Tables | Statut | Points d'attention |
+|---|---|---|---|---|---|
+| Référentiel (6 236 versets, 114 sourates, 30 juz, 60 hizb, 120 nisf, 604 pages) | `src/core/quran.ts`, `src/data/verses.json`, `pages.json` | `core/domain/Quran.kt`, `QuranDataLoader.kt` | — | **Porté** | identifiants **globaux contigus** 1–6236 : la continuité entre les clients en dépend |
+| Sources de moushaf | `src/core/quranSources.ts` | `core/model/Enums.kt` (`MushafSource`), `core/domain/ZipQuranSource.kt` | — | **Porté** | `coran_1441` et `coranTest` démarrés ; sources héritées reconnues et migrées |
+| Changement de source | `src/core/quranSourceTransition.ts` | `core/domain/QuranSourceTransition.kt` | — | **Porté** | sérialisé par verrou ; on ne valide qu'après préparation |
+| Découpage de page | `src/core/readerData.ts` | `core/domain/Reader.kt` (`ReaderLayout`) | — | **Porté** | 1920 × 3106, cadre de 4 px, mise à l'échelle sans déformation |
+| Zoom | `src/core/readerZoom.ts` | `core/domain/Reader.kt` (`ReaderZoomGeometry`) | — | **Porté** | 1× à 3×, ancré sous les doigts |
+| Navigation par balayage | `src/core/pageNavigation.ts` | `core/domain/Reader.kt` (`PageNavigation`) | — | **Porté** | seuil 60 px, rapport horizontal 1,5 |
+| Numéros de versets | `src/core/ayahMarker.ts` | `core/domain/Reader.kt` (`AyahMarker`) | — | **Porté** | chiffres arabes, corps 19 ou 16 selon le nombre de chiffres |
+| Annotations de marge | `src/core/marginAnnotations.ts` | `core/domain/Reader.kt` (`MarginAnnotations`) | — | **Porté** | |
+| Apparence de lecture | `src/core/readerAppearance.ts` | `AppState.reader`, `AppState.theme` | `user_state` | **Porté** | |
+| Rendu de page | `src/MushafPage.tsx`, `src/ui/ZoomableReader.tsx`, `src/ui/ImmersiveReaderChrome.tsx`, `src/ui/ReaderMoreSheet.tsx` | `feature/reader` | — | **À faire** | phase B — le cœur de l'application |
+| Téléchargement de sources | `src/services/quranDownload.ts`, `src/ui/QuranDownload.tsx` | — | — | **À faire** | phase B |
+| Source « Coran Test » | `src/coranTest/*` | `core/domain/ZipQuranSource.kt` | — | **Écrite** | le chargeur de pages est prêt, l'écran ne l'est pas |
+| Sélecteur de sourate | `src/SurahPicker.tsx` | `feature:reader` | — | **À faire** | phase B |
+
+**Données déjà importées :** 12 fichiers JSON (8,4 Mo) dans `core/domain/src/main/resources/quran/`
+et **28 pages de moushaf sur 604** (5,5 Mo) dans `app/src/main/assets/quran/pages/`. Les 576
+pages restantes doivent être copiées depuis une copie locale du dépôt source — l'outil
+`tools/import-quran-assets.mjs` est écrit pour cela.
+
+---
+
+## 3. Audio
+
+| Fonctionnalité RN | Source RN | Équivalent Android | Tables | Statut | Points d'attention |
+|---|---|---|---|---|---|
+| Catalogue des récitants | `src/core/audio.ts` (7 récitants) | `core/domain/Texts.kt`, `core/domain/Audio.kt` | `user_state` | **Porté** | défaut = `ar.shaatree`, comme l'original |
+| URL audio | `verseAudioUrl`, deux familles (CDN et everyayah) | `core/domain/Audio.kt` | — | **Porté** | |
+| Position audio | `nextAudioPosition`, `continuousAudioPosition` | `core/domain/Audio.kt` | — | **Porté** | |
+| Chronologie de chapitre | `parseChapterAudio`, `src/services/quranAudioTimeline.ts` | `core/domain/Audio.kt` | — | **Porté** | les horodatages sont en **millisecondes**, puis divisés par 1000 — piège vérifié par test |
+| Pause entre versets | `DEFAULT_AYAH_GAP_MS = 200` | `core/domain/Texts.kt` | — | **Porté** | |
+| Cache audio par verset | `src/services/verseAudioCache.ts` | `core/data/local/ResourceFiles.kt` | — | **Écrite** | |
+| Lecture audio | `src/PassageAudioPlayer.tsx` | `feature:reader` + **Media3 / ExoPlayer** | — | **À faire** | phase B |
+| Mini-lecteur | intégré au lecteur | `feature:reader` | — | **À faire** | discret, ne doit pas masquer le moushaf |
+| Répétition 1x/2x/3x/5x, plage X→Y | `audio-repeat-preferences` (local) | réglages locaux | — | **À faire** | phase B |
+| Enregistrement de récitation | `src/RecitationRecorder.tsx`, `src/services/recitations.ts` | — | `recitations`, `recitation_corrections`, `recitation_feedback` | **À faire** | phase D |
+
+---
+
+## 4. Apprentissage
+
+| Fonctionnalité RN | Source RN | Équivalent Android | Tables | Statut | Points d'attention |
+|---|---|---|---|---|---|
+| Objectif (sourates, hizb, juz) | `goalFromPreset`, `goalIds` | `core/domain/Program.kt` | `user_state` | **Porté** | le « volume » d'un objectif est un **nombre de lettres**, pas un nombre de versets |
+| Ordre d'apprentissage | `learningOrderIds` | `core/domain/Program.kt` | — | **Porté** | par défaut croissant (depuis An-Nâs) ; `fromNas` seulement si un objectif le demande |
+| Génération du programme | `generateProgram` | `core/domain/Program.kt` | `user_state` | **Porté** | |
+| Séance du jour | `nextChunk`, `splitContiguous` | `core/domain/Program.kt` | — | **Porté** | |
+| Validation d'une séance | `completeSession` | `core/domain/Program.kt` | `user_state` | **Porté** | |
+| Report d'une séance | `postponeSession` | `core/domain/Program.kt` | — | **Porté** | |
+| **Dates planifiées vs réalisées** | `scheduledDate`, `completedAt` | `core/model/AppState.kt` (`Session`) | `user_state` | **Porté** | séance prévue mardi, faite lundi : `scheduledDate` reste mardi, `completedAt` devient lundi ; la séance suivante ne prend **jamais** automatiquement la date du jour |
+| Progression par unité d'étude | `src/core/studyProgress.ts` | `core/domain/StudyProgressCalculator.kt` | `user_state` | **Porté** | |
+| Connaissances | `markKnowledge`, `toggleKnownRange` | `core/domain/Program.kt` | — | **Porté** | |
+| Statistiques | `stats`, `completedHizbs` | `core/domain/Program.kt` | — | **Porté** | |
+| Écran de séance | `src/ui/StudySession.tsx`, `src/ui/QuranSessionHeader.tsx` | `feature:program` | — | **À faire** | phase C |
+| Écran d'objectif | `src/ui/GoalScreen.tsx` | `feature:program` | — | **À faire** | phase C |
+
+---
+
+## 5. Révisions et consolidations
+
+| Fonctionnalité RN | Source RN | Équivalent Android | Tables | Statut | Points d'attention |
+|---|---|---|---|---|---|
+| Cycles 7 / 14 / 21 / 30 jours | `setReviewCycle` | `core/domain/Review.kt` | `user_state` | **Porté** | changer pour la durée déjà en place est sans effet : aucun cycle n'est créé |
+| Quantités (1 nisf, 1 hizb, 1 juz, 2 juz) | `setReviewQuantity`, `partitionReviewCorpus` | `core/domain/Review.kt` | — | **Porté** | le découpage ne perd ni ne duplique aucun verset (test) |
+| Consolidations J+1, J+3, J+7 | `consolidationFor`, `prepareReviewSchedule` | `core/domain/Review.kt` | `user_state` | **Porté** | échéances **ancrées** sur la date d'apprentissage, pas sur celle de la consultation |
+| Versets difficiles | `toggleDifficulty` | `core/domain/Review.kt` | `user_state` | **Porté** | le marqueur posé par le professeur survit au retrait par l'utilisateur |
+| Notation d'une révision | `gradeReviewTask` | `core/domain/Review.kt` | — | **Porté** | |
+| Historique | `reviewCycleHistory`, `consolidationHistory` | `core/model/AppState.kt` | `user_state` | **Porté** | jamais raccourci : la fusion les réunit |
+| Tableau de bord des révisions | `src/ReviewDashboard.tsx` | `feature:progress` | — | **À faire** | phase C |
+| Barre d'action de révision | `src/ui/RevisionBottomActionBar.tsx` | `feature:progress` | — | **À faire** | phase C |
+
+**Point de conception à ne pas perdre :** un passage à consolider doit être **cliquable** et
+ouvrir la bonne page, la bonne sourate et le bon passage, puis proposer « J'ai consolidé ».
+C'est la différence entre une liste de rappels et un outil de mémorisation.
+
+---
+
+## 6. Objectif hebdomadaire
+
+| Fonctionnalité RN | Source RN | Équivalent Android | Tables | Statut | Points d'attention |
+|---|---|---|---|---|---|
+| Semaine du lundi 00:01 au dimanche 23:59 | `weeklyProgress` | `core/domain/WeeklyProgress.kt` | — | **Porté** | un dimanche appartient à la semaine du lundi précédent (test) |
+| Nouvelle semaine à 0 % | `weeklyProgress` | `core/domain/WeeklyProgress.kt` | — | **Porté** | l'affichage repart de zéro **sans effacer l'historique** |
+| Programme à venir | `upcomingSessions` | `core/domain/WeeklyProgress.kt` | — | **Porté** | **10 jours** seulement, et rien n'est supprimé au-delà |
+| Statut d'une séance | `sessionStatus` | `core/domain/WeeklyProgress.kt` | — | **Porté** | distingue fait, reporté, partiel, en attente |
+
+---
+
+## 7. Signets et lecture
+
+| Fonctionnalité RN | Source RN | Équivalent Android | Tables | Statut | Points d'attention |
+|---|---|---|---|---|---|
+| Signets | `src/core/bookmarks.ts` | `core/domain/Bookmarks.kt` | `user_state` | **Porté** | suppression **douce** (`deletedAt`) : un signet supprimé sur un appareil ne ressuscite pas depuis l'autre |
+| Dernière lecture | `lastRead` | `AppState.lastRead` | `user_state` | **Porté** | |
+| Écran des signets | `src/BookmarksScreen.tsx` | `feature:reader` | — | **À faire** | phase B |
+
+---
+
+## 8. Quiz
+
+| Fonctionnalité RN | Source RN | Équivalent Android | Tables | Statut | Points d'attention |
+|---|---|---|---|---|---|
+| Question du jour | `src/core/quiz.ts`, `quizDay` | `core/domain/Quiz.kt` | `quiz_questions`, `quiz_daily_responses` | **Porté** | une seule participation par question et par jour |
+| Catégories | `quizCategories` | `core/domain/Texts.kt` | — | **Porté** | |
+| Défis entre amis | `challengeStatus` | `core/domain/Quiz.kt` | `quiz_challenges`, `quiz_challenge_questions`, `quiz_challenge_answers` | **Porté** | 5 ou 10 questions, **10 par défaut** ; les deux joueurs reçoivent les mêmes questions |
+| Statistiques | `quizStatistics` | `core/domain/Quiz.kt` | — | **Porté** | seules les réponses confirmées comptent |
+| Fusion d'instantané | `mergeQuizSnapshot` | `core/domain/Quiz.kt` | — | **Porté** | une réponse en attente d'envoi n'est pas effacée par un instantané serveur qui l'ignore encore |
+| Écran de quiz | `src/ui/QuizScreen.tsx`, `src/services/quiz.ts` | `feature:quiz` | — | **À faire** | phase D |
+| Écrans d'administration du quiz | `src/ui/AdminQuiz.tsx`, `AdminQuizSets.tsx` | — | `quiz_sets` | **Hors périmètre** | l'administration reste sur le web |
+
+---
+
+## 9. Amis et messagerie
+
+| Fonctionnalité RN | Source RN | Équivalent Android | Tables | Statut | Points d'attention |
+|---|---|---|---|---|---|
+| Profils d'amis | `src/services/social.ts` | `feature:social` | `friend_profiles` | **À faire** | phase D |
+| Demandes d'amis | `friend_links` | `feature:social` | `friend_links` | **À faire** | phase D |
+| Avatars | `src/services/avatars.ts` | `feature:social` | `friend_profiles` | **À faire** | phase D |
+| Messagerie | `src/ui/MessagingButton.tsx`, `SocialScreens.tsx` | `feature:social` | `friend_messages`, `friend_message_reads`, `friend_message_hidden`, `friend_message_reports` | **À faire** | phase D |
+| Groupes | — | `feature:social` | `friend_groups`, `friend_group_members` | **À faire** | phase D |
+| Partage de progression | `publishSocialProgress` | `feature:social` | `friend_progress`, `friend_shared_goals` | **À faire** | phase D |
+| Rendez-vous de révision entre amis | — | `feature:social` | `friend_review_appointments` | **À faire** | phase D |
+| Temps réel | `src/services/social.ts` (Realtime) | `core/data` (Realtime installé) | — | **À faire** | phase D — le module Realtime est déjà branché sur le client |
+
+---
+
+## 10. Notifications
+
+| Fonctionnalité RN | Source RN | Équivalent Android | Tables | Statut | Points d'attention |
+|---|---|---|---|---|---|
+| Préférences | `NotificationPreferences` | `core/model/AppState.kt` | `user_state` | **Porté** | messages, demandes d'amis, progression partagée, corrections, messages d'administration, aperçu des messages |
+| Appareils d'envoi | `src/services/notifications.ts` | — | `push_devices` | **À faire** | phase D — l'association `user_id` doit être conservée |
+| Rappel d'apprentissage à 19:00 | `syncLearningReminder` | — | — | **À faire** | phase D |
+| Canaux | — | — | — | **À faire** | messages, apprentissage, corrections, administration |
+| Messages d'administration | `src/services/adminNotifications.ts` | — | `admin_notifications` | **À faire** | phase D |
+| Corrections de récitation | `notification-corrections.sql` | — | `recitation_corrections` | **À faire** | phase D |
+| Envoi (FCM) | `src/services/notifications.ts` | — | `push_devices` | **À faire** | nécessite `google-services.json` — **intervention requise** |
+
+---
+
+## 11. Contenus, récitations, signalements
+
+| Fonctionnalité RN | Source RN | Équivalent Android | Tables | Statut |
+|---|---|---|---|---|
+| Contenus quotidiens | `src/DailyContentsScreen.tsx`, `src/services/dailyContents.ts` | `feature:home` | `daily_contents`, `daily_content_schedule`, `content_categories`, `content_favorites` | **À faire** (phase D) |
+| Médias de contenus | `src/services/dailyContentMedia.ts` | — | `daily_contents` | **À faire** (phase D) |
+| Récitations partagées | `src/RecitationsScreen.tsx`, `src/services/recitations.ts` | — | `recitations` | **À faire** (phase D) |
+| Signalement de problème | `src/ui/ProblemReport.tsx`, `src/services/problemReports.ts` | — | `app_problem_reports` | **À faire** (phase E) |
+
+---
+
+## 12. Écrans d'administration
+
+| Fonctionnalité RN | Source RN | Équivalent Android | Statut |
+|---|---|---|---|
+| Comptes d'administration | `src/AdminAccounts.tsx`, `src/services/adminAccounts.ts` | — | **Hors périmètre** |
+| Notifications d'administration | `src/AdminNotifications.tsx` | — | **Hors périmètre** |
+| Contenus quotidiens | `src/AdminDailyContents.tsx` | — | **Hors périmètre** |
+| Récitations et enregistrement vocal | `src/AdminRecitations.tsx`, `src/AdminVoiceRecorder.tsx` | — | **Hors périmètre** |
+| Signalements | `src/ui/AdminProblemReports.tsx` | — | **Hors périmètre** |
+
+Ces écrans s'adressent à un usage de bureau. Les reproduire sur téléphone ajouterait de la
+surface à maintenir pour un usage marginal. Le client React Native et l'administration web
+restent les outils d'administration.
+
+---
+
+## 13. Design
+
+| Élément RN | Source RN | Équivalent Android | Statut | Points d'attention |
+|---|---|---|---|---|
+| Jetons de design | `src/theme/tokens.ts` | `core/design/theme/Tokens.kt` | **Porté** | espacements, rayons, échelle typographique, ombre de carte et accents repris **à l'identique** ; `button = 15` remonté depuis le composant `Button`, où il était en dur |
+| Palettes | `src/ui/theme.tsx` (`palettes`) | `core/design/theme/Palettes.kt` | **Porté** | les 5 palettes × 18 clés et les 6 couleurs communes sont **mesurées** identiques au source par `tools/verifier-jetons-design.py` (11 contrôles) |
+| Règle d'accent | `applyTheme(theme, accent)` | `resolveColors(theme, accent)` | **Porté** | règle **asymétrique** : un accent explicite écrase la palette, un accent absent ne l'écrase que pour le thème blanc. Un test dédié protège cette dissymétrie |
+| Écran Apparence | `themeOptions` | `appThemeOptions` | **Porté** | 5 thèmes avec libellés accentués (« Thème blanc », « Bleu Nuit & Or ») et 4 pastilles chacun |
+| Polices | `src/theme/fonts.ts` | `core/design/theme/Fonts.kt` | **Porté** | Cormorant Garamond variable (axe `wght` **300..700**, défaut **300** → chaque graisse est demandée explicitement) + Amiri statique ; licences OFL embarquées dans les `assets` |
+| Thème Compose | `useTheme()` | `DeepSeekTheme` + `AppTheme.colors` | **Porté** | palette immuable fournie par l'environnement au lieu d'un objet global muté ; `ColorScheme` Material 3 dérivé pour que les composants Material se fondent dans l'écran |
+| Composants de base | `Label`, `Title`, `Card`, `Button`, `Choice`, `CheckChoice`, `Field` | `AppLabel`, `AppTitle`, `AppCard`, `AppButton`, `AppChoice`, `AppCheckChoice`, `AppField` | **Porté** | `Button` redessiné (géométrie exacte) ; `Choice` / `CheckChoice` / `Field` passent aux composants Material natifs pour l'accessibilité et les cibles tactiles |
+| Zone tactile minimale | — (implicite) | `Modifier.minimumTouchTarget()` | **Porté** | 48 px garantis autour d'un petit pictogramme, exigence explicite du cahier des charges |
+| Système de composants | `src/ui/DesignSystem.tsx`, `src/ui/Premium.tsx` | `core/design/component/` | **Partiel** | porté : `Heading`, `SectionHeader`, `IconButton`, `DailyTaskCard`, `StatCard`, `ArabicLabel`, `ProfileHeaderButton`, `ProgressTrack`, `ProgressRing`, `IslamicHero` (en fond de bande). Restent `SegmentedControl`, `QuranNumberMedallion`, `ThemeSelector`, `AccentSelector` : ils seront portés avec les écrans qui les utilisent, pour ne pas écrire de code sans appelant |
+| Navigation basse | `src/ui/Premium.tsx` (`BottomNavigation`) | `navigation/AppBottomBar.kt` | **Porté** | 5 onglets : Accueil, Coran, Programme, Progrès, Amis — **aucun autre**. Padding 5/3, hauteur 56, icône 23, libellé 10, pastille active 4 px, trait haut 1 px **à l'intérieur** du composant. La barre absorbe elle-même l'encoche de navigation gestuelle |
+| Navigation haute | `src/ui/Premium.tsx` (`AppTopNavigation`) | `navigation/AppTopBar.kt` | **Porté** | deux formes : « onglet » (livre doré, titre, profil, réglages, rangée d'onglets) et « outil » (retour, titre centré). Deux mesures relevées à la source : `titleFont()` renvoie la famille **600 SemiBold**, donc les deux formes rendent la même graisse ; les `fontWeight` 500/700 des onglets sont **sans effet** (une seule graisse enregistrée) — c'est le rendu qui est reproduit, pas l'intention |
+| Double rangée d'onglets | `AppTopNavigation` + `BottomNavigation` | idem | **Porté tel quel** | le dépôt d'origine affiche **les cinq mêmes destinations deux fois**, en haut et en bas. Ce n'est pas une erreur de portage : c'est le comportement actuel. Signalé ici pour qu'une simplification reste une décision et non un oubli |
+| Coquille et règles de visibilité | `App.tsx` (sept booléens : `reader`, `quizOpen`, `utilityView`, `reviewOpen`…) | `navigation/AppScaffold.kt` + `AppRoutes` | **Porté** | les barres visibles se **déduisent** de la route : onglet → les deux, écran d'outil → haute avec retour seulement, plein écran → aucune. Un écran d'outil garde son en-tête, sinon il n'aurait plus de retour |
+| Écran d'accueil | `src/ui/MainScreens.tsx` (`Home`, `activity`, `TinyWeek`) | `feature/home/HomeRenderer.kt` + `HomeScreen.kt` | **Porté** | bande d'en-tête, « Continuer ma lecture », les deux tâches du jour, « Ma semaine ». Le calcul est **pur** et séparé du `ViewModel` : 22 tests, dont deux sur `scheduledDate` et un sur la période de chaque bandeau |
+| Cartes de quiz, contenus du jour, messages non lus, signalement | `QuizHomeCards`, `TodayContents`, `ProblemReportCard` | — | **À faire** (phase D) | absents de l'accueil et **non remplacés** par un équivalent local : un quiz hors ligne n'aurait pas de question du jour à poser. L'emplacement est nommé dans `HomeViewModel` |
+| Thèmes (blanc, classique, féminin, lilas, nuit) | `AppTheme` | `core/model/Enums.kt` | **Porté** (les valeurs) | l'esprit visuel est conservé, adapté aux usages Android |
+
+**Le principe retenu :** garder l'identité visuelle — blanc et crème, vert, touches d'or, thèmes
+existants — et **adopter les comportements Android** plutôt que de copier l'aspect iOS. Un
+retour système, une zone tactile Material, un bouton de retour de la barre d'état : ce sont des
+attentes des utilisateurs Android, et les contredire coûte plus cher que la fidélité au pixel.
+
+---
+
+## 14. Ce qui est hors périmètre et pourquoi
+
+| Élément | Raison |
+|---|---|
+| Écrans d'administration (5 écrans) | usage de bureau |
+| Version web | le client React Native la couvre déjà |
+| Abonnement / Premium (`src/ui/Premium.tsx`) | **à clarifier** : le fichier porte des composants d'interface partagés autant qu'un écran d'abonnement — la partie abonnement devra être confirmée avant d'être portée ou écartée |
+
+---
+
+## Points d'attention transverses
+
+1. **Les identifiants de versets sont globaux et contigus (1–6236).** Toute la continuité entre
+   React Native, iOS et Android repose dessus. Une erreur d'indexation d'un seul verset
+   décalerait silencieusement la progression de l'utilisateur. C'est pourquoi le domaine est
+   éprouvé sur les vraies données et non sur une maquette.
+
+2. **Le volume d'un objectif est un nombre de lettres**, pas un nombre de versets. Un calcul en
+   versets donnerait un programme d'une durée fausse, sans qu'aucun écran ne paraisse en faute.
+
+3. **Les horodatages audio sont en millisecondes.** Le portage les divise par 1000 ; lire la
+   source comme des secondes produirait des positions 1000 fois trop grandes.
+
+4. **`scheduledDate` et `completedAt` sont deux choses distinctes.** Les confondre ferait
+   disparaître la notion de retard, et avec elle tout le suivi du rythme.
+
+5. **Les journaux ne se raccourcissent jamais.** Validations et historiques sont réunis par la
+   fusion, jamais remplacés. Un `merge` naïf qui prendrait « le plus récent » effacerait
+   l'historique d'un des deux appareils.

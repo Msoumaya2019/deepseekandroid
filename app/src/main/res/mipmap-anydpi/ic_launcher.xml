@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Icone adaptative.
+
+  Le dossier s'appelait `mipmap-anydpi-v26` : le qualificatif `-v26` est inutile puisque
+  `minSdk` vaut deja 26, et le lint le signalait. Le renommage ne change rien a ce qui est
+  livre, seulement ce que dit le lint.
+
+  `monochrome` sert aux icones thematiques d'Android 13 et superieur : le systeme teinte alors
+  le glyphe aux couleurs du fond d'ecran. Sans cette balise, l'icone garde ses couleurs au lieu
+  de suivre le theme — ce qui n'est pas une faute, mais ce que l'utilisateur attend d'une
+  application qui propose deja cinq themes. Le dessin d'avant-plan convient tel quel : c'est
+  une forme pleine, et la teinte est appliquee par le systeme.
+-->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/ic_launcher_background" />
+    <foreground android:drawable="@drawable/ic_launcher_foreground" />
+    <monochrome android:drawable="@drawable/ic_launcher_foreground" />
+</adaptive-icon>

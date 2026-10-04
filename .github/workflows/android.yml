@@ -1,0 +1,105 @@
+# ---------------------------------------------------------------------------
+# Intégration continue
+# ---------------------------------------------------------------------------
+# Ce flux vit dans `deepseekandroid` et **nulle part ailleurs**. Le dépôt `coran-memoire`
+# n'est pas touché : il est la source de référence, en lecture seule, et rien ici ne le
+# construit ni ne le modifie.
+#
+# Ce qui est vérifié, et pourquoi dans cet ordre :
+#
+#   1. **les tests unitaires d'abord.** Ils tournent sur la JVM en quelques dizaines de
+#      secondes et couvrent les règles qui coûtent cher quand elles sont fausses : fusion de
+#      compte, dates de séance, révisions, porte d'entrée. Un échec ici doit être connu avant
+#      qu'on ait dépensé cinq minutes de compilation Android ;
+#   2. **le lint ensuite.** Il attrape ce que les tests ne voient pas — permission manquante,
+#      API trop récente pour le `minSdk`, ressource inutilisée ;
+#   3. **l'APK de test enfin.** C'est la preuve que l'application est réellement assemblable,
+#      et l'artefact est joint pour être installé sans reconstruire.
+#
+# Aucun secret n'est **nécessaire** : sans `SUPABASE_ANON_KEY`, l'application se compile en mode
+# hors ligne et le dit (`SupabaseConfig.isConfigured`). Le flux reste donc vert sur un dépôt nu.
+#
+# Mais si le dépôt porte un secret `SUPABASE_ANON_KEY`, il est injecté dans les étapes Gradle et
+# l'APK publié se connecte réellement au projet. C'est le bon endroit : un secret de dépôt n'est
+# ni dans l'historique Git, ni dans les journaux (GitHub le masque), ni dans le code.
+#
+# **Ce qui ne doit jamais arriver ici : la clé `service_role`.** Elle contourne les politiques RLS
+# et donnerait à quiconque l'extrait de l'APK un accès total aux données de tous les comptes.
+# Seule la clé publiable est lue.
+# ---------------------------------------------------------------------------
+
+name: Android
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # Une seule exécution par référence : pousser deux fois de suite ne doit pas faire tourner
+  # deux constructions en parallèle pour rien.
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verifier:
+    name: Tests, lint et APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    # Injectées si le dépôt porte les secrets, vides sinon. Une variable vide est traitée comme
+    # absente par `connectionSetting` : l'application se compile alors hors ligne au lieu d'échouer.
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+
+    steps:
+      - name: Récupérer le dépôt
+        uses: actions/checkout@v4
+
+      - name: Installer le JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          # Le projet cible Java 17, mais AGP 8.13 est plus confortable sous 21. C'est la
+          # version utilisée en local, donc la CI mesure la même chose que le poste.
+          java-version: "21"
+          cache: gradle
+
+      - name: Préparer le SDK Android
+        uses: android-actions/setup-android@v3
+
+      - name: Rendre le lanceur exécutable
+        # Le bit exécutable n'est pas toujours conservé par le dépôt ; sans cela, `./gradlew`
+        # échoue sur un « Permission denied » qui ne dit rien de la vraie cause.
+        run: chmod +x gradlew
+
+      - name: Tests unitaires
+        run: ./gradlew test --console=plain --stacktrace
+
+      - name: Lint
+        run: ./gradlew lint --console=plain
+
+      - name: Assembler l'APK de test
+        run: ./gradlew :app:assembleDebug --console=plain
+
+      - name: Publier l'APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk-debug
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
+      - name: Publier les rapports de tests
+        # Toujours, et pas seulement en cas d'échec : c'est le rapport du coureur qui dit
+        # combien de tests ont réellement tourné, et un total vert sans rapport ne prouve rien.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rapports-tests
+          path: "**/build/test-results/**/*.xml"
+          if-no-files-found: warn

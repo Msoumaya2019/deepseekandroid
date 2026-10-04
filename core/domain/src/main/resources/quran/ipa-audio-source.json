@@ -1,0 +1,11 @@
+{
+  "sourceAsset": "Payload/Runner.app/Frameworks/App.framework/flutter_assets/packages/quran_library/assets/jsons/quranV4.json.gz",
+  "sha256": "89c4042c96c32bfd6f722945e7675bedab33f09a4f66d0dc3abcafab626c6a1a",
+  "verseCount": 6236,
+  "baseUrl": "https://cdn.islamic.network/quran/audio",
+  "referenceReciter": "ar.alafasy",
+  "referenceBitrate": 128,
+  "identifier": "globalVerseId",
+  "boundaries": "individual-mp3-files",
+  "embeddedUniversalTimings": false
+}

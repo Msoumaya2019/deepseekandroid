@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Regles de sauvegarde pour Android 11 et anterieurs.
+
+  La progression est incluse : elle represente des mois de travail et doit survivre a un
+  changement d'appareil.
+
+  Le jeton de session est exclu. Il est chiffre par une cle qui vit dans le magasin de cles du
+  systeme, et cette cle n'est pas sauvegardee. Un jeton restaure serait donc indechiffrable :
+  sans danger — le code traite une session illisible comme une absence de session — mais inutile,
+  et il vaut mieux ne pas transporter un secret hors de l'appareil qui l'a produit.
+-->
+<full-backup-content>
+    <exclude domain="file" path="state/session.bin" />
+</full-backup-content>
