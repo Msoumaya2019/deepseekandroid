@@ -76,9 +76,38 @@ Elle est en **lecture seule** : elle est lue pour comprendre, jamais modifiée.
 | Sélecteur de sourate | `src/SurahPicker.tsx` | `feature:reader` | — | **À faire** | phase B |
 
 **Données déjà importées :** 12 fichiers JSON (8,4 Mo) dans `core/domain/src/main/resources/quran/`
-et **28 pages de moushaf sur 604** (5,5 Mo) dans `app/src/main/assets/quran/pages/`. Les 576
-pages restantes doivent être copiées depuis une copie locale du dépôt source — l'outil
-`tools/import-quran-assets.mjs` est écrit pour cela.
+et **les 604 pages du moushaf** (114 Mo, 191 Ko en moyenne) dans `app/src/main/assets/quran/pages/`,
+copiées par `tools/import-quran-assets.mjs --all-pages`.
+
+Le client React Native **versionne** ces 604 pages et **télécharge** l'archive 1441 : la même
+règle est suivie ici. Les 604 pages du Tajweed (134 Mo) ne sont pas importées — elles
+s'ajoutent avec `--with-tajweed` le jour où la source « Tawjeed » sera ouverte.
+
+### Les quatre sources de lecture, telles que la source les définit
+
+`src/services/quranSourceReady.ts` est le point qui décide, et il distingue quatre cas — ils
+n'ont ni le même support, ni le même coût :
+
+| Source | Support réel | Où vivent les images | Coût |
+|---|---|---|---|
+| **Coran de Médine** (défaut) | 604 PNG, une par page | `assets/mushaf/pageXXX.png`, **versionnées** | 114 Mo dans le dépôt |
+| **Coran 1441** (`coran_1441`) | 9 060 PNG, **15 lignes par page** | `https://files.quran.app/hafs/madani_1441/zips/images_1440.zip`, **téléchargées** | archive de **102 608 011 octets** |
+| **Tajweed** (`tajweedPages`) | 604 PNG, une par page | `assets/mushaf-tajweed/`, non importées | 134 Mo |
+| **Coran Test** (`coranTest`) | 608 **polices `.woff2`** | `assets/coran-test/`, non importées | rendu par police, pas par image |
+
+Trois conséquences qui décident de l'architecture du lecteur :
+
+1. **La source 1441 n'est pas une page, c'est une ligne.** Le lecteur ne peut pas se contenter
+   d'afficher une image : il doit assembler 15 lignes, et les bornes de versets
+   (`coran_1441-bounds.json`, déjà importé) donnent la position de chacune. Le nom du fichier est
+   `page-ligne`, `001-01.png`, avec page sur 3 chiffres et ligne sur 2.
+2. **L'archive 1441 est vérifiée par sa taille exacte** (`zip.size === 102608011`) et par un
+   fichier témoin qui doit annoncer **9 060 fichiers** — soit 604 × 15. Un téléchargement
+   tronqué est donc détecté, et il est **reprisable** : l'état est publié
+   (`idle` → `downloading` → `extracting` → `ready`, ou `paused`, ou `error`).
+3. **`coranTest` ne se rend pas comme les autres.** C'est une police, pas une image : le même
+   écran doit savoir peindre du texte coranique aussi bien qu'une page. C'est la raison pour
+   laquelle `feature/reader` ne peut pas être un simple `ImageView` zoomable.
 
 ---
 

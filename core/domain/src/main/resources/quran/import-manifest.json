@@ -1,10 +1,11 @@
 {
-  "importedAt": "2026-10-04T13:55:59.847Z",
+  "importedAt": "2026-10-04T17:48:41.243Z",
   "source": "C:\\Users\\mchik\\WorkBuddy AI\\2026-10-04-15-41-12\\work\\coran-memoire",
   "dataFiles": {
     "bounds.json": "b3ff51817ba9",
     "coran_1441-bounds.json": "87670031b1d8",
     "coran_1441-dimensions.json": "b5ca8708496f",
+    "import-manifest.json": "8437f2daae05",
     "ipa-audio-source.json": "006f6d6bde60",
     "meta.json": "c42d1a62671e",
     "pages.json": "52126ea47012",
@@ -14,5 +15,5 @@
     "translation-fr-rashid.json": "bcb591ffc620",
     "verses.json": "01cee3d0cb11"
   },
-  "pages": 28
+  "pages": 604
 }
