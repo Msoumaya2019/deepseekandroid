@@ -32,10 +32,23 @@ kotlin {
 }
 
 dependencies {
-    // Ce module ne depend que du design et du modele : il ne connait ni le reseau, ni le
-    // stockage, ni les autres fonctionnalites. Quand il aura besoin de lire des donnees, il
-    // declarera `core:data` — comme `feature:home` — et rien d'autre.
+    // `core:design` porte les jetons et les composants, et expose Compose (BOM, `ui`,
+    // `foundation`, `material3`) par l'API — les gestes du lecteur viennent de là.
+    // `core:domain` porte la géométrie du lecteur, les données de page et les règles de geste.
+    //
+    // Ni réseau, ni stockage : le lecteur doit s'ouvrir en avion, et il n'a donc rien à
+    // demander à `core:data`. C'est une contrainte, pas une économie.
     api(project(":core:design"))
+    implementation(project(":core:domain"))
+
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.compose.material.icons.extended)
+
+    // Les 604 pages sont des images embarquées. Coil les décode **à la taille d'affichage**
+    // et garde la fenêtre de trois pages en mémoire ; décoder les pages à leur taille
+    // d'origine occuperait plusieurs dizaines de mégaoctets par page.
+    implementation(libs.coil.compose)
+
+    testImplementation(libs.junit)
+    testImplementation(libs.kotlin.test)
 }

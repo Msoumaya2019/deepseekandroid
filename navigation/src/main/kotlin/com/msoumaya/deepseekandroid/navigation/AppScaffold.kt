@@ -49,8 +49,9 @@ import com.msoumaya.deepseekandroid.feature.social.SocialScreen
 //   … et `!utilityView` de plus                             -> barre basse visible
 //
 // Le décalage de la barre d'état est posé **sur la colonne entière**, comme le `SafeAreaView
-// edges={['top']}` d'origine : le lecteur de moushaf démarre donc lui aussi sous la barre
-// d'état. Le passage en plein écran réel du lecteur viendra avec son écran, en phase B.
+// edges={['top']}` d'origine — sauf sur les routes déclarées `edgeToEdge`, qui vont jusqu'aux
+// bords et posent elles-mêmes leurs marges. Le lecteur de moushaf en fait partie depuis la
+// phase B : il centre la page dans l'espace sûr, barres système et découpes retirées.
 // ---------------------------------------------------------------------------
 
 /**
@@ -81,7 +82,18 @@ fun AppScaffold(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .windowInsetsPadding(WindowInsets.statusBars),
+                // Le décalage de la barre d'état est posé **sur la colonne entière**, comme le
+                // `SafeAreaView edges={['top']}` d'origine — sauf pour les écrans qui vont
+                // jusqu'aux bords et gèrent leurs propres marges. Le lecteur en fait partie :
+                // sans cette exception, il resterait une bande morte au-dessus de la page, et
+                // la page ne serait plus centrée dans l'écran réel.
+                .then(
+                    if (route in AppRoutes.edgeToEdge) {
+                        Modifier
+                    } else {
+                        Modifier.windowInsetsPadding(WindowInsets.statusBars)
+                    },
+                ),
         ) {
             if (route !in AppRoutes.fullScreen) {
                 AppTopBar(
@@ -143,7 +155,10 @@ private fun AppNavHost(
         composable(AppDestination.PROGRESS.route) { ProgressScreen() }
         composable(AppDestination.FRIENDS.route) { SocialScreen() }
 
-        composable(AppRoutes.READER) { ReaderScreen() }
+        // Le lecteur ne connaît pas la navigation : il demande à fermer, et c'est la coquille
+        // qui décide où l'on retourne. Un écran qui appelle `popBackStack` lui-même ne peut
+        // plus être ouvert autrement que depuis la pile.
+        composable(AppRoutes.READER) { ReaderScreen(onClose = { navController.popBackStack() }) }
         composable(AppRoutes.QUIZ) { QuizScreen() }
 
         composable(AppRoutes.PROFILE) { ProfileScreen(mode = ProfileMode.PROFILE) }

@@ -70,10 +70,40 @@ Elle est en **lecture seule** : elle est lue pour comprendre, jamais modifiée.
 | Numéros de versets | `src/core/ayahMarker.ts` | `core/domain/Reader.kt` (`AyahMarker`) | — | **Porté** | chiffres arabes, corps 19 ou 16 selon le nombre de chiffres |
 | Annotations de marge | `src/core/marginAnnotations.ts` | `core/domain/Reader.kt` (`MarginAnnotations`) | — | **Porté** | |
 | Apparence de lecture | `src/core/readerAppearance.ts` | `AppState.reader`, `AppState.theme` | `user_state` | **Porté** | |
-| Rendu de page | `src/MushafPage.tsx`, `src/ui/ZoomableReader.tsx`, `src/ui/ImmersiveReaderChrome.tsx`, `src/ui/ReaderMoreSheet.tsx` | `feature/reader` | — | **À faire** | phase B — le cœur de l'application |
-| Téléchargement de sources | `src/services/quranDownload.ts`, `src/ui/QuranDownload.tsx` | — | — | **À faire** | phase B |
+| Rendu de page | `src/MushafPage.tsx`, `src/ui/ZoomableReader.tsx` | `feature/reader/MushafPageView.kt` | — | **Livré** | image ajustée par `ReaderLayout.fitMushafPage`, jamais déformée ; surlignages du verset sélectionné, des signets et des versets difficiles, dans l'ordre de priorité de l'original |
+| Gestes du lecteur | `src/ui/ZoomableReader.tsx` (PanResponder) | `feature/reader/ReaderGestures.kt`, `core/domain/ReaderInteraction.kt` | — | **Livré** | **un seul** gestionnaire de pointeurs : balayage, pincement, appui et appui long ne peuvent pas se disputer les événements |
+| Centrage de la page | `onLayout` + `centerContent` | `ReaderScreen` (`BoxWithConstraints` + `WindowInsets.safeDrawing`) | — | **Livré** | la page se centre dans l'espace **sûr** ; le fond va jusqu'aux bords ; aucune marge fixe |
+| Coquille du lecteur | `src/ui/ImmersiveReaderChrome.tsx` | `feature/reader/ReaderChrome.kt` | — | **Livré** | **dans le flux**, pas flottante : une barre flottante masquerait le dernier verset de la page |
+| Fiche du verset | `ReaderMoreSheet`, `sessionPanel==='verse'` | `feature/reader/ReaderScreen.kt` (`VerseCard`) | `user_state` | **Livré** | appui long → référence et traduction française du sens |
+| Préchargement des voisins | `Image.prefetch` sur `page-1` / `page+1` | `core/domain/ReaderInteraction.kt` (`ReaderPreload`), `MushafAssets.kt` | — | **Livré** | **trois pages au maximum**, la courante en tête ; borné et éprouvé |
+| Téléchargement de sources | `src/services/quranDownload.ts`, `src/ui/QuranDownload.tsx` | — | — | **À faire** | archive de 102 608 011 octets, reprise et témoin de 9 060 fichiers |
 | Source « Coran Test » | `src/coranTest/*` | `core/domain/ZipQuranSource.kt` | — | **Écrite** | le chargeur de pages est prêt, l'écran ne l'est pas |
 | Sélecteur de sourate | `src/SurahPicker.tsx` | `feature:reader` | — | **À faire** | phase B |
+
+### Un seul gestionnaire de gestes, et une règle unique
+
+Le lecteur n'empile pas `detectTransformGestures`, `detectTapGestures` et
+`detectHorizontalDragGestures` : ces trois-là se disputent les mêmes événements, et Compose
+donne la main au premier qui consomme. Il en sort des gestes qui marchent « sauf quand » — un
+balayage qui zoome, un appui long qui tourne la page. `ReaderGestures` traduit donc **tous** les
+événements en intentions, au même endroit :
+
+| Ce que fait le doigt | Ce qui se passe |
+|---|---|
+| deux doigts | zoom et déplacement, jamais de changement de page |
+| un doigt, page agrandie | la page se déplace, elle ne tourne pas |
+| un doigt, page entière, mouvement court | appui : la coquille s'affiche ou disparaît |
+| un doigt, page entière, appui long (450 ms) | fiche du verset sous le doigt |
+| un doigt, page entière, glissement franc | page suivante ou précédente |
+
+Un pincement **neutralise le reste du geste** jusqu'au lever : après avoir zoomé, le doigt qui
+reste ne doit ni faire défiler la page ni la tourner.
+
+La **décision** n'est pas dans l'écran : `ReaderGesture.dragIntent` dit l'intention,
+`PageNavigation` dit le numéro. Un test vérifie que les deux **s'accordent** — et il a servi :
+la première version de `dragIntent` inversait le sens par rapport à `pageAfterSwipe`, qui est
+le portage fidèle du client d'origine et qui était déjà éprouvé. Sans ce test, l'intention
+aurait annoncé « suivante » pendant que le numéro calculé disait « précédente ».
 
 **Données déjà importées :** 12 fichiers JSON (8,4 Mo) dans `core/domain/src/main/resources/quran/`
 et **les 604 pages du moushaf** (114 Mo, 191 Ko en moyenne) dans `app/src/main/assets/quran/pages/`,

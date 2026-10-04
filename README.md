@@ -20,15 +20,16 @@ libre de conserver l'un, l'autre, ou les deux.
 | **D** | Amis, Quiz, notifications, progrès | à venir |
 | **E** | Hors ligne, optimisation, tests, nettoyage | à venir |
 
-Ce qui est **fait et éprouvé** aujourd'hui — **229 tests**, tous verts :
+Ce qui est **fait et éprouvé** aujourd'hui — **261 tests**, tous verts :
 
 | Module | Tests | Ce qu'ils couvrent |
 |---|---|---|
-| `core:domain` | **153** | le domaine porté de `src/core/*.ts`, exécuté sur les **vraies données** (6 236 versets, 114 sourates, 604 pages) |
-| `core:design` | **19** | les règles du thème : asymétrie de l'accent, fond secondaire, distinction des cinq palettes, résolution des polices |
-| `feature:home` | **22** | les règles de l'accueil : point de reprise, `scheduledDate` contre `date`, série de jours, période de chaque bandeau, objectif de la semaine |
+| `core:domain` | **178** | le domaine porté de `src/core/*.ts`, exécuté sur les **vraies données** (6 236 versets, 114 sourates, 604 pages) — dont la géométrie du lecteur, les gestes et la fenêtre de préchargement |
 | `core:data` | **26** | le magasin JSON local, la file hors ligne, la fusion à trois voies, la règle du propriétaire — sur de **vrais fichiers** |
+| `feature:home` | **22** | les règles de l'accueil : point de reprise, `scheduledDate` contre `date`, série de jours, période de chaque bandeau, objectif de la semaine |
+| `core:design` | **19** | les règles du thème : asymétrie de l'accent, fond secondaire, distinction des cinq palettes, résolution des polices |
 | `feature:auth` | **9** | l'activation du formulaire de connexion : adresse, longueur du mot de passe, occupation |
+| `feature:reader` | **7** | le nommage des pages (une page blanche est une panne silencieuse) et les bornes du geste |
 
 En détail :
 
@@ -58,9 +59,15 @@ En détail :
   connecte au projet, et la clé ne passe jamais par l'historique Git.
 - **Corpus coranique complet** : les **604 pages** du Coran de Médine (114 Mo) sont embarquées
   dans `app/src/main/assets/quran/pages/`, à côté des 12 fichiers JSON du référentiel.
+- **Lecteur de moushaf** : page centrée dans l'espace sûr (barres système, découpes, navigation
+  par geste), jamais déformée ; **un seul** gestionnaire de gestes, donc aucun conflit entre
+  balayage, pincement, appui et appui long ; **trois pages en mémoire au maximum** ; coquille
+  discrète **dans le flux**, qui ne recouvre jamais le dernier verset ; fiche du verset à
+  l'appui long, avec la traduction française du sens. Il s'ouvre **en avion**.
 
-Ce qui **reste** : l'écran du lecteur de moushaf, le téléchargement de la source « Coran 1441 »,
-l'audio Media3, les écrans Programme / Progrès / Amis / Quiz / Profil, et les notifications.
+Ce qui **reste** : le téléchargement de la source « Coran 1441 », l'audio Media3, la coquille
+d'étude (bandeau de séance, marqueurs de marge), le mode signet, le sélecteur de sourate, les
+écrans Programme / Progrès / Amis / Quiz / Profil, et les notifications.
 
 ---
 

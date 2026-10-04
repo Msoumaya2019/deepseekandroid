@@ -102,6 +102,18 @@ object AppRoutes {
     val fullScreen: Set<String> = setOf(READER, QUIZ, DAILY, RECITATIONS, REVIEW, ADMIN)
 
     /**
+     * Écrans qui vont **jusqu'aux bords** de l'écran, barres système comprises.
+     *
+     * Le lecteur seul est dans ce cas, et c'est une distinction qui compte. `fullScreen` dit
+     * « pas de barres de l'application » ; `edgeToEdge` dit « pas de marge de barre d'état non
+     * plus ». Un quiz en plein écran a toujours besoin de ne pas passer sous la barre d'état,
+     * sinon sa première ligne serait illisible. Le lecteur, lui, **gère ses propres marges** :
+     * il centre la page dans l'espace sûr tout en laissant son fond aller jusqu'aux bords —
+     * ce qui est la seule façon d'éviter une bande morte sur les appareils à découpe.
+     */
+    val edgeToEdge: Set<String> = setOf(READER)
+
+    /**
      * Écrans d'outil : barre supérieure **avec un retour**, et **pas** de barre basse.
      *
      * La valeur est le titre affiché. L'ordre suit celui du ternaire d'origine dans `App.tsx` :
