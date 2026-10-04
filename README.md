@@ -20,15 +20,15 @@ libre de conserver l'un, l'autre, ou les deux.
 | **D** | Amis, Quiz, notifications, progrès | à venir |
 | **E** | Hors ligne, optimisation, tests, nettoyage | à venir |
 
-Ce qui est **fait et éprouvé** aujourd'hui — **477 tests**, tous verts :
+Ce qui est **fait et éprouvé** aujourd'hui — **490 tests**, tous verts :
 
 | Module | Tests | Ce qu'ils couvrent |
 |---|---|---|
-| `core:domain` | **326** | le domaine porté de `src/core/*.ts`, exécuté sur les **vraies données** (6 236 versets, 114 sourates, 604 pages) — dont la géométrie du lecteur, les gestes, la fenêtre de préchargement, les règles de silence entre deux versets, la relecture des préférences d'écoute, **les libellés des écrans du lecteur** (titre de la feuille aligné sur la ligne qui l'ouvre, vitesses en virgule française, refus de la saisie libre), et les règles du paquet « Coran 1441 » : décision d'entrée, taille exacte, dimensions d'image, témoin d'installation, **forme de la page selon la source**, **rectangles des versets**, **transition de source**, et **les mots du panneau** |
+| `core:domain` | **336** | le domaine porté de `src/core/*.ts`, exécuté sur les **vraies données** (6 236 versets, 114 sourates, 604 pages) — dont la géométrie du lecteur, les gestes, la fenêtre de préchargement, les règles de silence entre deux versets, la relecture des préférences d'écoute, **les libellés des écrans du lecteur** (titre de la feuille aligné sur la ligne qui l'ouvre, vitesses en virgule française, refus de la saisie libre), et les règles du paquet « Coran 1441 » : décision d'entrée, taille exacte, dimensions d'image, témoin d'installation, **forme de la page selon la source**, **rectangles des versets**, **transition de source**, et **les mots du panneau**, et **la traduction française du panneau** : la plage est ramenée au corpus au lieu de faire tomber l'écran, l'accord des 6 236 versets avec la traduction est vérifié un par un, et le titre du panneau est celui de la ligne qui l'ouvre |
 | `core:data` | **67** | le magasin JSON local, la file hors ligne, la fusion à trois voies, la règle du propriétaire — sur de **vrais fichiers** ; **le dépôt des réglages d'écoute** (premier démarrage, document complet, champ hors bornes isolé, document illisible mis de côté, relecture depuis le disque, échec d'écriture qui ne publie rien) ; l'installation du paquet 1441 (reprise, témoin écrit en dernier, refus d'une archive douteuse) sur un **vrai ZIP** ; le transport HTTP contre un **vrai serveur** local, en-tête `Range` compris ; et le **branchement du conteneur**, tenu par un contrôle de forme |
 | `feature:home` | **22** | les règles de l'accueil : point de reprise, `scheduledDate` contre `date`, série de jours, période de chaque bandeau, objectif de la semaine |
 | `core:design` | **19** | les règles du thème : asymétrie de l'accent, fond secondaire, distinction des cinq palettes, résolution des polices |
-| `feature:reader` | **18** | le nommage des pages (une page blanche est une panne silencieuse), les bornes du geste, **ce que le mini-lecteur annonce** (le nombre d'écoutes tel que le moteur le jouera, saisie abîmée comprise), et **la pose des quinze bandes** d'une page du paquet |
+| `feature:reader` | **21** | le nommage des pages (une page blanche est une panne silencieuse), les bornes du geste, **ce que le mini-lecteur annonce** (le nombre d'écoutes tel que le moteur le jouera, saisie abîmée comprise), et **la pose des quinze bandes** d'une page du paquet, et **le branchement du panneau de traduction** (contrôle de forme : la ligne de la feuille l'ouvre, ses lignes sont calculées, et il est rendu) |
 | `core:audio` | **16** | l'enchaînement réel d'une séance : silence technique observé, silence choisi sur les reprises seulement, arrêt en fin de passage, répétition illimitée, changement de récitateur, fin oubliée après fermeture, **réglages appliqués à la séance en cours**, **saisie d'écoutes illisible qui ne fige pas la séance** — sur une **horloge virtuelle** |
 | `feature:auth` | **9** | l'activation du formulaire de connexion : adresse, longueur du mot de passe, occupation |
 
@@ -75,8 +75,8 @@ En détail :
   1 à 999 écoutes ou sans fin, silence réglable entre deux écoutes, vitesse 0,75× / 1× / 1,25×.
   Ces réglages se changent depuis la feuille « Réglages audio » du lecteur, et **s'appliquent à la
   séance en cours** — changer le nombre d'écoutes pendant une leçon vaut pour cette leçon, sans la
-  relancer et sans couper le verset qui joue. Ils ne sont **pas encore enregistrés** d'une session
-  à l'autre. Le mini-lecteur est **dans le flux**, lui aussi : la page reste entière. La décision
+  relancer et sans couper le verset qui joue. Ils sont **enregistrés sur l'appareil**, hors des comptes, et relus au démarrage de
+  l'application. Le mini-lecteur est **dans le flux**, lui aussi : la page reste entière. La décision
   d'enchaînement est dans le domaine, donc éprouvée ; le silence technique de 200 ms entre deux
   versets est **observé par un test**, pas attendu.
 - **Paquet « Coran 1441 »** : l'archive de **102 608 011 octets** — 9 060 images, 604 pages ×
@@ -102,7 +102,7 @@ d'écoutes pendant une leçon vaut pour cette leçon, sans la relancer, et sans 
 joue. Une destination dont l'écran n'est pas écrit **n'apparaît pas** dans la feuille : une ligne
 grisée laisserait croire que l'écran existe mais qu'il est indisponible.
 
-Ce qui **reste** : la traduction française, la coquille d'étude (bandeau de séance, marqueurs de
+Ce qui **reste** : la coquille d'étude (bandeau de séance, marqueurs de
 marge), le mode signet, les écrans Programme / Progrès / Amis / Quiz / Profil, et les
 notifications.
 
@@ -160,7 +160,7 @@ supposent rien : ils mesurent.
 | Script | Ce qu'il établit |
 |---|---|
 | `compter-tests.py` | le nombre de tests réellement exécutés, lu dans les rapports XML. Ne compte qu'une variante par classe : additionner `**/build/test-results/**` compte chaque test deux fois (debug **et** release) et oublie les modules JVM purs, qui écrivent sous `test-results/test/` |
-| `falsifier.py` | qu'un test **détecte** ce qu'il prétend couvrir. Chaque cas casse volontairement une règle, joue la suite, et vérifie que les tests qui tombent sont ceux prévus — puis **restaure la source** et le prouve par empreinte. Seuls les rapports écrits après le lancement sont lus : un rapport périmé ferait passer un test supprimé pour vert. `--verifier` contrôle que les 34 cas sont encore jouables, sans lancer Gradle |
+| `falsifier.py` | qu'un test **détecte** ce qu'il prétend couvrir. Chaque cas casse volontairement une règle, joue la suite, et vérifie que les tests qui tombent sont ceux prévus — puis **restaure la source** et le prouve par empreinte. Seuls les rapports écrits après le lancement sont lus : un rapport périmé ferait passer un test supprimé pour vert. `--verifier` contrôle que les 37 cas sont encore jouables, sans lancer Gradle |
 | `verifier-parite-donnees.py` | que les **604 pages** et les **11 fichiers de données** embarqués sont **octet pour octet** ceux de `coran-memoire` — et que l'empreinte du manifeste d'import décrit bien les fichiers présents. À lancer avec `--source <copie locale de coran-memoire>`, ouverte en lecture seule |
 | `verifier-jetons-design.py` | que les 48 couleurs et les 5 jeux de pastilles sont **identiques** à ceux de `coran-memoire`. Même `--source`, même lecture seule |
 | `import-quran-assets.mjs` | l'import des données coraniques et des pages du moushaf depuis la même copie en lecture seule |

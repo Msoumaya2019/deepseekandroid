@@ -78,13 +78,12 @@ import com.msoumaya.deepseekandroid.core.model.RepeatMode
  * personne — celle-ci empêche d'y arriver, celui-là empêche qu'une préférence abîmée fige la
  * séance.
  *
- * ## Ce qui n'est pas encore là, et où ça ira
+ * ## Les réglages sont enregistrés, mais pas par cette feuille
  *
- * Les réglages vivent le temps de la session : ils ne sont **pas encore enregistrés**, donc un
- * redémarrage de l'application ramène les valeurs par défaut. C'est la prochaine ligne de la
- * phase B — le magasin local existe (`JsonFileStore`) et `AudioSession.stored()` /
- * `AudioSession.fromStored` sont déjà écrits et éprouvés ; il manque le raccordement au
- * conteneur. Le dire ici évite de croire à une préférence qui survivrait.
+ * La feuille ne fait que **remonter** chaque changement : elle n'écrit rien, et ne sait pas où
+ * cela s'écrit. C'est l'appelant qui enregistre — le lecteur, seul à connaître le conteneur.
+ * Une feuille qui écrirait elle-même se croirait propriétaire d'un réglage qui vaut pour toute
+ * l'application, et deux endroits écriraient le même document.
  *
  * @param settings les réglages affichés. Ils viennent de l'appelant : c'est lui qui les tient,
  *   parce qu'il est aussi celui qui les applique au contrôleur.

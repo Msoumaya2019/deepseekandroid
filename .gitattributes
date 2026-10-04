@@ -16,6 +16,11 @@
 # Par défaut, git décide seul, et normalise vers LF dans le dépôt.
 * text=auto
 
+# Ce fichier-ci suit la convention qu'il définit. Sans cette ligne, Git annonce à chaque `add`
+# que sa copie de travail passera en CRLF — et un fichier de convention dont la copie locale
+# diffère du blob est exactement ce qu'il sert à éviter.
+.gitattributes text eol=lf
+
 # Les scripts restent en LF, quoi qu'en dise la configuration locale.
 *.sh text eol=lf
 gradlew text eol=lf
@@ -33,6 +38,12 @@ gradlew text eol=lf
 *.kt text eol=lf
 *.kts text eol=lf
 *.java text eol=lf
+# Les outils de `tools/` sont des scripts Python, et ils portent des chaînes de recherche
+# littérales — `grep -F` sur une fin de ligne comprise. Sans cette ligne, Git annonce à chaque
+# `add` que la copie de travail passera en CRLF : la copie locale et le blob divergent alors
+# silencieusement, et un contrôle joué sur le fichier local ne dit plus rien de ce qui est
+# versionné. C'est mot pour mot le risque décrit plus haut.
+*.py text eol=lf
 *.xml text eol=lf
 *.md text eol=lf
 *.json text eol=lf

@@ -394,6 +394,37 @@ CAS: list[dict] = [
         "tache": ":core:data:testDebugUnitTest",
         "attendus": ["AudioSettingsRepositoryTest"],
     },
+    {
+        # La feuille d'options ne recoit plus de destination pour la traduction : la ligne
+        # « Traduction francaise » disparait de la feuille, et rien d'autre ne le dit — le
+        # domaine reste vert, la compilation passe, et le seul symptome est une ligne absente.
+        "nom": "lecteur : la ligne de traduction n'ouvre plus le panneau",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/ReaderScreen.kt",
+        "avant": "            onTranslation = { panel = ReaderPanel.TRANSLATION },",
+        "apres": "            onTranslation = { panel = ReaderPanel.NONE },",
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": ["ReaderPanelWiringTest"],
+    },
+    {
+        # Les lignes du panneau ne viennent plus de la regle eprouvee : le panneau s'ouvre sur du
+        # vide, ou sur autre chose que la plage de la page affichee.
+        "nom": "lecteur : le panneau de traduction ne calcule plus ses lignes",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/ReaderScreen.kt",
+        "avant": "                    .map { TranslationPanel.rows(session = null, page = it) }",
+        "apres": "                    .map { listOf<TranslationPanel.Row>() }",
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": ["ReaderPanelWiringTest"],
+    },
+    {
+        # La destination existe encore, mais plus rien n'est rendu pour elle : le panneau
+        # s'ouvrirait sur du vide. Les deux autres reglages restent verts.
+        "nom": "lecteur : le panneau de traduction n'est plus rendu",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/ReaderScreen.kt",
+        "avant": "            TranslationPanelSheet(rows = rows, onClose = { panel = ReaderPanel.NONE })",
+        "apres": "            Unit",
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": ["ReaderPanelWiringTest"],
+    },
 ]
 
 

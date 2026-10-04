@@ -46,6 +46,7 @@ import com.msoumaya.deepseekandroid.core.domain.ReaderGesture
 import com.msoumaya.deepseekandroid.core.domain.ReaderLayout
 import com.msoumaya.deepseekandroid.core.domain.ReaderOptionsText
 import com.msoumaya.deepseekandroid.core.domain.ReaderZoomGeometry
+import com.msoumaya.deepseekandroid.core.domain.TranslationPanel
 import com.msoumaya.deepseekandroid.core.model.MushafPageSource
 import com.msoumaya.deepseekandroid.core.model.MushafSource
 import com.msoumaya.deepseekandroid.core.model.ReaderZoom
@@ -82,6 +83,10 @@ private const val DEFAULT_TOTAL_PAGES = 604
  *   (`SurahPickerScreen`), qu'on règle l'écoute (`AudioSettingsSheet`) ou qu'on choisit la
  *   présentation des pages. Une destination dont l'écran n'est pas écrit **n'apparaît pas**
  *   dans la feuille.
+ * - **La traduction française se lit sans quitter la page.** Le panneau décrit dans
+ *   `TranslationPanelSheet` donne, verset par verset, la référence et le sens du passage
+ *   affiché. Quels versets exactement — la séance, ou la page — est une règle de
+ *   `core:domain`, éprouvée là où elle vit.
  * - **Les réglages d'écoute s'appliquent à la séance en cours.** Changer de récitateur, de
  *   nombre d'écoutes, de mode ou de silence vaut pour la séance ouverte, sans avoir à la
  *   relancer : c'est le comportement du client d'origine, où les réglages sont relus à chaque
@@ -95,9 +100,9 @@ private const val DEFAULT_TOTAL_PAGES = 604
  *
  * ## Ce qui viendra, et où
  *
- * La traduction française, la coquille d'étude et le mode signet appartiennent à la phase C.
- * Chacune de ces lignes s'ajoutera en passant sa destination à `ReaderOptionsSheet` : tant
- * qu'elle vaut `null`, la ligne ne s'affiche pas, et rien ne ment à l'écran.
+ * La coquille d'étude et le mode signet appartiennent à la phase C. Chacune de ces lignes
+ * s'ajoutera en passant sa destination à `ReaderOptionsSheet` : tant qu'elle vaut `null`, la
+ * ligne ne s'affiche pas, et rien ne ment à l'écran.
  *
  * @param initialPage page ouverte au lancement. Bornée au moushaf.
  * @param source la source coranique affichée. Elle décide du **découpage** des pages : deux
@@ -211,11 +216,11 @@ fun ReaderScreen(
 
     // Les destinations réellement branchées dans la feuille d'options. « Changer de sourate »
     // l'est toujours : le sélecteur sait gérer un référentiel non chargé et le dit. « Réglages
-    // audio » aussi, depuis que l'écran existe. « Affichage du Coran » dépend de l'appelant, car
-    // le lecteur ne connaît ni les sources ni le stockage. La traduction n'y figure pas encore :
-    // son écran n'est pas écrit, et une ligne sans destination ne s'affiche pas.
+    // audio » et « Traduction française » aussi, depuis que leurs écrans existent. « Affichage
+    // du Coran » dépend de l'appelant, car le lecteur ne connaît ni les sources ni le stockage.
     val options: Set<ReaderOptionsText.Action> = buildSet {
         add(ReaderOptionsText.Action.SURAH)
+        add(ReaderOptionsText.Action.TRANSLATION)
         add(ReaderOptionsText.Action.AUDIO)
         if (onOpenSourcePicker != null) add(ReaderOptionsText.Action.DISPLAY)
     }
@@ -435,6 +440,7 @@ fun ReaderScreen(
         ReaderPanel.OPTIONS -> ReaderOptionsSheet(
             onClose = { panel = ReaderPanel.NONE },
             onSurah = { panel = ReaderPanel.SURAH },
+            onTranslation = { panel = ReaderPanel.TRANSLATION },
             onAudio = { panel = ReaderPanel.AUDIO },
             // Le client d'origine referme la feuille **puis** ouvre le choix de présentation :
             // les deux ne s'empilent pas, et deux voiles superposés assombriraient l'écran.
@@ -474,6 +480,24 @@ fun ReaderScreen(
             onRestart = audioState.range?.let { session -> { audio.start(session, settings) } },
             onClose = { panel = ReaderPanel.NONE },
         )
+
+        ReaderPanel.TRANSLATION -> {
+            // Les lignes sont calculées **ici**, et non à la composition du lecteur : la table
+            // de traduction pèse 1,5 Mo, et une personne qui n'ouvre jamais ce panneau n'a pas à
+            // en payer la lecture. Les versets, eux, viennent de la plage de la page affichée,
+            // dans le découpage de la source — la règle vit dans `TranslationPanel`, éprouvée
+            // dans `core:domain`.
+            //
+            // `session = null` : aucune séance n'existe encore dans ce client. Le jour où la
+            // phase C en ouvrira une, c'est ici qu'elle se branchera — et la règle est déjà
+            // écrite pour la recevoir.
+            val rows = remember(page, source) {
+                runCatching { MushafSourceNavigation.pageRange(source, page) }
+                    .map { TranslationPanel.rows(session = null, page = it) }
+                    .getOrDefault(emptyList())
+            }
+            TranslationPanelSheet(rows = rows, onClose = { panel = ReaderPanel.NONE })
+        }
 
         ReaderPanel.SURAH -> SurahPickerScreen(
             // Un référentiel non chargé ne fait pas tomber l'écran : la première sourate est
@@ -569,7 +593,18 @@ private fun surahFor(source: MushafSource, page: Int): Surah? = runCatching {
 /** Ce qu'affiche la coquille quand la sourate n'est pas déterminable. */
 private const val DEFAULT_SURAH_NAME = "Le Coran"
 
-/** Le panneau ouvert par-dessus le lecteur. Un seul à la fois. */
+/**
+ * Le panneau ouvert par-dessus le lecteur. Un seul à la fois.
+ *
+ * ## Un écart assumé : la fiche du verset survit à la fermeture
+ *
+ * Dans le client d'origine, un **seul** gestionnaire ferme les six panneaux, et il efface au
+ * passage le verset sélectionné : `setSessionPanel(null); setSelectedVerse(null)`. Ici, la fiche
+ * du verset vit de son côté, et fermer un panneau la laisse à l'écran. Rien n'est perdu ni
+ * menti — la fiche dit elle-même qu'un appui sur la page la referme — et la personne retrouve le
+ * verset qu'elle venait de toucher. La rattacher à la fermeture des quatre panneaux ferait
+ * disparaître une information qu'aucun d'eux n'a remplacée.
+ */
 private enum class ReaderPanel {
     /** Aucun : le lecteur est nu. */
     NONE,
@@ -582,6 +617,9 @@ private enum class ReaderPanel {
 
     /** Les réglages d'écoute. */
     AUDIO,
+
+    /** La traduction française de la page. */
+    TRANSLATION,
 }
 
 /**

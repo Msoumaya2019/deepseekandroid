@@ -11,10 +11,12 @@ package com.msoumaya.deepseekandroid.core.domain
  * ## Une ligne dont la destination n'existe pas n'est pas affichée
  *
  * Le client d'origine propose toujours les quatre lignes, parce que ses quatre écrans existent.
- * Ici, la traduction française n'est pas encore écrite. Afficher une ligne qui ne mène nulle
- * part ferait douter du reste de l'écran — c'est le principe déjà tenu par la coquille et par
- * le mini-lecteur. [visible] **filtre** donc au lieu de griser, et l'ordre du client d'origine
- * est conservé pour les lignes qui restent.
+ * Ici, trois sont branchées en dur — changer de sourate, la traduction, les réglages d'écoute —
+ * et la quatrième dépend de l'appelant : le lecteur ne connaît ni les sources ni le stockage, et
+ * une route qui ne propose pas de choix de présentation ne doit pas voir la ligne. Afficher une
+ * ligne qui ne mène nulle part ferait douter du reste de l'écran — c'est le principe déjà tenu
+ * par la coquille et par le mini-lecteur. [visible] **filtre** donc au lieu de griser, et
+ * l'ordre du client d'origine est conservé pour les lignes qui restent.
  *
  * ## Ce que cette règle ne décide pas
  *

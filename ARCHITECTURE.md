@@ -409,14 +409,14 @@ de tout le domaine — déjà testé — pour un gain nul. Elle n'est donc pas l
 
 | Suite | Nombre | Ce qu'elle couvre |
 |---|---|---|
-| `core:domain` | 326 | Coran, dates, programme, révisions, consolidations, signets, audio, file d'écoute et silences, quiz, lecteur et gestes, fusion hors ligne, file d'attente, composition de synchronisation, décision d'ouverture, messages de connexion, **libellés des écrans du lecteur** (feuille d'options, sélecteur de sourate, réglages d'écoute : titre aligné sur la ligne qui l'ouvre, vitesses en virgule française, note de marge technique, refus de la saisie libre), **règles du paquet « Coran 1441 »** (décision d'entrée, taille exacte, dimensions d'image, témoin d'installation, forme de la page selon la source, rectangles des versets, transition de source, mots du panneau) |
+| `core:domain` | 336 | Coran, dates, programme, révisions, consolidations, signets, audio, file d'écoute et silences, quiz, lecteur et gestes, fusion hors ligne, file d'attente, composition de synchronisation, décision d'ouverture, messages de connexion, **libellés des écrans du lecteur** (feuille d'options, sélecteur de sourate, réglages d'écoute : titre aligné sur la ligne qui l'ouvre, vitesses en virgule française, note de marge technique, refus de la saisie libre), **règles du paquet « Coran 1441 »** (décision d'entrée, taille exacte, dimensions d'image, témoin d'installation, forme de la page selon la source, rectangles des versets, transition de source, mots du panneau), **panneau de traduction** (plage de séance prioritaire, plage ramenée au corpus au lieu de faire tomber l'écran, accord des 6 236 versets avec la traduction, référence d'un verset, titre aligné sur la ligne qui l'ouvre) |
 | `core:data` | 67 | lecture locale, hors ligne, premier chargement, isolation des comptes, fichier d'état illisible, file, idempotence, remise à zéro, règle du propriétaire, **dépôt des réglages d'écoute** (premier démarrage, document complet, champ hors bornes isolé, document illisible mis de côté, relecture depuis le disque, échec d'écriture qui ne publie rien), **branchement du conteneur** (contrôle de forme : la relecture au démarrage et l'emplacement du document), **installation du paquet 1441** (reprise, témoin écrit en dernier, refus d'une archive douteuse) et **transport HTTP** (en-tête `Range`, `200` contre `206`, refus) |
 | `feature:home` | 22 | point de reprise, `scheduledDate` contre `date`, série de jours, période de chaque bandeau, objectif de la semaine, libellés de repli |
 | `core:design` | 19 | asymétrie de l'accent, fond secondaire, distinction des cinq palettes, échelles de `tokens.ts`, résolution des polices, écran Apparence |
-| `feature:reader` | 18 | nommage des pages, bornes du geste, **affichage du nombre d'écoutes** (ce que le moteur jouera, saisie abîmée comprise), **pose des quinze bandes** d'une page du paquet (hauteur, premier et dernière bande, chevauchement) |
+| `feature:reader` | 21 | nommage des pages, bornes du geste, **affichage du nombre d'écoutes** (ce que le moteur jouera, saisie abîmée comprise), **pose des quinze bandes** d'une page du paquet (hauteur, premier et dernière bande, chevauchement), et **branchement du panneau de traduction** (contrôle de forme : la ligne de la feuille l'ouvre, ses lignes sont calculées, et il est rendu) |
 | `core:audio` | 16 | conduite d'une séance sur horloge virtuelle : silence observé, reprises, arrêt, répétition illimitée, changement de récitateur, fin oubliée après fermeture, fichier illisible, **réglages appliqués à la séance en cours**, et **saisie d'écoutes illisible qui ne fige pas la séance** |
 | `feature:auth` | 9 | activation du formulaire : adresse, longueur du mot de passe, occupation, libellés |
-| **total** | **477** | 41 classes de test |
+| **total** | **490** | 43 classes de test |
 
 Le domaine est éprouvé sur les **vraies données** — 6 236 versets, 114 sourates, 604 pages — et
 non sur une maquette de trois versets, qui laisserait passer une erreur d'indexation ou une
@@ -455,7 +455,7 @@ affiche aussi le **nombre de classes lues** : un relevé vide signalerait que le
 aucun test, et « tout vert » ne voudrait alors rien dire.
 
 **Un test vert ne dit pas qu'il détecte quoi que ce soit.** `tools/falsifier.py` casse
-volontairement une règle — trente-quatre fois, chacune sur une règle différente — relance la suite, et
+volontairement une règle — trente-sept fois, chacune sur une règle différente — relance la suite, et
 vérifie que les tests qui tombent sont **ceux qui devaient tomber**. Il restaure ensuite le fichier
 et le prouve par empreinte, pas par la bonne volonté d'un `finally`. Deux pièges y sont traités
 nommément : les rapports XML restent sur le disque d'une exécution à l'autre, donc seuls ceux
@@ -480,6 +480,15 @@ défaut et le premier réglage **écrase le choix enregistré sans que rien ne l
 pourquoi `AppContainerWiringTest` lit le source du conteneur et vérifie que l'appel est écrit. Ce
 contrôle est **de forme** : il dit que le branchement existe, pas que la relecture aboutit — le
 comportement, lui, est éprouvé par `AudioSettingsRepositoryTest`, sur de vrais fichiers.
+
+**Le même raisonnement vaut pour le branchement du lecteur.** Le panneau de traduction
+est rendu par une fonction `@Composable` : rien de ce qu'il branche ne s'exécute dans une
+épreuve JVM. Or trois choses y seraient silencieuses — la ligne de la feuille d'options
+qui ouvre le panneau, le calcul de ses lignes, et son rendu. Si l'une disparaissait, le
+domaine resterait vert, la compilation passerait, et le seul symptôme serait une ligne
+absente d'une feuille ou un panneau vide. `ReaderPanelWiringTest` lit donc le source du
+lecteur et vérifie que ces trois branchements sont écrits. Il ne dit pas que le panneau
+s'affiche correctement : cela se lit dans un diff, et c'est écrit dans le code concerné.
 
 **Ce qui reste hors de tout contrôle automatique, et qu'il faut donc lire dans un diff** : le
 lecteur adopte la valeur relue tant que rien n'a été réglé à la main, et il rapporte chaque

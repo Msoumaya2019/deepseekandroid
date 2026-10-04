@@ -74,7 +74,7 @@ import com.msoumaya.deepseekandroid.core.domain.ReaderOptionsText
  * @param onClose referme la feuille. Le client d'origine referme aussi en la tirant vers le
  *   bas : la poignée le fait ici, avec le même seuil de 45 points.
  * @param onSurah ouvre le sélecteur de sourate. `null` quand il n'y a nulle part où aller.
- * @param onTranslation affiche la traduction française. `null` tant que l'écran n'existe pas.
+ * @param onTranslation ouvre la traduction française. `null` quand l'appelant n'en propose pas.
  * @param onAudio ouvre les réglages d'écoute. `null` quand l'appelant n'en propose pas.
  * @param onDisplay ouvre le choix de présentation. `null` quand l'appelant n'en propose pas.
  */
