@@ -33,15 +33,26 @@ class MiniPlayerTest {
     }
 
     @Test
-    fun `une saisie libre abimee ne fait pas tomber le lecteur`() {
-        // `resolveCount()` echoue sur ces saisies. Mieux vaut afficher une repetition illimitee
-        // qu'un lecteur qui refuse de s'ouvrir parce qu'un enregistrement local est illisible.
-        for (text in listOf("abc", "0", "", "1000", "2.5")) {
+    fun `une saisie libre abimee s'affiche comme ce que le moteur jouera`() {
+        // Le moteur ramene une saisie illisible a 1, comme le client d'origine. Afficher « ∞ »
+        // annoncerait une repetition sans fin qui n'aura pas lieu : l'affichage dit ce qui se
+        // passera, il ne rassure pas.
+        for (text in listOf("abc", "0", "", "  ", "2.5", "-1")) {
             assertEquals(
-                INFINITE,
+                "1",
                 countLabelOf(AudioSession(countChoice = AudioCount.CUSTOM, customCount = text)),
                 "saisie : « $text »",
             )
         }
+    }
+
+    @Test
+    fun `une saisie libre lisible s'affiche telle quelle, meme hors des bornes de l'ecran`() {
+        // L'ecran refuse au-dela de 999, mais le moteur ne re-juge pas ce qui est deja regle :
+        // afficher 1000 est exact, puisque c'est ce qui sera joue.
+        assertEquals(
+            "1000",
+            countLabelOf(AudioSession(countChoice = AudioCount.CUSTOM, customCount = "1000")),
+        )
     }
 }

@@ -102,10 +102,21 @@ class AudioSessionController(
         _state.value = AudioSessionState()
     }
 
-    /** Applique une vitesse à la lecture en cours, sans interrompre le verset. */
-    fun setSpeed(speed: Float) {
-        settings = settings.copy(speed = speed)
-        output.setSpeed(speed)
+    /**
+     * Remplace les réglages de la séance en cours.
+     *
+     * Le client d'origine reconstruit `settingsRef` à **chaque rendu** à partir des réglages
+     * affichés : changer le nombre d'écoutes, le mode ou le silence s'applique donc à la séance
+     * en cours, sans qu'il faille la relancer. C'est ce que fait cette méthode. Le verset en
+     * train de jouer n'est pas interrompu — on ne coupe pas une récitation au milieu d'un mot
+     * parce qu'un réglage a bougé — mais la **suite** le suit.
+     *
+     * La vitesse est la seule à devoir être poussée au lecteur natif : les autres réglages ne
+     * sont lus qu'au moment de décider du verset suivant.
+     */
+    fun updateSettings(value: AudioSession) {
+        settings = value
+        output.setSpeed(value.speed)
     }
 
     /** Change de récitateur. Le verset en cours continue ; le suivant vient du nouveau. */

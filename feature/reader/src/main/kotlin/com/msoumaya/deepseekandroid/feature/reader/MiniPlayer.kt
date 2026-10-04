@@ -105,11 +105,13 @@ internal const val INFINITE = "∞"
 /**
  * Le nombre d'écoutes tel que le mini-lecteur l'affiche : `3`, `20`, ou `∞`.
  *
- * Le repli sur [INFINITE] n'est pas une coquetterie. `resolveCount()` **échoue** quand le choix
- * est « Autre » et que la saisie n'est pas un entier entre 1 et 999 — ce qui arrive dès qu'un
- * enregistrement local est abîmé. Sans ce repli, ouvrir le lecteur lèverait une exception et
- * l'écran ne s'afficherait pas du tout : une préférence illisible emporterait la lecture du
- * moushaf avec elle.
+ * L'affichage doit dire ce que le moteur **fait**, et rien d'autre. Une saisie libre abîmée est
+ * ramenée à 1 par [AudioSession.resolveCount] ; afficher `∞` dans ce cas annoncerait une
+ * répétition sans fin qui n'aura pas lieu — une promesse que la séance ne tiendra pas.
+ *
+ * Le lecteur s'ouvre dans tous les cas : c'est [AudioSession.resolveCount] qui garantit qu'une
+ * préférence illisible ne fait pas échouer la lecture, et `AudioSessionControllerTest` qui le
+ * mesure.
  */
 internal fun countLabelOf(settings: AudioSession): String =
-    runCatching { settings.resolveCount()?.toString() ?: INFINITE }.getOrDefault(INFINITE)
+    settings.resolveCount()?.toString() ?: INFINITE

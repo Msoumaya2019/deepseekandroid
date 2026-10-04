@@ -24,6 +24,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -225,7 +226,7 @@ class AudioSessionControllerTest {
         controller.start(Range(1, 3), AudioSession(speed = 1.25f))
         assertEquals(1.25f, output.lastSpeed)
 
-        controller.setSpeed(0.75f)
+        controller.updateSettings(AudioSession(speed = 0.75f))
         assertEquals(0.75f, output.lastSpeed)
     }
 
@@ -283,5 +284,64 @@ class AudioSessionControllerTest {
 
         assertTrue(output.released)
         assertFalse(controller.state.value.isOpen)
+    }
+
+    @Test
+    fun `une saisie d'ecoutes illisible ne fige pas la seance`() = runTest {
+        val output = FakeAudioOutput()
+        val controller = AudioSessionController(output, backgroundScope)
+        // « abc » n'est pas un entier. Le moteur doit ramener le compte a 1, et surtout NE PAS
+        // echouer : l'exception serait absorbee par la portee de coroutines, le collecteur qui
+        // conduit la seance mourrait, et plus rien n'avancerait — sans le moindre message.
+        controller.start(
+            Range(1, 1),
+            AudioSession(countChoice = AudioCount.CUSTOM, customCount = "abc"),
+        )
+        runCurrent()
+
+        output.finish()
+        settle()
+
+        // Le compte vaut 1 : la seance se termine proprement, au lieu de se figer.
+        assertNull(controller.state.value.error)
+        assertTrue(controller.state.value.isFinished, "la seance doit s'arreter proprement")
+        assertFalse(controller.state.value.isPlaying)
+        assertEquals(1, output.played.size)
+
+        // Et la preuve directe que le collecteur est VIVANT : une seance neuve, sur des reglages
+        // lisibles, doit encore enchainer. S'il etait mort, cette fin ne declencherait rien.
+        controller.start(Range(1, 3), AudioSession(countChoice = AudioCount.THREE))
+        runCurrent()
+        output.finish()
+        settle()
+
+        assertEquals(listOf(url(1), url(1), url(2)), output.played)
+        assertEquals(AudioPosition(2, 1), controller.state.value.position)
+    }
+
+    @Test
+    fun `changer les reglages s'applique a la seance en cours`() = runTest {
+        val output = FakeAudioOutput()
+        val controller = AudioSessionController(output, backgroundScope)
+        controller.start(
+            Range(1, 2),
+            AudioSession(countChoice = AudioCount.ONE, mode = RepeatMode.PASSAGE),
+        )
+        runCurrent()
+
+        // Le client d'origine reconstruit ses reglages a **chaque rendu** : changer le mode et le
+        // nombre d'ecoutes vaut pour la seance en cours, sans qu'il faille la relancer.
+        controller.updateSettings(
+            AudioSession(countChoice = AudioCount.THREE, mode = RepeatMode.EACH_VERSE),
+        )
+        assertEquals(1, output.played.size, "le verset en cours ne doit pas etre coupe")
+
+        output.finish()
+        settle()
+
+        // Mode « chaque verset » : le meme verset est repris, et non le suivant. Si le controleur
+        // n'avait retenu que la vitesse, il serait passe au verset 2.
+        assertEquals(AudioPosition(1, 2), controller.state.value.position)
+        assertEquals(listOf(url(1), url(1)), output.played)
     }
 }

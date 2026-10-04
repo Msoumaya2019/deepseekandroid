@@ -408,14 +408,14 @@ de tout le domaine — déjà testé — pour un gain nul. Elle n'est donc pas l
 
 | Suite | Nombre | Ce qu'elle couvre |
 |---|---|---|
-| `core:domain` | 292 | Coran, dates, programme, révisions, consolidations, signets, audio, file d'écoute et silences, quiz, lecteur et gestes, fusion hors ligne, file d'attente, composition de synchronisation, décision d'ouverture, messages de connexion, **règles du paquet « Coran 1441 »** (décision d'entrée, taille exacte, dimensions d'image, témoin d'installation, forme de la page selon la source, rectangles des versets, transition de source, mots du panneau) |
+| `core:domain` | 326 | Coran, dates, programme, révisions, consolidations, signets, audio, file d'écoute et silences, quiz, lecteur et gestes, fusion hors ligne, file d'attente, composition de synchronisation, décision d'ouverture, messages de connexion, **libellés des écrans du lecteur** (feuille d'options, sélecteur de sourate, réglages d'écoute : titre aligné sur la ligne qui l'ouvre, vitesses en virgule française, note de marge technique, refus de la saisie libre), **règles du paquet « Coran 1441 »** (décision d'entrée, taille exacte, dimensions d'image, témoin d'installation, forme de la page selon la source, rectangles des versets, transition de source, mots du panneau) |
 | `core:data` | 57 | lecture locale, hors ligne, premier chargement, isolation des comptes, fichier d'état illisible, file, idempotence, remise à zéro, règle du propriétaire, **installation du paquet 1441** (reprise, témoin écrit en dernier, refus d'une archive douteuse) et **transport HTTP** (en-tête `Range`, `200` contre `206`, refus) |
 | `feature:home` | 22 | point de reprise, `scheduledDate` contre `date`, série de jours, période de chaque bandeau, objectif de la semaine, libellés de repli |
 | `core:design` | 19 | asymétrie de l'accent, fond secondaire, distinction des cinq palettes, échelles de `tokens.ts`, résolution des polices, écran Apparence |
-| `feature:reader` | 17 | nommage des pages, bornes du geste, repli d'affichage d'une préférence d'écoute illisible, **pose des quinze bandes** d'une page du paquet (hauteur, premier et dernière bande, chevauchement) |
-| `core:audio` | 14 | conduite d'une séance sur horloge virtuelle : silence observé, reprises, arrêt, répétition illimitée, changement de récitateur, fin oubliée après fermeture, fichier illisible |
+| `feature:reader` | 18 | nommage des pages, bornes du geste, **affichage du nombre d'écoutes** (ce que le moteur jouera, saisie abîmée comprise), **pose des quinze bandes** d'une page du paquet (hauteur, premier et dernière bande, chevauchement) |
+| `core:audio` | 16 | conduite d'une séance sur horloge virtuelle : silence observé, reprises, arrêt, répétition illimitée, changement de récitateur, fin oubliée après fermeture, fichier illisible, **réglages appliqués à la séance en cours**, et **saisie d'écoutes illisible qui ne fige pas la séance** |
 | `feature:auth` | 9 | activation du formulaire : adresse, longueur du mot de passe, occupation, libellés |
-| **total** | **430** | 36 classes de test |
+| **total** | **467** | 39 classes de test |
 
 Le domaine est éprouvé sur les **vraies données** — 6 236 versets, 114 sourates, 604 pages — et
 non sur une maquette de trois versets, qui laisserait passer une erreur d'indexation ou une
@@ -430,7 +430,12 @@ un test qui attend 200 ms pour de vrai échoue sur une machine chargée, et fait
 plutôt que de lui. Une mesure utile à connaître : `advanceUntilIdle()` **n'exécute pas** le
 travail d'un `backgroundScope`, où vivent les collecteurs du contrôleur audio. Un test qui s'en
 servirait verrait un enchaînement qui ne se produit jamais — et, pire, il passerait quand on lui
-demande de constater une **absence**. Ces tests avancent donc l'horloge explicitement.
+demande de constater une **absence**. Ces tests avancent donc l'horloge explicitement. Le
+corollaire est une règle de conception, et non de test : **le moteur ne lève jamais sur un
+réglage**. Une préférence abîmée y fait ramener le nombre d'écoutes à 1 ; c'est l'**écran**, et lui
+seul, qui refuse une saisie, avec le message du client d'origine. L'écran empêche d'y arriver, le
+moteur empêche qu'une préférence abîmée interrompe l'écoute — et les deux règles vivent à deux
+endroits distincts pour ne pas se confondre.
 
 **L'installation du paquet « Coran 1441 » s'éprouve sans réseau et sans fabriquer 102 Mo.** La
 règle d'archive vit dans le domaine, où elle ne connaît ni fichier ni socket ; l'installeur reçoit
@@ -449,7 +454,7 @@ affiche aussi le **nombre de classes lues** : un relevé vide signalerait que le
 aucun test, et « tout vert » ne voudrait alors rien dire.
 
 **Un test vert ne dit pas qu'il détecte quoi que ce soit.** `tools/falsifier.py` casse
-volontairement une règle — vingt-deux fois, chacune sur une règle différente — relance la suite, et
+volontairement une règle — vingt-huit fois, chacune sur une règle différente — relance la suite, et
 vérifie que les tests qui tombent sont **ceux qui devaient tomber**. Il restaure ensuite le fichier
 et le prouve par empreinte, pas par la bonne volonté d'un `finally`. Deux pièges y sont traités
 nommément : les rapports XML restent sur le disque d'une exécution à l'autre, donc seuls ceux
@@ -458,6 +463,13 @@ un filtre Gradle trop étroit donne un « BUILD SUCCESSFUL » sans avoir rien jo
 vide est un échec et non un succès. Ce harnais a réellement servi : il a montré qu'une classe de
 tests ne passait que **parce qu'une autre avait installé le référentiel avant elle**, et que deux
 garde-fous de `MushafPageShape` se recouvraient si exactement qu'aucun n'était éprouvable seul.
+
+**Un défaut peut ne faire tomber aucun test.** Une exception levée dans le collecteur qui conduit
+une séance d'écoute était **absorbée par la portée de coroutines** : le collecteur mourait, la
+leçon se figeait, et rien ne le disait — ni message, ni erreur, ni test rouge. Le défaut n'a été
+établi qu'en écrivant un test qui demande explicitement à la séance de **survivre** : après une fin
+de verset sur des réglages abîmés, il faut qu'une séance neuve enchaîne encore. Un test qui se
+serait contenté de constater l'absence d'erreur serait passé au vert sur le code fautif.
 Les deux constats sont écrits dans le code concerné, pas seulement dans ce document.
 
 **Les données embarquées se prouvent, elles aussi.** `tools/verifier-parite-donnees.py` recalcule

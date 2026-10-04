@@ -52,6 +52,23 @@ object AudioSettings {
         }
         return value
     }
+
+    /**
+     * Le message à afficher avant de lancer une écoute, ou `null` si les réglages tiennent.
+     *
+     * C'est la règle de l'**écran** : elle ne refuse que la saisie libre, puisque les autres
+     * choix portent leur nombre. Le client d'origine écrit la même condition dans son `begin()`
+     * et affiche [CUSTOM_COUNT_MESSAGE] ; on ne réinvente donc pas le texte ici.
+     *
+     * Elle est distincte de [AudioSession.resolveCount], qui ne refuse rien : le moteur applique
+     * ce qui est réglé, l'écran prévient avant. Les deux sont nécessaires — sans la première, on
+     * lancerait une écoute de 1 sans le dire ; sans la seconde, une préférence abîmée figerait
+     * la séance.
+     */
+    fun validationMessage(settings: AudioSession): String? =
+        runCatching { settings.countChoice.resolve(settings.customCount) }
+            .exceptionOrNull()
+            ?.message
 }
 
 /**
@@ -87,6 +104,11 @@ enum class AudioCount(val label: String, val wire: String) {
      *
      * Échoue avec le message du client d'origine si le choix est « Autre » et que la saisie
      * n'est pas un entier entre 1 et 999.
+     *
+     * C'est la règle de l'**écran**, celle qui refuse une saisie au moment de la valider. Le
+     * moteur ne s'en sert pas : il applique ce qui est réglé, en ramenant à 1 ce qu'il ne sait
+     * pas lire — voir [AudioSession.resolveCount], qui explique pourquoi cette distinction est
+     * nécessaire.
      */
     fun resolve(customText: String): Int? = when (this) {
         CONTINUOUS -> null
@@ -134,8 +156,32 @@ data class AudioSession(
     val autoStop: Boolean = true,
 ) {
 
-    /** Le nombre d'écoutes, ou `null` si la répétition est illimitée. */
-    fun resolveCount(): Int? = countChoice.resolve(customCount)
+    /**
+     * Le nombre d'écoutes que le **moteur** applique, ou `null` si la répétition est illimitée.
+     *
+     * Une saisie libre illisible est **ramenée à 1** ; elle ne fait pas échouer la lecture. C'est
+     * la règle du client d'origine, où `settingsRef` écrit
+     * `count==='continuous'?count:Number.isInteger(count)&&count>0?count:1` : le moteur ne
+     * re-juge pas ce qui a déjà été réglé.
+     *
+     * Le refus, lui, appartient à l'**écran** : voir [AudioSettings.requireCustomCount], qui
+     * porte le message d'origine et sert à valider la saisie avant de lancer. Deux règles, et
+     * non deux avis contradictoires — l'écran empêche d'y arriver, le moteur ne laisse pas une
+     * préférence abîmée interrompre l'écoute.
+     *
+     * Ce n'est pas une tolérance de confort : lever ici tue le collecteur qui conduit la séance
+     * (l'exception est absorbée par la portée de coroutines), et la leçon se fige **sans rien
+     * dire**. C'est mesuré par `AudioSessionControllerTest`.
+     *
+     * Une écriture exponentielle (`1e2`, que `Number` lirait comme 100) est ici illisible, donc
+     * ramenée à 1 : l'écran la refuse de toute façon, et les deux clients ne peuvent pas
+     * diverger sur un nombre d'écoutes.
+     */
+    fun resolveCount(): Int? = when (countChoice) {
+        AudioCount.CONTINUOUS -> null
+        AudioCount.CUSTOM -> customCount.trim().toIntOrNull()?.takeIf { it > 0 } ?: 1
+        else -> countChoice.fixed
+    }
 
     /**
      * `true` quand la répétition est illimitée.

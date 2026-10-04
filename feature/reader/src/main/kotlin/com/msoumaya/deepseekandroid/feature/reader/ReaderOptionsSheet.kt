@@ -3,7 +3,6 @@ package com.msoumaya.deepseekandroid.feature.reader
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -15,12 +14,10 @@ import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -28,7 +25,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.outlined.ChevronRight
-import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Headphones
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Settings
@@ -43,8 +39,6 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -81,7 +75,7 @@ import com.msoumaya.deepseekandroid.core.domain.ReaderOptionsText
  *   bas : la poignée le fait ici, avec le même seuil de 45 points.
  * @param onSurah ouvre le sélecteur de sourate. `null` quand il n'y a nulle part où aller.
  * @param onTranslation affiche la traduction française. `null` tant que l'écran n'existe pas.
- * @param onAudio ouvre les réglages d'écoute. `null` tant que l'écran n'existe pas.
+ * @param onAudio ouvre les réglages d'écoute. `null` quand l'appelant n'en propose pas.
  * @param onDisplay ouvre le choix de présentation. `null` quand l'appelant n'en propose pas.
  */
 @Composable
@@ -170,7 +164,10 @@ internal fun ReaderOptionsSheet(
                             selectable = false,
                         )
 
-                        CloseButton(onClose = onClose)
+                        SheetCloseButton(
+                            onClose = onClose,
+                            description = ReaderOptionsText.CLOSE,
+                        )
                     }
 
                     for (row in ReaderOptionsText.visible(destinations.keys)) {
@@ -179,74 +176,6 @@ internal fun ReaderOptionsSheet(
                 }
             }
         }
-    }
-}
-
-/**
- * La poignée : elle se tire vers le bas pour refermer.
- *
- * Une poignée dessinée mais inerte serait un mensonge — elle invite à un geste qui ne ferait
- * rien. Le seuil est celui du client d'origine : un glissement de plus de 45 points referme.
- *
- * La conversion en pixels est nécessaire : `dragAmount` est exprimé en pixels physiques, alors
- * que le seuil de l'original est en points indépendants de la densité. Comparer l'un à l'autre
- * sans convertir rendrait la fermeture deux à trois fois plus sensible sur un écran dense.
- */
-@Composable
-private fun SheetHandle(onDismiss: () -> Unit) {
-    val colors = AppTheme.colors
-    val threshold = with(LocalDensity.current) { DISMISS_DRAG.toPx() }
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp)
-            .pointerInput(threshold) {
-                var dragged = 0f
-                detectVerticalDragGestures(
-                    onDragStart = { dragged = 0f },
-                    onDragEnd = { if (dragged > threshold) onDismiss() },
-                    onDragCancel = { dragged = 0f },
-                ) { _, amount -> dragged += amount }
-            },
-        contentAlignment = Alignment.Center,
-    ) {
-        Box(
-            modifier = Modifier
-                .width(HANDLE_WIDTH)
-                .height(HANDLE_HEIGHT)
-                .clip(RoundedCornerShape(HANDLE_RADIUS))
-                .background(colors.softBorder),
-        )
-    }
-}
-
-/** Le bouton de fermeture : un rond de 44 points, teinté du fond doux. */
-@Composable
-private fun CloseButton(onClose: () -> Unit) {
-    val colors = AppTheme.colors
-    val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-
-    Box(
-        modifier = Modifier
-            .size(CLOSE_SIZE)
-            .alpha(if (pressed) PRESSED_ALPHA else 1f)
-            .clip(RoundedCornerShape(CLOSE_SIZE / 2))
-            .background(colors.soft)
-            .clickable(
-                interactionSource = interaction,
-                indication = null,
-                role = Role.Button,
-                onClick = onClose,
-            ),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            imageVector = Icons.Outlined.Close,
-            contentDescription = ReaderOptionsText.CLOSE,
-            tint = colors.green,
-        )
     }
 }
 
@@ -368,21 +297,6 @@ private fun rowAccent(action: ReaderOptionsText.Action): RowAccent = when (actio
     )
 }
 
-/** Le glissement qui referme la feuille, en points. C'est le seuil du client d'origine. */
-private val DISMISS_DRAG = 45.dp
-
-/** L'ombre de la feuille. L'original pose une élévation de 12. */
-private val SHEET_ELEVATION = 12.dp
-
-/** Le remplissage intérieur de la feuille. L'original pose 14. */
-private val SHEET_PADDING = 14.dp
-
-private val HANDLE_WIDTH = 36.dp
-private val HANDLE_HEIGHT = 4.dp
-private val HANDLE_RADIUS = 4.dp
-
-private val CLOSE_SIZE = 44.dp
-
 /** Une ligne fait au moins 66 points de haut, comme dans l'original. */
 private val ROW_MIN_HEIGHT = 66.dp
 private val ROW_RADIUS = 18.dp
@@ -393,6 +307,3 @@ private val BADGE_SIZE = 40.dp
 private val BADGE_RADIUS = 13.dp
 private val ICON_SIZE = 23.dp
 private val CHEVRON_SIZE = 20.dp
-
-/** L'opacité d'une ligne à l'appui. C'est celle du client d'origine. */
-private const val PRESSED_ALPHA = 0.72f

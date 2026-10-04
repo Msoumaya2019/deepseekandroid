@@ -172,4 +172,68 @@ class AudioSessionTest {
         assertTrue(AudioSession(countChoice = AudioCount.THREE, autoStop = false).isUnlimited)
         assertFalse(AudioSession(countChoice = AudioCount.THREE, autoStop = true).isUnlimited)
     }
+
+    @Test
+    fun `une saisie libre illisible est ramenee a une ecoute, pas refusee`() {
+        // Deux regles differentes, et il faut les deux. L'ECRAN refuse la saisie avec le
+        // message d'origine (voir le test des bornes ci-dessus). Le MOTEUR, lui, ne juge pas :
+        // le client d'origine ecrit dans `settingsRef`
+        // `count==='continuous'?count:Number.isInteger(count)&&count>0?count:1`, donc une
+        // saisie illisible devient 1. Faire lever le moteur tuerait le collecteur qui conduit
+        // la seance, et la lecon se figerait sans rien dire.
+        for (text in listOf("abc", "", "  ", "2.5", "0", "-1")) {
+            assertEquals(
+                1,
+                AudioSession(countChoice = AudioCount.CUSTOM, customCount = text).resolveCount(),
+                "saisie : « $text »",
+            )
+        }
+    }
+
+    @Test
+    fun `le moteur ne rejuge pas une saisie libre deja acceptee par l'ecran`() {
+        // `begin()` refuse au-dela de 999, mais `Number.isInteger(1000)&&1000>0` est vrai :
+        // une fois le reglage pose, le moteur applique ce qu'on lui donne. Les deux regles ne
+        // se contredisent pas — l'ecran empeche d'y arriver, le moteur ne re-juge pas.
+        assertEquals(
+            1000,
+            AudioSession(countChoice = AudioCount.CUSTOM, customCount = "1000").resolveCount(),
+        )
+    }
+
+    @Test
+    fun `l'ecran ne refuse que la saisie libre illisible`() {
+        // Les choix fixes portent leur nombre, et « ∞ » n'en a pas besoin : une saisie libre
+        // abîmée ne les atteint pas. Seul « Autre » peut être faux — c'est le seul cas où
+        // l'écran doit parler, et donc le seul où il ne doit pas se taire.
+        for (count in AudioCount.ALL - AudioCount.CUSTOM) {
+            assertNull(
+                AudioSettings.validationMessage(
+                    AudioSession(countChoice = count, customCount = "abc"),
+                ),
+                "choix : $count",
+            )
+        }
+    }
+
+    @Test
+    fun `l'ecran refuse une saisie libre hors bornes avec le message d'origine`() {
+        for (text in listOf("", "  ", "abc", "2.5", "0", "-1", "1000")) {
+            assertEquals(
+                AudioSettings.CUSTOM_COUNT_MESSAGE,
+                AudioSettings.validationMessage(
+                    AudioSession(countChoice = AudioCount.CUSTOM, customCount = text),
+                ),
+                "saisie : « $text »",
+            )
+        }
+        for (text in listOf("1", "20", " 42 ", "999")) {
+            assertNull(
+                AudioSettings.validationMessage(
+                    AudioSession(countChoice = AudioCount.CUSTOM, customCount = text),
+                ),
+                "saisie : « $text »",
+            )
+        }
+    }
 }

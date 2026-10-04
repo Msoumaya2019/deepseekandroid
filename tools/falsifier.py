@@ -268,6 +268,69 @@ CAS: list[dict] = [
         "tache": ":core:domain:test",
         "attendus": ["ReaderOptionsTextTest"],
     },
+    {
+        # Remettre la lecture du nombre d'ecoutes sur la forme qui LEVE : c'est exactement
+        # l'etat d'avant la correction. Le collecteur qui conduit la seance meurt en silence et
+        # la lecon se fige sans message. Le banc du domaine doit le voir.
+        "nom": "audio : le moteur se remet a lever sur une saisie illisible",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/AudioSession.kt",
+        "avant": "AudioCount.CUSTOM -> customCount.trim().toIntOrNull()?.takeIf { it > 0 } ?: 1",
+        "apres": "AudioCount.CUSTOM -> countChoice.resolve(customCount)",
+        "tache": ":core:domain:test",
+        "attendus": ["AudioSessionTest"],
+    },
+    {
+        # La MEME mutation, vue par le banc du moteur. Ce defaut ne se voyait pas dans un
+        # rapport de domaine : il fallait une fin de verset pour le declencher, et l'exception
+        # etait absorbee par la portee de coroutines. Ce cas est ce qui prouve que le banc du
+        # controleur detecte la mort silencieuse du collecteur.
+        "nom": "audio : la mort silencieuse du collecteur est vue par le banc du moteur",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/AudioSession.kt",
+        "avant": "AudioCount.CUSTOM -> customCount.trim().toIntOrNull()?.takeIf { it > 0 } ?: 1",
+        "apres": "AudioCount.CUSTOM -> countChoice.resolve(customCount)",
+        "tache": ":core:audio:testDebugUnitTest",
+        "attendus": ["AudioSessionControllerTest"],
+    },
+    {
+        # Le repli inverse : une saisie illisible devient une repetition ILLIMITEE. C'est la
+        # faute dangereuse — la seance ne s'arrete plus jamais, au lieu de s'arreter trop tot.
+        "nom": "audio : une saisie illisible devient une repetition illimitee",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/AudioSession.kt",
+        "avant": "AudioCount.CUSTOM -> customCount.trim().toIntOrNull()?.takeIf { it > 0 } ?: 1",
+        "apres": "AudioCount.CUSTOM -> customCount.trim().toIntOrNull()?.takeIf { it > 0 }",
+        "tache": ":core:domain:test",
+        "attendus": ["AudioSessionTest"],
+    },
+    {
+        # Le titre de la feuille reprend l'en-tete du lecteur de poche au lieu du nom du bouton
+        # qui l'ouvre : la personne qui appuie sur « Reglages audio » arrive sur un ecran qui
+        # s'appelle autrement.
+        "nom": "audio : le titre de la feuille ne suit plus la ligne qui l'ouvre",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/AudioSettingsText.kt",
+        "avant": "const val TITLE: String = \"Réglages audio\"",
+        "apres": "const val TITLE: String = \"Écouter un récitateur\"",
+        "tache": ":core:domain:test",
+        "attendus": ["AudioSettingsTextTest"],
+    },
+    {
+        # L'ecran cesse de refuser : il valide une saisie libre qu'il n'a pas lue.
+        "nom": "audio : l'ecran ne refuse plus une saisie libre illisible",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/AudioSession.kt",
+        "avant": "runCatching { settings.countChoice.resolve(settings.customCount) }",
+        "apres": "runCatching { settings.countChoice.resolve(\"20\") }",
+        "tache": ":core:domain:test",
+        "attendus": ["AudioSessionTest"],
+    },
+    {
+        # Le controleur ne retient plus que la vitesse : les autres reglages n'atteignent plus
+        # la seance en cours, alors que l'ecran vient de les annoncer.
+        "nom": "audio : les reglages ne s'appliquent plus a la seance en cours",
+        "fichier": "core/audio/src/main/kotlin/com/msoumaya/deepseekandroid/core/audio/AudioSessionController.kt",
+        "avant": "        settings = value",
+        "apres": "        settings = settings.copy(speed = value.speed)",
+        "tache": ":core:audio:testDebugUnitTest",
+        "attendus": ["AudioSessionControllerTest"],
+    },
 ]
 
 

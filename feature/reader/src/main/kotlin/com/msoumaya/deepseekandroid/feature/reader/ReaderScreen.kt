@@ -22,6 +22,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -34,6 +36,7 @@ import com.msoumaya.deepseekandroid.core.audio.ExoAudioOutput
 import com.msoumaya.deepseekandroid.core.design.component.AppCard
 import com.msoumaya.deepseekandroid.core.design.theme.AppTheme
 import com.msoumaya.deepseekandroid.core.domain.Audio
+import com.msoumaya.deepseekandroid.core.domain.AudioCount
 import com.msoumaya.deepseekandroid.core.domain.AudioSession
 import com.msoumaya.deepseekandroid.core.domain.MushafSourceNavigation
 import com.msoumaya.deepseekandroid.core.domain.PageNavigation
@@ -46,6 +49,7 @@ import com.msoumaya.deepseekandroid.core.domain.ReaderZoomGeometry
 import com.msoumaya.deepseekandroid.core.model.MushafPageSource
 import com.msoumaya.deepseekandroid.core.model.MushafSource
 import com.msoumaya.deepseekandroid.core.model.ReaderZoom
+import com.msoumaya.deepseekandroid.core.model.RepeatMode
 import com.msoumaya.deepseekandroid.core.model.Surah
 import kotlin.math.roundToInt
 
@@ -75,17 +79,23 @@ private const val DEFAULT_TOTAL_PAGES = 604
  *   distants — et c'est elle, et elle seule, qui le dit quand elle échoue.
  * - **Le carrefour des réglages de lecture.** Le bouton « ⋯ » de la coquille ouvre la feuille
  *   d'options décrite dans `ReaderOptionsSheet`, et c'est de là qu'on change de sourate
- *   (`SurahPickerScreen`) ou qu'on choisit la présentation des pages. Une destination dont
- *   l'écran n'est pas écrit **n'apparaît pas** dans la feuille.
+ *   (`SurahPickerScreen`), qu'on règle l'écoute (`AudioSettingsSheet`) ou qu'on choisit la
+ *   présentation des pages. Une destination dont l'écran n'est pas écrit **n'apparaît pas**
+ *   dans la feuille.
+ * - **Les réglages d'écoute s'appliquent à la séance en cours.** Changer de récitateur, de
+ *   nombre d'écoutes, de mode ou de silence vaut pour la séance ouverte, sans avoir à la
+ *   relancer : c'est le comportement du client d'origine, où les réglages sont relus à chaque
+ *   rendu. Le verset en train de jouer n'est jamais coupé.
  *
  * ## Ce qui viendra, et où
  *
- * Les réglages d'écoute (récitateur, nombre d'écoutes, silence entre deux écoutes, vitesse)
- * sont portés par `AudioSession` et déjà appliqués par le contrôleur ; il manque l'écran qui
- * les modifie, et c'est la ligne « Réglages audio » de la feuille qui l'attend. La traduction
- * française, la coquille d'étude et le mode signet appartiennent à la phase C. Chacune de ces
- * lignes s'ajoutera en passant sa destination à `ReaderOptionsSheet` : tant qu'elle vaut
- * `null`, la ligne ne s'affiche pas, et rien ne ment à l'écran.
+ * Les réglages d'écoute **ne sont pas encore enregistrés** : ils vivent le temps de la session,
+ * et un redémarrage de l'application ramène les valeurs par défaut. Le magasin local existe
+ * (`JsonFileStore`), et `AudioSession.stored()` / `AudioSession.fromStored` sont écrits et
+ * éprouvés ; il manque le raccordement au conteneur, et c'est la prochaine ligne de la phase B.
+ * La traduction française, la coquille d'étude et le mode signet appartiennent à la phase C.
+ * Chacune de ces lignes s'ajoutera en passant sa destination à `ReaderOptionsSheet` : tant
+ * qu'elle vaut `null`, la ligne ne s'affiche pas, et rien ne ment à l'écran.
  *
  * @param initialPage page ouverte au lancement. Bornée au moushaf.
  * @param source la source coranique affichée. Elle décide du **découpage** des pages : deux
@@ -142,11 +152,25 @@ fun ReaderScreen(
     }
     val audioState by audio.state.collectAsState()
 
-    // Les réglages d'écoute. Ce sont les valeurs du client d'origine ; l'écran qui les modifie
-    // viendra avec le reste de la phase B.
-    val settings = remember { AudioSession() }
-    val reciterName = remember { Audio.defaultReciter.name }
+    // Les réglages d'écoute et le récitateur. Ils vivent **ici**, et non dans la feuille : c'est
+    // ici qu'ils sont appliqués au contrôleur, et la feuille n'est qu'un moyen de les changer.
+    // Sauvegardés, ils survivent à une rotation — sans quoi tourner le téléphone ramènerait le
+    // premier récitateur de la liste, alors que la page, elle, est conservée.
+    var settings by rememberSaveable(stateSaver = AudioSessionSaver) {
+        mutableStateOf(AudioSession())
+    }
+    var reciterId by rememberSaveable { mutableStateOf(Audio.defaultReciter.id) }
+    // Un identifiant inconnu retombe sur le récitateur par défaut, comme une préférence
+    // enregistrée par une version antérieure : mieux vaut écouter le mauvais récitateur que
+    // rien du tout, et la liste des récitateurs est visible deux appuis plus loin.
+    val reciter = remember(reciterId) {
+        Audio.reciters.firstOrNull { it.id == reciterId } ?: Audio.defaultReciter
+    }
     val countLabel = remember(settings) { countLabelOf(settings) }
+
+    // Poussé au contrôleur à la première composition, puis à chaque changement : le verset
+    // suivant vient du bon récitateur, sans interrompre celui qui joue.
+    LaunchedEffect(reciter) { audio.useReciter(reciter) }
 
     val page by pageState
     val zoom = zoomState.value
@@ -160,12 +184,13 @@ fun ReaderScreen(
     val surah: Surah? = surahFor(source, page)
 
     // Les destinations réellement branchées dans la feuille d'options. « Changer de sourate »
-    // l'est toujours : le sélecteur sait gérer un référentiel non chargé et le dit. « Affichage
-    // du Coran » dépend de l'appelant, car le lecteur ne connaît ni les sources ni le stockage.
-    // La traduction et les réglages d'écoute n'y figurent pas encore — leurs écrans ne sont pas
-    // écrits, et une ligne sans destination ne s'affiche pas.
+    // l'est toujours : le sélecteur sait gérer un référentiel non chargé et le dit. « Réglages
+    // audio » aussi, depuis que l'écran existe. « Affichage du Coran » dépend de l'appelant, car
+    // le lecteur ne connaît ni les sources ni le stockage. La traduction n'y figure pas encore :
+    // son écran n'est pas écrit, et une ligne sans destination ne s'affiche pas.
     val options: Set<ReaderOptionsText.Action> = buildSet {
         add(ReaderOptionsText.Action.SURAH)
+        add(ReaderOptionsText.Action.AUDIO)
         if (onOpenSourcePicker != null) add(ReaderOptionsText.Action.DISPLAY)
     }
     val openOptions: (() -> Unit)? = if (ReaderOptionsText.isUseful(options)) {
@@ -349,7 +374,7 @@ fun ReaderScreen(
         if (audioState.isOpen) {
             MiniPlayer(
                 state = audioState,
-                reciterName = reciterName,
+                reciterName = reciter.name,
                 countLabel = countLabel,
                 onToggle = { audio.toggle() },
                 onStop = { audio.close() },
@@ -384,6 +409,7 @@ fun ReaderScreen(
         ReaderPanel.OPTIONS -> ReaderOptionsSheet(
             onClose = { panel = ReaderPanel.NONE },
             onSurah = { panel = ReaderPanel.SURAH },
+            onAudio = { panel = ReaderPanel.AUDIO },
             // Le client d'origine referme la feuille **puis** ouvre le choix de présentation :
             // les deux ne s'empilent pas, et deux voiles superposés assombriraient l'écran.
             onDisplay = onOpenSourcePicker?.let { open ->
@@ -392,6 +418,29 @@ fun ReaderScreen(
                     open()
                 }
             },
+        )
+
+        ReaderPanel.AUDIO -> AudioSettingsSheet(
+            settings = settings,
+            reciter = reciter,
+            // Chaque appui remonte les réglages au contrôleur, qui les applique à la séance en
+            // cours : c'est le comportement du client d'origine, où les réglages sont relus à
+            // chaque rendu. Un réglage qui ne vaudrait qu'après avoir relancé la séance serait
+            // un piège, puisque rien à l'écran ne le dirait.
+            onSettings = {
+                settings = it
+                audio.updateSettings(it)
+            },
+            onReciter = { reciterId = it.id },
+            // Lancer part de la plage de la **page** affichée : c'est ce qu'on voit, et c'est ce
+            // que le bouton annonce. `null` quand la plage n'est pas connue — le bouton est
+            // alors absent, plutôt que présent et sans effet.
+            onLaunch = listenAction,
+            // Redémarrer repart de la plage de la **séance** ouverte, et non de la page : si
+            // l'auditeur a tourné la page pendant l'écoute, la séance ne l'a pas suivi. Le
+            // client d'origine reprend `rangeRef.current`, et le contrôleur la connaît.
+            onRestart = audioState.range?.let { session -> { audio.start(session, settings) } },
+            onClose = { panel = ReaderPanel.NONE },
         )
 
         ReaderPanel.SURAH -> SurahPickerScreen(
@@ -498,4 +547,43 @@ private enum class ReaderPanel {
 
     /** Le sélecteur de sourate. */
     SURAH,
+
+    /** Les réglages d'écoute. */
+    AUDIO,
 }
+
+/**
+ * Comment les réglages d'écoute survivent à une rotation.
+ *
+ * Le lecteur est recréé quand l'écran tourne. Sans cette sauvegarde, choisir un récitateur puis
+ * tourner le téléphone le ramènerait au premier de la liste — alors que la page, elle, est
+ * conservée, et que la séance d'écoute, elle, continue. Les six valeurs sont des primitives :
+ * elles se posent directement dans le sac d'état, sans passer par du JSON.
+ *
+ * Une restauration qui échoue rend `null`, et Compose repart de la valeur initiale. Un état
+ * abîmé ne doit pas empêcher le lecteur de s'afficher.
+ */
+private val AudioSessionSaver: Saver<AudioSession, Any> = listSaver(
+    save = { session ->
+        listOf(
+            session.countChoice.name,
+            session.customCount,
+            session.mode.name,
+            session.gapSeconds,
+            session.speed,
+            session.autoStop,
+        )
+    },
+    restore = { values ->
+        runCatching {
+            AudioSession(
+                countChoice = AudioCount.valueOf(values[0] as String),
+                customCount = values[1] as String,
+                mode = RepeatMode.valueOf(values[2] as String),
+                gapSeconds = values[3] as Int,
+                speed = values[4] as Float,
+                autoStop = values[5] as Boolean,
+            )
+        }.getOrNull()
+    },
+)
