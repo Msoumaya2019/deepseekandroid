@@ -15,7 +15,7 @@ libre de conserver l'un, l'autre, ou les deux.
 | Phase | Contenu | État |
 |---|---|---|
 | **A** | Analyse, architecture, Supabase, authentification, navigation, accueil | livrée — porte d'entrée, coquille de navigation et accueil |
-| **B** | Coran, lecteur, cache, audio | à venir |
+| **B** | Coran, lecteur, cache, audio | **en cours** — les 604 pages du moushaf sont embarquées, la carte des sources est écrite |
 | **C** | Apprentissage, révisions, consolidation, programme | à venir |
 | **D** | Amis, Quiz, notifications, progrès | à venir |
 | **E** | Hors ligne, optimisation, tests, nettoyage | à venir |
@@ -53,11 +53,14 @@ En détail :
   exactement le test prévu.
 - **APK de test et APK de version** produits : `:app:assembleDebug` et `:app:assembleRelease`.
   Le référentiel coranique et les polices sont **vérifiés dans le binaire**, pas supposés présents.
-- **Intégration continue** : `.github/workflows/android.yml` — tests, lint et APK de test, sans
-  aucun secret.
+- **Intégration continue** : `.github/workflows/android.yml` — tests, lint et APK de test. Elle
+  reste **verte sans aucun secret** ; si le dépôt porte `SUPABASE_ANON_KEY`, l'APK publié se
+  connecte au projet, et la clé ne passe jamais par l'historique Git.
+- **Corpus coranique complet** : les **604 pages** du Coran de Médine (114 Mo) sont embarquées
+  dans `app/src/main/assets/quran/pages/`, à côté des 12 fichiers JSON du référentiel.
 
-Ce qui **reste** : le lecteur de moushaf, l'audio Media3, les écrans Programme / Progrès /
-Amis / Quiz / Profil, les notifications, et les 576 pages de moushaf manquantes.
+Ce qui **reste** : l'écran du lecteur de moushaf, le téléchargement de la source « Coran 1441 »,
+l'audio Media3, les écrans Programme / Progrès / Amis / Quiz / Profil, et les notifications.
 
 ---
 
