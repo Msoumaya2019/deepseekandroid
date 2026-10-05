@@ -17,6 +17,7 @@ import com.msoumaya.deepseekandroid.core.domain.QuranSourceReady
 import com.msoumaya.deepseekandroid.core.domain.Review
 import com.msoumaya.deepseekandroid.core.domain.VerseActionsText
 import com.msoumaya.deepseekandroid.core.model.MushafPageSource
+import com.msoumaya.deepseekandroid.feature.reader.BookmarksScreen
 import com.msoumaya.deepseekandroid.feature.reader.EmbeddedMushafPages
 import com.msoumaya.deepseekandroid.feature.reader.ReaderScreen
 import com.msoumaya.deepseekandroid.feature.sources.QuranDownloadPanel
@@ -68,6 +69,17 @@ import kotlinx.coroutines.launch
  * mot du bouton suit le marqueur de l'**élève** seul, tandis que la teinte de la page suit les
  * deux origines : ce sont deux questions différentes, et `VerseActionsText` les sépare. La
  * route fournit les deux ensembles, et n'en confond aucun.
+ *
+ * ## L'écran des signets, et pourquoi il ne remplace pas le lecteur
+ *
+ * Le client d'origine remplace le lecteur par l'écran des signets. Ici, l'écran est posé
+ * **par-dessus** : le lecteur reste monté, donc la séance d'écoute en cours n'est pas
+ * interrompue parce qu'on consulte ses marques-pages. Le prix est une fenêtre au lieu d'un
+ * écran ; le gain est une lecture qui continue, et c'est celui qui compte.
+ *
+ * La page de reprise suit le **découpage de la source affichée** : les deux découpages du
+ * projet ne placent pas les mêmes versets au même endroit — 56 versets sur 6 236 changent
+ * de page — donc reprendre un signet à la page de l'autre découpage ouvrirait à côté.
  *
  * ## Les réglages d'écoute
  *
@@ -122,12 +134,25 @@ fun ReaderRoute(
     val userMarkedIds = remember(userState) {
         userState?.let { VerseActionsText.userMarkedIds(it) } ?: emptySet()
     }
+    // Les lignes de l'écran des signets, résolues ici : c'est le seul endroit qui connaisse à
+    // la fois l'état du compte et la source affichée — et la page d'un signet dépend de cette
+    // source. La vue ne reçoit que du texte déjà résolu, et c'est `Bookmarks.rows` qui omet un
+    // signet hors corpus au lieu de faire tomber l'écran.
+    val bookmarkRows = remember(userState, source) {
+        userState?.let { Bookmarks.rows(it, source) } ?: emptyList()
+    }
 
     // La page est tenue ici, et non dans le lecteur : le choix de présentation en a besoin pour
     // vérifier que la page affichée existera encore dans l'autre source. Changer de
     // présentation ne doit pas ramener la personne à la page 1.
     var page by rememberSaveable { mutableIntStateOf(1) }
     var pickerOpen by rememberSaveable { mutableStateOf(false) }
+
+    // L'écran des signets, et le verset qu'une reprise demande de sélectionner au retour.
+    // Les deux sont **sauvegardés** : une rotation pendant qu'on consulte un signet ne doit
+    // ni refermer la liste, ni perdre le verset qu'on vient de reprendre.
+    var bookmarksOpen by rememberSaveable { mutableStateOf(false) }
+    var pendingVerse by rememberSaveable { mutableStateOf<Int?>(null) }
 
     // La porte est une décision pure sur deux valeurs — la source et l'installation — et elle
     // est relue à chaque recomposition. C'est `readiness`, appelée ailleurs, qui touche le
@@ -187,6 +212,13 @@ fun ReaderRoute(
         bookmarkIds = bookmarkIds,
         difficultIds = difficultIds,
         userMarkedIds = userMarkedIds,
+        // Ouvrir la liste **oublie** le verset en attente : sans cela, reprendre deux fois le
+        // même signet ne le sélectionnerait qu'une fois, la clé de l'effet n'ayant pas changé.
+        onOpenBookmarks = {
+            pendingVerse = null
+            bookmarksOpen = true
+        },
+        initialVerse = pendingVerse,
         // Bascule le marqueur de difficulté de l'élève. Seule écriture du panneau des actions,
         // et la seule qui ne puisse pas vivre dans le lecteur : lui ne connaît ni le conteneur
         // ni le stockage. Comme pour le signet, un disque plein ne doit pas emporter le lecteur.
@@ -198,6 +230,41 @@ fun ReaderRoute(
             }
         },
     )
+
+    // L'écran des signets, par-dessus le lecteur — qui reste donc monté, et dont l'écoute n'est
+    // pas interrompue. Voir la note de la route sur cet écart assumé.
+    if (bookmarksOpen) {
+        BookmarksScreen(
+            rows = bookmarkRows,
+            onClose = { bookmarksOpen = false },
+            onResume = { id ->
+                val target = userState?.let {
+                    runCatching { Bookmarks.pageFor(it, source, id) }.getOrNull()
+                }
+                // Une conversion qui échoue laisse la liste ouverte : sauter à une page
+                // devinée serait pire, puisque rien ne dirait qu'elle est fausse.
+                if (target != null) {
+                    scope.launch {
+                        runCatching {
+                            container.userState.mutate { state ->
+                                Bookmarks.useBookmark(state, id, pageOverride = target)
+                            }
+                        }
+                    }
+                    pendingVerse = id
+                    page = target
+                    bookmarksOpen = false
+                }
+            },
+            onDelete = { id ->
+                scope.launch {
+                    runCatching {
+                        container.userState.mutate { state -> Bookmarks.deleteBookmark(state, id) }
+                    }
+                }
+            },
+        )
+    }
 
     if (pickerOpen) {
         QuranSourcePickerDialog(

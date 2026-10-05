@@ -824,6 +824,141 @@ CAS: list[dict] = [
         "attendus": ["ReaderRouteVerseActionsTest"],
     },
 
+    {
+        # La fenetre se limite a la largeur d'un telephone : en paysage, la liste flotte au milieu
+        # de l'ecran au lieu de l'occuper. Rien d'autre ne le dit — l'ecran s'affiche, la liste
+        # defile, et seuls le cadre et la largeur ont change.
+        "nom": "ecran-signets : la fenetre se limite a la largeur du telephone",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/BookmarksScreen.kt",
+        "avant": "properties = DialogProperties(usePlatformDefaultWidth = false),",
+        "apres": "properties = DialogProperties(),",
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": ["BookmarksScreenWiringTest"],
+    },
+    {
+        # Le bouton de la ligne supprime directement : le dialogue de confirmation existe toujours,
+        # mais plus personne ne l'ouvre. Un signet disparait au premier appui, et la personne ne
+        # sait pas ce qu'elle a touche.
+        "nom": "ecran-signets : le bouton de ligne supprime sans confirmer",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/BookmarksScreen.kt",
+        "avant": "onDelete = { pendingDelete = row.verseId },",
+        "apres": "onDelete = { onDelete(row.verseId) },",
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": ["BookmarksScreenWiringTest"],
+    },
+    {
+        # La vue se met a calculer ses lignes : elle connait des lors le referentiel, et le partage
+        # qui rend le domaine eprouvable sans ecran tombe. La ligne hors corpus ferait aussi
+        # tomber l'ecran, au lieu d'etre omise.
+        "nom": "ecran-signets : la vue calcule ses lignes",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/BookmarksScreen.kt",
+        "avant": "    val colors = AppTheme.colors\n\n    // Le signet dont la suppression attend confirmation.",
+        "apres": "    val colors = AppTheme.colors\n    val ignore = Bookmarks.rows(\n        com.msoumaya.deepseekandroid.core.model.AppState(),\n        com.msoumaya.deepseekandroid.core.model.MushafSource.MEDINA,\n    )\n\n    // Le signet dont la suppression attend confirmation.",
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": ["BookmarksScreenWiringTest"],
+    },
+    {
+        # Le texte coranique n'est plus borne : un verset long repousse le bouton « Reprendre » de
+        # sa propre carte hors de l'ecran. Le signet devient impossible a reprendre, et il est
+        # justement celui qu'on voulait reprendre.
+        "nom": "ecran-signets : le texte coranique n'est plus borne",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/BookmarksScreen.kt",
+        "avant": "            maxLines = ROW_TEXT_MAX_LINES,\n",
+        "apres": "",
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": ["BookmarksScreenWiringTest"],
+    },
+    {
+        # La carte d'explication perd son fond doux : elle ne se distingue plus des lignes de
+        # signets, et se lit comme l'une d'elles. La consigne disparait dans la liste.
+        "nom": "ecran-signets : la carte d'explication perd son fond",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/BookmarksScreen.kt",
+        "avant": "AppCard(background = colors.soft) {",
+        "apres": "AppCard {",
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": ["BookmarksScreenWiringTest"],
+    },
+    {
+        # La route n'affiche plus l'ecran : le bouton « Mes marques-pages » du panneau n'ouvre
+        # rien. La condition est fausse pour toujours, et rien ne le signale — le bouton, lui,
+        # reste la.
+        "nom": "route-signets : l'ecran des signets n'est plus affiche",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/ReaderRoute.kt",
+        "avant": "if (bookmarksOpen) {",
+        "apres": "if (false) {",
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["ReaderRouteBookmarksScreenTest"],
+    },
+    {
+        # La reprise perd le decoupage de la source : elle saute a la page de Medine pour un signet
+        # lu dans le paquet 1441. 56 versets sur 6 236 sont dans ce cas, et la page s'affiche —
+        # elle n'est simplement pas la bonne.
+        "nom": "route-signets : la reprise perd le decoupage de la source",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/ReaderRoute.kt",
+        "avant": "Bookmarks.pageFor(it, source, id)",
+        "apres": "Bookmarks.pageFor(it, com.msoumaya.deepseekandroid.core.model.MushafSource.MEDINA, id)",
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["ReaderRouteBookmarksScreenTest"],
+    },
+    {
+        # La route quitte avant d'afficher l'ecran : le lecteur est demonte, son lecteur audio est
+        # libere, et la seance d'ecoute s'arrete parce qu'on consulte ses signets. C'est l'ecart
+        # assume du portage qui disparait, et rien ne le dit.
+        "nom": "route-signets : la route quitte avant d'afficher l'ecran",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/ReaderRoute.kt",
+        "avant": "if (bookmarksOpen) {\n        BookmarksScreen(",
+        "apres": "if (bookmarksOpen) {\n        return\n        BookmarksScreen(",
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["ReaderRouteBookmarksScreenTest"],
+    },
+    {
+        # La reprise n'enregistre plus la page : « Derniere reprise » pointerait sur la page par
+        # defaut du verset, et non sur celle ou l'on a effectivement repris. L'ecran des signets
+        # marquerait alors une ligne qui ne correspond pas au geste.
+        "nom": "route-signets : la reprise n'enregistre plus la page",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/ReaderRoute.kt",
+        "avant": "Bookmarks.useBookmark(state, id, pageOverride = target)",
+        "apres": "Bookmarks.useBookmark(state, id)",
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["ReaderRouteBookmarksScreenTest"],
+    },
+    {
+        # Ouvrir la liste ne remet plus le verset en attente a zero : reprendre deux fois de suite
+        # le meme signet ne le selectionne qu'une fois, la cle de l'effet n'ayant pas change. Le
+        # defaut ne se voit qu'en recommencant, donc jamais pendant un essai rapide.
+        "nom": "route-signets : ouvrir la liste n'oublie plus le verset en attente",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/ReaderRoute.kt",
+        "avant": "onOpenBookmarks = {\n            pendingVerse = null\n            bookmarksOpen = true",
+        "apres": "onOpenBookmarks = {\n            bookmarksOpen = true",
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["ReaderRouteBookmarksScreenTest"],
+    },
+
+    {
+        # La reprise n'enregistre plus le verset demande : la page s'ouvre, elle est la bonne,
+        # et le verset qu'on venait chercher n'est simplement plus designe. Rien ne le dit —
+        # la fiche du verset est une carte parmi d'autres, et son absence ne ressemble pas a
+        # une panne.
+        "nom": "reprise-verset : la reprise ne designe plus le verset",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/ReaderScreen.kt",
+        "avant": "\n            verseState.value = initialVerse",
+        "apres": "",
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": ["ReaderScreenResumeTest"],
+    },
+    {
+        # La reprise ne referme plus le panneau qu'on avait quitte. Le lecteur n'etant **pas**
+        # demonte quand on consulte ses signets, la feuille ouverte avant de partir survit a
+        # l'aller-retour et revient par-dessus la page : c'est le `setSessionPanel(null)` du
+        # source qui disparait, et rien ne le signale.
+        "nom": "reprise-verset : la reprise ne referme plus le panneau",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/ReaderScreen.kt",
+        "avant": "\n            verseState.value = initialVerse\n            panel = ReaderPanel.NONE",
+        "apres": "\n            verseState.value = initialVerse",
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": ["ReaderScreenResumeTest"],
+    },
+
 ]
 
 

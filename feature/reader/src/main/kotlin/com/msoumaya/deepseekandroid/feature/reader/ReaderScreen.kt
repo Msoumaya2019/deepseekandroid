@@ -153,6 +153,8 @@ private const val DEFAULT_TOTAL_PAGES = 604
  * @param onMarkDifficulty bascule le marqueur de difficulté de l'élève sur un verset. `null`
  *   quand l'appelant ne sait pas l'écrire : l'entrée de marquage est alors retirée du
  *   panneau au lieu de mener nulle part.
+ * @param initialVerse le verset à désigner au premier rendu — celui qu'une reprise de signet
+ *   vient de demander. `null` quand personne n'en attend : le lecteur s'ouvre sans fiche.
  */
 @Composable
 fun ReaderScreen(
@@ -173,6 +175,10 @@ fun ReaderScreen(
     // Ouvre l'écran des signets. `null` tant que cet écran n'existe pas : l'entrée du panneau
     // est alors retirée au lieu de mener nulle part.
     onOpenBookmarks: (() -> Unit)? = null,
+    // Le verset à désigner au premier rendu. Il vient de la **reprise d'un signet** : la
+    // route ouvre la page, et désigne le verset qu'on venait chercher. `null` veut dire
+    // « personne n'en attend » — et non « le premier verset ».
+    initialVerse: Int? = null,
     bookmarkIds: Set<Int> = emptySet(),
     difficultIds: Set<Int> = emptySet(),
     userMarkedIds: Set<Int> = emptySet(),
@@ -214,6 +220,23 @@ fun ReaderScreen(
         if (savedNotice) {
             delay(BookmarksText.SAVED_NOTICE_MS)
             savedNotice = false
+        }
+    }
+
+    // Le verset qu'une reprise de signet demande de désigner. L'effet est **clé sur le
+    // verset** : il ne s'exécute donc qu'une fois par valeur reçue, et non à chaque
+    // recomposition — sans quoi la fiche se rouvrirait à chaque frappe ailleurs. La route
+    // remet la valeur à `null` avant chaque ouverture de la liste, ce qui garantit qu'une
+    // même reprise, deux fois de suite, change bien la clé.
+    //
+    // Le panneau est refermé au passage, comme le `setSessionPanel(null)` du source : on
+    // revient d'une **liste**, et non d'un panneau — laisser ouvert celui qu'on avait
+    // quitté ferait réapparaître une feuille que personne n'a demandée. Ce n'est possible
+    // que parce que le lecteur reste monté : ailleurs, l'écran aurait été reconstruit.
+    LaunchedEffect(initialVerse) {
+        if (initialVerse != null) {
+            verseState.value = initialVerse
+            panel = ReaderPanel.NONE
         }
     }
 

@@ -125,6 +125,10 @@ fun AppSectionTitle(
  * L'interligne n'est volontairement pas fixé ici. Amiri porte des signes diacritiques hauts et
  * bas ; sa propre métrique est plus fiable qu'un ratio inventé. Le lecteur du Coran, qui gère
  * aussi l'échelle de zoom, posera son interligne lui-même.
+ *
+ * `maxLines` borne le texte, sans effet par défaut. Un verset long repousserait sinon ce qui
+ * le suit hors de l'écran — dans une liste de signets, le bouton « Reprendre » de sa propre
+ * carte. La borne est donc celle de l'appelant, et elle est explicite là où elle compte.
  */
 @Composable
 fun ArabicText(
@@ -133,6 +137,7 @@ fun ArabicText(
     color: Color = AppTheme.colors.text,
     fontSize: TextUnit = AppTheme.typeScale.arabic,
     textAlign: TextAlign = TextAlign.Center,
+    maxLines: Int = Int.MAX_VALUE,
 ) {
     Text(
         text = text,
@@ -143,5 +148,7 @@ fun ArabicText(
             fontFamily = AppTheme.fonts.arabicFamily,
             textAlign = textAlign,
         ),
+        maxLines = maxLines,
+        overflow = if (maxLines == Int.MAX_VALUE) TextOverflow.Clip else TextOverflow.Ellipsis,
     )
 }
