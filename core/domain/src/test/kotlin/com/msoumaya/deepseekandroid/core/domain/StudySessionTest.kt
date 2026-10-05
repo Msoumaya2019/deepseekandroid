@@ -165,6 +165,34 @@ class StudySessionTest {
     }
 
     // -----------------------------------------------------------------------
+    // Les repères de marge
+    // -----------------------------------------------------------------------
+
+    @Test
+    fun `les reperes pleins comptent du premier verset de la plage`() {
+        // Le document en déduit quels repères sont pleins : il compare le **rang** d'un repère
+        // dans la séance (`id`) à ce compte, et le premier rang vaut 1.
+        assertEquals(6, StudySession.completedIn(Range(100, 110), 105))
+    }
+
+    @Test
+    fun `un dernier verset valide au dela de la plage ne remplit pas plus que la plage`() {
+        // Atteignable : un enregistrement repris d'un autre découpage, ou une plage réduite par
+        // une reprise partielle. Compter au-delà ferait écrire au document des repères qui
+        // n'existent pas.
+        assertEquals(11, StudySession.completedIn(Range(100, 110), 200))
+    }
+
+    @Test
+    fun `sans validation, ou avant la plage, aucun repere n'est plein`() {
+        // Le premier cas est le plus fréquent : `through` vaut `range.start - 1` quand rien n'a
+        // été validé. Le second est la borne basse, et elle n'est pas cosmétique : un `through`
+        // antérieur à la plage donnerait un compte négatif, qui ne se lirait plus comme un compte.
+        assertEquals(0, StudySession.completedIn(Range(100, 110), 99))
+        assertEquals(0, StudySession.completedIn(Range(100, 110), 50))
+    }
+
+    // -----------------------------------------------------------------------
     // La plage ouverte
     // -----------------------------------------------------------------------
 

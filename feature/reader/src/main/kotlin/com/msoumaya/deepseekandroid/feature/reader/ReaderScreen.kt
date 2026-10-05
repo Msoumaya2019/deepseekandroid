@@ -42,6 +42,7 @@ import com.msoumaya.deepseekandroid.core.domain.Audio
 import com.msoumaya.deepseekandroid.core.domain.AudioCount
 import com.msoumaya.deepseekandroid.core.domain.AudioSession
 import com.msoumaya.deepseekandroid.core.domain.BookmarksText
+import com.msoumaya.deepseekandroid.core.domain.MarginAnnotations
 import com.msoumaya.deepseekandroid.core.domain.MushafSourceNavigation
 import com.msoumaya.deepseekandroid.core.domain.PageNavigation
 import com.msoumaya.deepseekandroid.core.domain.Quran
@@ -56,6 +57,7 @@ import com.msoumaya.deepseekandroid.core.domain.TestPageOverlay
 import com.msoumaya.deepseekandroid.core.domain.Texts
 import com.msoumaya.deepseekandroid.core.domain.TranslationPanel
 import com.msoumaya.deepseekandroid.core.domain.VerseActionsText
+import com.msoumaya.deepseekandroid.core.model.MarginRegion
 import com.msoumaya.deepseekandroid.core.model.MushafPageSource
 import com.msoumaya.deepseekandroid.core.model.MushafSource
 import com.msoumaya.deepseekandroid.core.model.QuranPaper
@@ -387,6 +389,13 @@ fun ReaderScreen(
     // mode est armé et si la confirmation est encore d'actualité.
     val notice: String? = BookmarksText.notice(placing = bookmarkMode, saved = savedNotice)
 
+    // La séance que le lecteur sert, ou `null` : une séance sans moyen de la valider n'en est pas
+    // une. La valeur est tenue **hors** de la colonne, et déclarée **ici** parce que les repères
+    // de marge en ont besoin avant la page ; le bandeau et la feuille, plus bas, lisent la même.
+    // La redéclarer ferait deux gardes pour une seule règle — et un bandeau qui s'annonce comme
+    // une séance dont le geste n'ouvre rien est exactement le bouton mort que ce lecteur refuse.
+    val seance = study?.takeIf { onValidateStudy != null }
+
     // Ce que la source composée reçoit pour colorer sa page. Le **mode de pose** y figure, et il
     // y décide de deux choses à la fois : ce que le document colore, et ce qu'un appui désigne.
     // Les séparer les ferait diverger — la page colorerait autre chose que ce qu'un appui
@@ -399,6 +408,20 @@ fun ReaderScreen(
         bookmarks = bookmarkIds,
         difficult = difficultIds,
         selecting = bookmarkMode,
+        // Les **repères de marge**. C'est la plage **prévue** que l'original envoie
+        // (`App.tsx:499`, `sessionRange={plannedRange}`), et non la plage demandée : une reprise
+        // partielle doit numéroter ses repères sur la plage prévue, sinon les numéros annoncés
+        // désigneraient d'autres versets — et ils seraient plausibles, donc invisibles.
+        //
+        // Les versets sont donnés **dans l'ordre**, une place chacun : c'est ce qui donne à
+        // chaque repère son numéro. Le compte des versets faits vient du domaine, jamais d'un
+        // calcul écrit ici.
+        session = seance?.let { (it.range.start..it.range.end).toList() } ?: emptyList(),
+        sessionDone = seance?.let { StudySession.completedIn(it.range, it.through) } ?: 0,
+        // La teinte de la séance, celle de l'original (`sessionColor={colors.review}`), et
+        // **inconditionnelle** : l'original ne distingue pas l'apprentissage de la révision pour
+        // les repères, même si son bandeau, lui, change de couleur.
+        sessionColor = TestPageColors.hex(colors.review),
         background = paperHex,
         primary = TestPageColors.hex(colors.green),
         selection = TestPageColors.hex(colors.selected),
@@ -459,9 +482,10 @@ fun ReaderScreen(
 
     // Le bandeau de séance n'existe que si une séance est servie **et** que la validation est
     // branchée : sans destination, son geste ne mènerait nulle part, et c'est ce que ce lecteur
-    // refuse partout ailleurs. La valeur est tenue **hors** de la colonne : la feuille, posée à
-    // la fin de cette fonction, a besoin des mêmes informations.
-    val seance = study?.takeIf { onValidateStudy != null }
+    // refuse partout ailleurs. La valeur — `seance` — est déclarée **plus haut**, avec les repères
+    // de marge qui en dépendent aussi ; elle est tenue **hors** de la colonne parce que la
+    // feuille, posée à la fin de cette fonction, a besoin des mêmes informations. La redéclarer
+    // ici donnerait deux gardes pour une seule règle, donc deux vérités à tenir en accord.
 
     Column(
         modifier = modifier
@@ -683,6 +707,41 @@ fun ReaderScreen(
                         )
                     },
             ) {
+                // Les repères de marge du lecteur **standard**. La vue immersive a les siens,
+                // calculés dans le script du document ; ici, la règle de `core:domain` est
+                // appelée directement et le rendu est en Compose. Les deux lisent le même
+                // `seance`, donc elles ne peuvent pas diverger sur *ce qui* est marqué.
+                //
+                // La plage est la **prévue** — `seance.range`, que `StudyChromeState` porte — et
+                // le dernier verset validé est `seance.through`. Prendre ceux de la requête
+                // donnerait, sur une reprise partielle, une plage plus étroite : le lecteur
+                // numéroterait alors moins de repères, sans qu'aucun test du domaine ne tombe.
+                val reperesDeMarge = remember(mushafPage, seance) {
+                    if (seance == null) {
+                        emptyList()
+                    } else {
+                        val largeur = mushafPage.sourceWidth.toFloat()
+                        val hauteur = mushafPage.sourceHeight.toFloat()
+                        MarginAnnotations.marginAnnotations(
+                            regions = mushafPage.rows.mapNotNull { row ->
+                                val id = Quran.verseId(row.surah, row.ayah) ?: return@mapNotNull null
+                                MarginRegion(
+                                    id = id,
+                                    ayah = row.ayah,
+                                    x = row.left / largeur,
+                                    y = row.top / hauteur,
+                                    width = (row.right - row.left) / largeur,
+                                    height = (row.bottom - row.top) / hauteur,
+                                    line = row.line,
+                                )
+                            },
+                            start = seance.range.start,
+                            end = seance.range.end,
+                            through = seance.through,
+                        )
+                    }
+                }
+
                 MushafPageView(
                     page = mushafPage,
                     zoom = zoom,
@@ -691,6 +750,9 @@ fun ReaderScreen(
                     selectedVerse = selectedVerse,
                     bookmarkIds = bookmarkIds,
                     difficultIds = difficultIds,
+                    sessionGroups = reperesDeMarge,
+                    sessionColor = colors.review,
+                    marginGutter = (availableWidth - pageWidth) / 2f,
                 )
 
                 // La notice du mode de pose, au-dessus de la page et non dans la coquille :

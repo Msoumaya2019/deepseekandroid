@@ -1474,10 +1474,16 @@ CAS: list[dict] = [
     {
         # La route du lecteur perd son argument : le verset demande n'atteint plus la route, et
         # la position memorisee se decale d'un cran a chaque ouverture.
+        #
+        # L'ancre vise la construction **actuelle** de la route. La precedente — une seule
+        # expression ternaire — a disparu quand la ligne 8 a remplace le ternaire par une liste
+        # d'arguments, pour que les trois bornes d'une seance voyagent ensemble. Le cas est reste
+        # casse jusqu'a ce que `--verifier` le dise : une ancre perimee ne se voit pas autrement,
+        # puisque ce cas n'est jamais joue par les autres.
         "nom": "memoire : la route du lecteur perd son argument",
         "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/AppDestination.kt",
-        "avant": "        if (verseId == null) READER else \"$READER?$READER_VERSE=$verseId\"",
-        "apres": "        if (verseId == null) READER else READER",
+        "avant": "            if (verseId != null) add(\"$READER_VERSE=$verseId\")",
+        "apres": "            if (verseId != null) add(\"\")",
         "tache": ":navigation:testDebugUnitTest",
         "attendus": ["AppRoutesReaderTest"],
     },
@@ -1599,6 +1605,100 @@ CAS: list[dict] = [
         "apres": "            currentPage = 1,\n            onClose = { completionOpen = false },",
         "tache": ":feature:reader:testDebugUnitTest",
         "attendus": ["StudyChromeWiringTest"],
+    },
+    #
+    # Les huit cas suivants couvrent les **reperes de marge**, qui ont deux chemins et non un :
+    # le document immersif, qui les calcule dans son propre script, et le lecteur standard, qui
+    # appelle la regle de `core:domain` et les dessine en Compose. Les deux partent du meme etat ;
+    # une mutation qui n'en casserait qu'un seul est donc exactement ce qu'il faut eprouver.
+    {
+        # Un `through` posterieur a la plage — un enregistrement repris d'un autre decoupage —
+        # ferait compter plus de reperes qu'il n'y a de versets. Le nombre reste plausible, et le
+        # document dessinerait des reperes qui n'existent pas.
+        "nom": "reperes de marge : le compte depasse la plage",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/StudySession.kt",
+        "avant": "        (minOf(range.end, through) - range.start + 1).coerceAtLeast(0)",
+        "apres": "        (through - range.start + 1).coerceAtLeast(0)",
+        "tache": ":core:domain:test",
+        "attendus": ["StudySessionTest"],
+    },
+    {
+        # Un `through` anterieur a la plage — une reprise qui n'a rien valide — donnerait un
+        # compte **negatif**, qui ne se lit plus comme un compte. C'est la borne basse qui
+        # l'empeche, et rien d'autre ne la dirait.
+        "nom": "reperes de marge : le compte peut devenir negatif",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/StudySession.kt",
+        "avant": "        (minOf(range.end, through) - range.start + 1).coerceAtLeast(0)",
+        "apres": "        (minOf(range.end, through) - range.start + 1)",
+        "tache": ":core:domain:test",
+        "attendus": ["StudySessionTest"],
+    },
+    {
+        # Un verset hors du corpus est **omis** au lieu de garder sa place : tous les reperes
+        # suivants se decalent d'un cran, et le document annonce alors les numeros d'autres
+        # versets. Un numero decale reste un numero plausible — donc invisible, comme une page
+        # fausse.
+        "nom": "reperes de marge : un verset hors corpus decale les suivants",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/TestPageOverlay.kt",
+        "avant": "        JsonArray(ids.map { id -> keyOf(id)?.let { JsonPrimitive(it) } ?: JsonNull })",
+        "apres": "        JsonArray(ids.mapNotNull { id -> keyOf(id)?.let { JsonPrimitive(it) } })",
+        "tache": ":core:domain:test",
+        "attendus": ["TestPageOverlayTest"],
+    },
+    {
+        # Le champ lu par le document change de nom : `sessionDone` devient `sessionThrough`. Le
+        # document ne le lit plus, `readerState.sessionDone||0` vaut `0`, et **aucun** repere n'est
+        # plein — ce qui ressemble exactement a une seance ou rien n'a ete valide.
+        "nom": "reperes de marge : le compte change de nom",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/TestPageOverlay.kt",
+        "avant": "            \"sessionDone\" to JsonPrimitive(markers.sessionDone),",
+        "apres": "            \"sessionThrough\" to JsonPrimitive(markers.sessionDone),",
+        "tache": ":core:domain:test",
+        "attendus": ["TestPageOverlayTest"],
+    },
+    {
+        # Le document ne dessine plus ses reperes : la fonction est ecrite, mais plus appelee. La
+        # vue immersive perd ses reperes, et rien d'autre ne le dit — le script est une ile, et
+        # aucun test du domaine ne regarde ce qui s'y appelle.
+        "nom": "reperes de marge : le document ne les dessine plus",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/TestPageHtml.kt",
+        "avant": "appendChild(icon);}}drawMargin();}",
+        "apres": "appendChild(icon);}}}",
+        "tache": ":core:domain:test",
+        "attendus": ["TestPageHtmlTest"],
+    },
+    {
+        # La teinte de la seance n'a plus son repli : `sessionColor` absent laisserait la couleur
+        # indefinie, et les reperes seraient peints d'une teinte que personne n'a choisie — ou pas
+        # peints du tout.
+        "nom": "reperes de marge : le repli de la teinte disparait",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/TestPageHtml.kt",
+        "avant": "color=readerState.sessionColor||readerState.primary;const rail=",
+        "apres": "color=readerState.primary;const rail=",
+        "tache": ":core:domain:test",
+        "attendus": ["TestPageHtmlTest"],
+    },
+    {
+        # Le lecteur transmet le **dernier verset valide** au lieu du **nombre** de versets faits.
+        # Le document compare ce nombre au rang d'un repere : avec un numero global, tous les
+        # reperes au-dela du premier seraient pleins.
+        "nom": "reperes de marge : le lecteur transmet un verset au lieu d'un compte",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/ReaderScreen.kt",
+        "avant": "        sessionDone = seance?.let { StudySession.completedIn(it.range, it.through) } ?: 0,",
+        "apres": "        sessionDone = seance?.let { it.through } ?: 0,",
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": ["ReaderScreenMarksTest"],
+    },
+    {
+        # Le lecteur standard ne recoit plus ses groupes : la regle de `core:domain` n'a plus aucun
+        # appelant, et la vue standard perd ses reperes pendant que la vue immersive garde les
+        # siens. Les deux chemins doivent dire la meme chose.
+        "nom": "reperes de marge : le lecteur standard ne les recoit plus",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/ReaderScreen.kt",
+        "avant": "                    sessionGroups = reperesDeMarge,",
+        "apres": "                    sessionGroups = emptyList(),",
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": ["ReaderScreenMarksTest"],
     },
 ]
 

@@ -13,6 +13,14 @@ import kotlin.test.assertTrue
  * le document lit ces champs par leur nom, et un nom faux ne lève rien — il fait simplement
  * qu'aucune marque n'apparaît, ou que la page garde son fond par défaut. Un défaut silencieux
  * dans un contrat se paie en le cherchant à l'œil sur une capture d'écran.
+ *
+ * ## Les trois champs de séance, et le quatrième écarté
+ *
+ * `session`, `sessionDone` et `sessionColor` portent les **repères de marge** : la suite des clés
+ * **dans l'ordre** (une place par verset), le nombre de repères pleins, et la teinte. Le
+ * quatrième champ de l'original — `sessionThrough` — n'est pas envoyé : mesuré, le document ne le
+ * lit nulle part. Le bandeau de séance, lui, est rendu en Compose au-dessus de la page : il n'est
+ * pas dans ce message du tout, et le porter ici ferait deux bandeaux pour une seule séance.
  */
 class TestPageOverlayTest {
 
@@ -24,12 +32,18 @@ class TestPageOverlayTest {
         playing: Int? = 1,
         bookmarks: Set<Int> = setOf(8),
         difficult: Set<Int> = setOf(1),
+        session: List<Int> = emptyList(),
+        sessionDone: Int = 0,
+        sessionColor: String? = null,
     ) = TestPageOverlay.Markers(
         selected = selected,
         playing = playing,
         bookmarks = bookmarks,
         difficult = difficult,
         selecting = false,
+        session = session,
+        sessionDone = sessionDone,
+        sessionColor = sessionColor,
         background = "#faf7f2",
         primary = "#153F36",
         selection = "#EAF2EC",
@@ -40,9 +54,12 @@ class TestPageOverlayTest {
     fun `le message porte exactement les champs que le document lit`() {
         assertEquals(
             """{"enabled":true,"selecting":false,"playing":"1:1","selected":"2:1",""" +
-                """"bookmarks":["2:1"],"difficulty":["1:1"],"primary":"#153F36",""" +
+                """"bookmarks":["2:1"],"difficulty":["1:1"],"session":["2:1","2:2","2:3"],""" +
+                """"sessionDone":1,"sessionColor":"#246B48","primary":"#153F36",""" +
                 """"selection":"#EAF2EC","gold":"#B39559","background":"#faf7f2"}""",
-            TestPageOverlay.json(markers()),
+            TestPageOverlay.json(
+                markers(session = listOf(8, 9, 10), sessionDone = 1, sessionColor = "#246B48"),
+            ),
         )
     }
 
@@ -100,15 +117,45 @@ class TestPageOverlayTest {
         assertEquals(a, b)
     }
 
+    // --- les repères de marge ---
+
     @Test
-    fun `le bandeau de seance n'est pas envoye`() {
-        // Le document porté n'a pas de bandeau de séance et ne lit donc aucun de ces champs.
-        // Les envoyer laisserait croire que quelque chose s'en sert.
-        val json = TestPageOverlay.json(markers())
-        assertFalse(json.contains(""""session""""), json)
+    fun `les trois champs de la seance sont envoyes, et le bandeau ne l'est pas`() {
+        // Le document lit `session` (pour ranger chaque clé à sa place), `sessionDone` (pour
+        // savoir quels repères sont pleins) et `sessionColor` (avec repli sur `primary`).
+        // `sessionThrough` n'est lu **nulle part** : l'envoyer serait un champ que personne ne
+        // lit, donc du faux.
+        val json = TestPageOverlay.json(
+            markers(session = listOf(8, 9), sessionDone = 1, sessionColor = "#246B48"),
+        )
+        assertTrue(json.contains(""""session":["2:1","2:2"]"""), json)
+        assertTrue(json.contains(""""sessionDone":1"""), json)
+        assertTrue(json.contains(""""sessionColor":"#246B48""""), json)
         assertFalse(json.contains("sessionThrough"), json)
-        assertFalse(json.contains("sessionDone"), json)
-        assertFalse(json.contains("sessionColor"), json)
+        // Le bandeau de séance est rendu en Compose, au-dessus de la page : le porter ici ferait
+        // deux bandeaux pour une seule séance.
+        assertFalse(json.contains(""""study""""), json)
+    }
+
+    @Test
+    fun `une seance vide est ecrite comme une liste vide, jamais absente`() {
+        // Le document fait `readerState.session||[]` : un champ absent passerait donc, mais par
+        // accident. On l'écrit quand même, pour que le contrat se lise.
+        val json = TestPageOverlay.json(markers())
+        assertTrue(json.contains(""""session":[]"""), json)
+        assertTrue(json.contains(""""sessionDone":0"""), json)
+        assertTrue(json.contains(""""sessionColor":null"""), json)
+    }
+
+    @Test
+    fun `un verset hors du corpus garde sa place dans la seance au lieu de la decaler`() {
+        // `session` est une suite **numérotée**, et non un ensemble : le document y range chaque
+        // clé à sa position, et c'est cette position qui donne au repère son numéro. Omettre un
+        // verset — ce que `mapNotNull` fait pour les signets — décalerait tous les suivants d'un
+        // cran, et le document annoncerait alors les numéros d'autres versets : un décalage
+        // **plausible**, donc invisible, exactement comme une page fausse.
+        val json = TestPageOverlay.json(markers(session = listOf(8, 99_999, 9)))
+        assertTrue(json.contains(""""session":["2:1",null,"2:2"]"""), json)
     }
 
     @Test
@@ -132,6 +179,9 @@ class TestPageOverlayTest {
                 playing = 1,
                 bookmarks = setOf(1, 8, 20, 6236),
                 difficult = setOf(2, 3000),
+                session = listOf(1, 8, 6236),
+                sessionDone = 2,
+                sessionColor = "#246B48",
             ),
         )
         val surs = Regex("""^[A-Za-z0-9#:\[\]{}",]+$""")

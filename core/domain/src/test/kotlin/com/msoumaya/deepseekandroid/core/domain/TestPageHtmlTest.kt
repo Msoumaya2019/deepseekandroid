@@ -164,11 +164,31 @@ class TestPageHtmlTest {
     }
 
     @Test
-    fun `le document ne porte ni bandeau de seance ni regle de marge, et c'est annonce`() {
-        // L'ecart est assume : les deux dependent d'une seance en cours, qui releve de
-        // l'apprentissage. Les porter a moitie serait pire que ne pas les porter.
+    fun `le document porte les reperes de marge, mais pas le bandeau de seance`() {
+        // Les repères appartiennent au document, et à lui seul : il est le seul à connaître les
+        // rectangles de ses mots, et c'est de là que vient leur place. Le bandeau, lui, est rendu
+        // en Compose au-dessus de la page, pour toutes les sources : le porter ici ferait deux
+        // bandeaux pour une seule séance.
         val html = document(1)
+        assertTrue(html.contains("function marginAnchors("), "les repères se calculent dans le document")
+        assertTrue(html.contains("function drawMargin("), "et ils s'y dessinent")
+        assertTrue(html.contains("drawMargin();}"), "la surimpression les appelle en dernier")
         assertFalse(html.contains("study-banner"))
-        assertFalse(html.contains("marginAnchors"))
+    }
+
+    @Test
+    fun `le document lit les trois champs de seance, et pas celui qu'on a ecarte`() {
+        // L'accord entre ce que l'application envoie et ce que le document lit se mesure des deux
+        // côtés : `TestPageOverlayTest` fixe ce qui part, ce test fixe ce qui est lu. Un champ
+        // envoyé et jamais lu laisserait croire que quelque chose s'en sert — et, à l'inverse, un
+        // champ lu et jamais envoyé resterait `undefined` sans que rien ne le signale.
+        val html = document(1)
+        assertTrue(html.contains("readerState.session||[]"), "la suite des clés de la séance")
+        assertTrue(html.contains("readerState.sessionDone||0"), "le nombre de repères pleins")
+        assertTrue(
+            html.contains("readerState.sessionColor||readerState.primary"),
+            "la teinte, avec son repli sur `primary`",
+        )
+        assertFalse(html.contains("sessionThrough"), "le quatrième champ est écarté après mesure")
     }
 }

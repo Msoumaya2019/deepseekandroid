@@ -26,8 +26,67 @@ import kotlin.test.assertTrue
  * Il prouve que **le passage est écrit**. Il ne prouve pas qu'une marque s'affiche au bon
  * endroit : cela se lit dans `MushafPageView`, et la règle qui décide *quels* versets sont
  * marqués est éprouvée dans `core:domain` (`ReaderMarksTest`).
+ *
+ * ## Les repères de séance, et pourquoi ils sont ici aussi
+ *
+ * Le même raisonnement vaut pour la séance, mais il y a **deux** chemins et non un : la vue
+ * immersive reçoit trois champs par le message du document, et le lecteur standard reçoit des
+ * groupes **déjà calculés** par `MarginAnnotations`. Les deux partent du même état et doivent
+ * dire la même chose ; les deux ont une valeur par défaut vide, donc une omission ne se verrait
+ * nulle part. C'est le seul endroit où les deux passages se lisent côte à côte.
  */
 class ReaderScreenMarksTest {
+
+    // --- les repères de séance ---
+
+    @Test
+    fun `le lecteur transmet la seance au document immersif`() {
+        // Les trois champs partent **ensemble**, et chacun a sa raison : la suite des clés donne
+        // à chaque repère son numéro, le compte dit lesquels sont pleins, la teinte les colore.
+        // Les omettre ne lève rien : les trois ont une valeur par défaut vide côté domaine, et le
+        // document s'afficherait alors sans un seul repère.
+        val source = sourceDuLecteur()
+        assertTrue(
+            source.contains("session = seance?.let { (it.range.start..it.range.end).toList() } ?: emptyList(),"),
+            "Le lecteur ne transmet plus la plage de la séance au document : aucun repère ne " +
+                "s'afficherait dans la vue immersive.",
+        )
+        assertTrue(
+            source.contains("sessionDone = seance?.let { StudySession.completedIn(it.range, it.through) } ?: 0,"),
+            "Le lecteur ne transmet plus le nombre de repères pleins : tous les repères " +
+                "paraîtraient vides, ce qui ressemble à une séance où rien n'a été validé.",
+        )
+        assertTrue(
+            source.contains("sessionColor = TestPageColors.hex(colors.review),"),
+            "Le lecteur ne transmet plus la teinte de la séance.",
+        )
+    }
+
+    @Test
+    fun `le lecteur standard recoit la seance et la gouttiere`() {
+        // Le lecteur **standard** n'a pas de document : ses repères sont dessinés en Compose, à
+        // partir de `MarginAnnotations` — la même règle que le script du document recopie. Si le
+        // passage disparaissait, les deux vues divergeraient sans que rien ne le dise : l'une
+        // porterait ses repères, l'autre non.
+        val source = sourceDuLecteur()
+        assertTrue(
+            source.contains("sessionGroups = reperesDeMarge,"),
+            "Le lecteur standard ne reçoit plus les groupes de la séance : aucun repère ne " +
+                "serait dessiné, et la règle de `core:domain` n'aurait plus aucun appelant.",
+        )
+        assertTrue(
+            source.contains("marginGutter = (availableWidth - pageWidth) / 2f,"),
+            "Le lecteur standard ne reçoit plus la gouttière : les pastilles seraient placées " +
+                "sans savoir de quelle place la fenêtre dispose autour de la page.",
+        )
+        assertTrue(
+            source.contains("MarginAnnotations.marginAnnotations("),
+            "Le lecteur standard ne calcule plus ses repères avec la règle du domaine : il en " +
+                "existerait une seconde, écrite ici, et les deux divergeraient.",
+        )
+    }
+
+    // --- les marques du verset ---
 
     @Test
     fun `le lecteur recoit les deux ensembles de marques`() {

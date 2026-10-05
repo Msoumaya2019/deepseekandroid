@@ -30,13 +30,25 @@ import kotlinx.serialization.json.JsonPrimitive
  * un marqueur orphelin serait le pire des échanges. Le portage **omet** l'élément, comme
  * `Bookmarks.rows` omet un signet hors corpus au lieu de faire tomber son écran.
  *
- * ## Ce qui n'est pas envoyé, et pourquoi
+ * ## Ce qui est envoyé pour les **repères de marge**, et pourquoi trois champs seulement
  *
- * L'original envoie aussi `session`, `sessionThrough`, `sessionDone` et `sessionColor`, qui
- * nourrissent le **bandeau de séance**. Le document porté ne les lit pas — il n'a pas de
- * bandeau — donc les envoyer serait du faux : un champ que personne ne lit laisse croire que
- * quelque chose s'en sert. Ils arriveront avec la coquille d'étude, en même temps que son
- * lecteur.
+ * L'original envoie quatre champs de séance : `session`, `sessionThrough`, `sessionDone` et
+ * `sessionColor`. Trois sont retenus, et le quatrième est **écarté après mesure** :
+ *
+ *  - `session` — la suite des clés de la plage prévue, **dans l'ordre**, une place par verset.
+ *    C'est elle qui donne aux repères leur numéro : `drawMargin` y range chaque clé à sa
+ *    position, et `marginAnchors` ne garde que les versets de la séance ;
+ *  - `sessionDone` — combien de versets sont faits, du premier au dernier validé. Le document en
+ *    déduit quels repères sont **pleins** ;
+ *  - `sessionColor` — la teinte de la séance. Absente, le document retombe sur `primary`.
+ *  - `sessionThrough` **n'est pas envoyé** : mesuré, le document ne le lit **nulle part** (zéro
+ *    occurrence dans le script de la page). L'envoyer serait du faux — un champ que personne ne
+ *    lit laisse croire que quelque chose s'en sert. C'est la règle déjà suivie pour les
+ *    rectangles de versets.
+ *
+ * Le `study` du **bandeau** n'est pas envoyé non plus, pour une raison différente : ce client
+ * rend son bandeau **en Compose, au-dessus de la page**, pour toutes les sources. Le porter aussi
+ * dans le document ferait deux bandeaux pour une seule séance.
  */
 object TestPageOverlay {
 
@@ -53,6 +65,12 @@ object TestPageOverlay {
         val bookmarks: Set<Int> = emptySet(),
         val difficult: Set<Int> = emptySet(),
         val selecting: Boolean = false,
+        /** La plage **prévue** de la séance, dans l'ordre. Vide : aucune séance, donc aucun repère. */
+        val session: List<Int> = emptyList(),
+        /** Combien de versets de [session] sont faits, du premier au dernier validé. */
+        val sessionDone: Int = 0,
+        /** La teinte de la séance, ou `null` pour laisser le document prendre `primary`. */
+        val sessionColor: String? = null,
         val background: String,
         val primary: String,
         val selection: String,
@@ -78,6 +96,9 @@ object TestPageOverlay {
             "selected" to nullableKey(markers.selected, keyOf),
             "bookmarks" to keys(markers.bookmarks, keyOf),
             "difficulty" to keys(markers.difficult, keyOf),
+            "session" to sessionKeys(markers.session, keyOf),
+            "sessionDone" to JsonPrimitive(markers.sessionDone),
+            "sessionColor" to (markers.sessionColor?.let { JsonPrimitive(it) } ?: JsonNull),
             "primary" to JsonPrimitive(markers.primary),
             "selection" to JsonPrimitive(markers.selection),
             "gold" to JsonPrimitive(markers.gold),
@@ -85,6 +106,22 @@ object TestPageOverlay {
         )
         return AppJson.encodeToString(JsonObject.serializer(), JsonObject(fields))
     }
+
+    /**
+     * Les clés de la séance, **dans l'ordre**, une place par verset.
+     *
+     * `map` et non `mapNotNull`, et c'est le point qui compte : un verset hors du corpus garde
+     * **sa place**, écrite `null`. L'omettre décalerait tous les suivants d'un cran, et le
+     * document annoncerait alors les numéros d'autres versets — un décalage **plausible**, donc
+     * invisible, exactement comme une page fausse.
+     *
+     * L'ordre est ici une **donnée**, non une commodité. Les signets et les versets difficiles
+     * sont triés parce que le document y cherche par appartenance ; la séance, elle, est une
+     * suite **numérotée** : la trier par clé ferait de ses positions un ordre alphabétique.
+     */
+    private fun sessionKeys(ids: List<Int>, keyOf: (Int) -> String?): JsonArray =
+        JsonArray(ids.map { id -> keyOf(id)?.let { JsonPrimitive(it) } ?: JsonNull })
+
 
     /**
      * La clé `sourate:verset` d'un identifiant global, ou `null` s'il est hors du Mushaf.

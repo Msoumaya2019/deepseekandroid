@@ -156,6 +156,32 @@ object StudySession {
     }
 
     /**
+     * Combien de versets de la plage sont **faits**, du premier au dernier validé.
+     *
+     * Porté depuis `sessionDone` de `readerOverlayState` (`src/coranTest/model.ts:23`), où la
+     * formule est `Math.max(0, Math.min(end, through) - start + 1)`. Les deux bornes ont leur
+     * raison :
+     *
+     *  - `min(end, through)` parce qu'un `through` **postérieur** à la plage est possible — un
+     *    enregistrement repris d'un autre découpage, ou une plage réduite par une reprise
+     *    partielle — et qu'il ne doit pas faire compter plus de versets qu'il n'y en a ;
+     *  - `max(0, …)` parce qu'un `through` **antérieur** au premier verset (`range.start - 1`,
+     *    ce que rend [through] quand rien n'est validé) donne `0` verset, et non `-1`.
+     *
+     * C'est le compte que le document reçoit pour décider quels repères de marge sont **pleins**.
+     * Se tromper d'un verset y est invisible : le repère est plein un cran trop tôt, ce qui
+     * ressemble exactement à une validation de plus.
+     */
+    fun completedIn(range: Range, through: Int): Int =
+        (minOf(range.end, through) - range.start + 1).coerceAtLeast(0)
+
+    // Pas de variante `completed(state, request)` : elle n'aurait aucun appelant. Le seul
+    // consommateur est `ReaderScreen`, qui reçoit déjà la plage prévue et le `through` résolus
+    // dans son `StudyChromeState` — la composition `completedIn(plannedRange(…), through(…))`
+    // se lirait donc là-bas, sur deux valeurs déjà calculées. Une fonction que personne
+    // n'appelle est un mensonge au même titre qu'un champ que personne ne lit.
+
+    /**
      * La requête **réellement ouverte** par le lecteur.
      *
      * Une tâche interrompue reprend à son reste : c'est le portage de la première ligne
