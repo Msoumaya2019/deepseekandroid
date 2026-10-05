@@ -509,7 +509,7 @@ class ProgramRendererTest {
     }
 
     @Test
-    fun `une reprise de revision n'est pas servie`() {
+    fun `le programme ne sert pas une reprise de revision`() {
         val state = Program.defaultState().copy(
             sessions = listOf(session("a", 6000, 6004, SessionStatus.TODO, today, today)),
             studyProgress = mapOf(
@@ -517,10 +517,12 @@ class ProgramRendererTest {
             ),
         )
 
-        // Une reprise de révision se valide sous l'identité de sa **tâche**, que ce client ne
-        // transporte encore par aucune route. La servir sous l'identifiant de la progression
-        // écrirait la validation sous une clé que personne ne relirait — et le lendemain,
-        // l'application redemanderait le même passage sans que rien ne le dise.
+        // L'écran de programme ne retient que l'apprentissage : une reprise de révision s'ouvre
+        // depuis le **tableau de bord des révisions**, qui transporte l'identité de sa tâche. La
+        // servir ici, sous l'identifiant de la progression, écrirait la validation sous une clé
+        // que personne ne relirait — et le lendemain, l'application redemanderait le même passage
+        // sans que rien ne le dise. Le tableau de bord, lui, la sert : voir
+        // `ReviewDashboardRendererTest`.
         assertTrue(render(state).resumes.isEmpty())
     }
 

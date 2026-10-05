@@ -1757,12 +1757,12 @@ CAS: list[dict] = [
         # reste a valider existe, donc la ligne s'affiche et a l'air juste.
         #
         # Ce cas remplace celui qui devait viser le **refus d'une reprise de revision**. Ce refus
-        # est tenu par deux mecanismes independants : le filtre de l'appelant, qui n'admet que
-        # l'apprentissage, et la garde de `resume`, qui refuse le reste. Le premier ecarte
-        # l'enregistrement avant meme que `resume` soit appele, donc la garde est
-        # **inatteignable** — et aucune mutation d'un seul point ne peut faire tomber ce refus.
-        # Un cas qui ne tombe jamais serait pire qu'aucun cas : le comportement, lui, reste
-        # epingle par `une reprise de revision n'est pas servie`.
+        # est tenu par un seul mecanisme, et il est cote appelant : le filtre du programme, qui
+        # n'admet que `StudyMode.LEARNING`. `resume` lui-meme ne refuse plus rien — depuis que le
+        # tableau de bord partage son constructeur de reprise, il sert les deux modes et choisit
+        # l'identite selon eux. Une mutation d'un seul point ne peut donc pas faire tomber ce
+        # refus : le comportement reste epingle par `le programme ne sert pas une reprise de
+        # revision`, dans `ProgramRendererTest`.
         "nom": "programme : une seance reportee redevient reprise",
         "fichier": "feature/program/src/main/kotlin/com/msoumaya/deepseekandroid/feature/program/ProgramRenderer.kt",
         "avant": "it.id == record.id && it.status == SessionStatus.TODO",
@@ -1793,6 +1793,116 @@ CAS: list[dict] = [
         "apres": ".takeLast(HISTORY_LIMIT).sortedBy { it.id }",
         "tache": ":feature:program:testDebugUnitTest",
         "attendus": ["ProgramRendererTest"],
+    },
+    # ------------------------------------------------------------------ les revisions (phase C)
+    #
+    # Le tableau de bord des revisions, la regle de consolidation, et le transport d'une tache par
+    # la route. Trois choses qui se perdent en **silence** : une reprise servie sous le mauvais
+    # mode apparait sur deux ecrans a la fois ; une consolidation prise pour une revision ordinaire
+    # n'ouvre jamais l'etape des trois jours ; une tache transportee sans ses bornes s'ouvre en
+    # lecture libre et n'est jamais validee.
+    #
+    # Les deux cas a ancre multi-ligne le sont parce que leur ancre d'une ligne apparait deux
+    # fois : `study = StudySession.forTask(task),` est ecrit dans `consolidation` **et** dans
+    # `priority`, et `addAll(bornes)` dans le bloc de la seance **et** dans celui de la tache.
+    # Le fichier est en LF, donc `\n` suffit — verifie par `git ls-files --eol`.
+    {
+        # Le tableau de bord sert l'apprentissage au lieu de la revision. C'est le complement exact
+        # du filtre du programme : le meme enregistrement apparait alors sur les deux ecrans, et
+        # chacun le compte a sa facon.
+        "nom": "revisions : le tableau de bord sert une reprise d'apprentissage",
+        "fichier": "feature/program/src/main/kotlin/com/msoumaya/deepseekandroid/feature/program/ReviewDashboardRenderer.kt",
+        "avant": "                .filter { it.mode == StudyMode.REVISION && it.status == StudyStatus.PARTIAL }",
+        "apres": "                .filter { it.mode == StudyMode.LEARNING && it.status == StudyStatus.PARTIAL }",
+        "tache": ":feature:program:testDebugUnitTest",
+        "attendus": ["ReviewDashboardRendererTest"],
+    },
+    {
+        # La ligne de consolidation perd sa categorie : elle n'ouvre plus l'etape des trois jours,
+        # et se valide comme une revision ordinaire — donc sous une cle que le plan ne relit pas.
+        "nom": "revisions : la ligne de consolidation perd sa categorie",
+        "fichier": "feature/program/src/main/kotlin/com/msoumaya/deepseekandroid/feature/program/ReviewDashboardRenderer.kt",
+        "avant": "            category = ReviewCategory.RECENT,",
+        "apres": "            category = ReviewCategory.HABITUAL,",
+        "tache": ":feature:program:testDebugUnitTest",
+        "attendus": ["ReviewDashboardRendererTest"],
+    },
+    {
+        # La regle de consolidation ne vaut plus rien : aucune tache n'ouvre l'etape des trois
+        # jours, et le bandeau du lecteur annonce « Revision du jour » la ou il annoncait
+        # « Consolidation · J+n ». La consolidation se perd sans que rien ne le dise.
+        "nom": "revisions : la regle de consolidation ne vaut plus rien",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Review.kt",
+        "avant": "        val isConsolidation: Boolean get() = category == ReviewCategory.RECENT",
+        "apres": "        val isConsolidation: Boolean get() = false",
+        "tache": ":feature:program:testDebugUnitTest",
+        "attendus": ["ReviewDashboardRendererTest"],
+    },
+    {
+        # Une ligne prioritaire ouvre la consolidation. La categorie `priority` n'a rien a voir avec
+        # un verset recemment appris : l'etape des trois jours s'ouvrirait sur un verset qui n'en a
+        # pas, et le bandeau masquerait la progression au lieu de la compter.
+        "nom": "revisions : une ligne prioritaire ouvre la consolidation",
+        "fichier": "feature/program/src/main/kotlin/com/msoumaya/deepseekandroid/feature/program/ReviewDashboardRenderer.kt",
+        "avant": "            detail = ReviewText.priorityDetail(Review.reviewQuantity(listOf(task.range))),\n            study = StudySession.forTask(task),",
+        "apres": "            detail = ReviewText.priorityDetail(Review.reviewQuantity(listOf(task.range))),\n            study = StudySession.forTask(task, consolidation = true),",
+        "tache": ":feature:program:testDebugUnitTest",
+        "attendus": ["ReviewDashboardRendererTest"],
+    },
+    {
+        # Le tableau de bord ne recoit plus de quoi se fermer. Plein ecran, sans barre superieure ni
+        # barre basse, il n'a plus aucun moyen de revenir en arriere : l'application s'y enferme.
+        "nom": "revisions : le tableau de bord ne recoit plus de quoi se fermer",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/AppScaffold.kt",
+        "avant": "        composable(AppRoutes.REVIEW) {\n            ReviewDashboardScreen(\n                onClose = { navController.popBackStack() },",
+        "apres": "        composable(AppRoutes.REVIEW) {\n            ReviewDashboardScreen(\n                onClose = {},",
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["AppScaffoldReviewEntryTest"],
+    },
+    {
+        # L'accueil recolle sa route a la main au lieu de passer par la fonction partagee. C'est le
+        # defaut d'origine, a la lettre : une tache ouverte depuis l'accueil perd son identite et sa
+        # session, et se transforme en lecture libre qui ne valide rien.
+        "nom": "revisions : l'accueil recolle sa route au lieu de passer par studyRoute",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/AppScaffold.kt",
+        "avant": "                onOpenStudy = { request -> navController.navigate(AppRoutes.studyRoute(request)) },\n                // Trois rappels de l'accueil",
+        "apres": "                onOpenStudy = { request -> navController.navigate(AppRoutes.readerRoute(request.range.start)) },\n                // Trois rappels de l'accueil",
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["AppScaffoldReviewEntryTest"],
+    },
+    {
+        # La route d'une tache de revision perd ses bornes. C'est le defaut qui a reellement ete
+        # ecrit, puis attrape : les bornes n'etaient posees que dans le bloc de la seance, donc une
+        # revision — qui n'a pas d'identifiant de seance — partait sans `de` ni `a`. La route
+        # s'ouvrait, la page s'affichait, et rien ne disait que la plage manquait.
+        "nom": "route : une tache de revision perd ses bornes",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/AppDestination.kt",
+        "avant": '                add("$READER_CATEGORY=$reviewCategory")\n                addAll(bornes)',
+        "apres": '                add("$READER_CATEGORY=$reviewCategory")',
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["AppRoutesStudyTest"],
+    },
+    {
+        # Le decodeur de categorie se replie au lieu de refuser. Une cle inconnue rend alors
+        # `habitual`, et une revision s'enregistre sous une categorie que personne n'a choisie —
+        # ce qui rend une consolidation meconnaissable dans l'historique.
+        "nom": "route : le decodeur de categorie se replie au lieu de refuser",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Review.kt",
+        "avant": "        ReviewCategory.entries.firstOrNull { it.name.equals(key, ignoreCase = true) }",
+        "apres": "        ReviewCategory.entries.firstOrNull { it.name.equals(key, ignoreCase = true) } ?: ReviewCategory.HABITUAL",
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["AppRoutesStudyTest"],
+    },
+    {
+        # Le lecteur ne relit plus la categorie par le decodeur, mais par une comparaison recopiee
+        # ici. Une consolidation — categorie `recent` — passerait alors pour une revision
+        # ordinaire, et l'etape des trois jours ne s'ouvrirait jamais.
+        "nom": "route : le lecteur n'utilise plus le decodeur de categorie",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/AppScaffold.kt",
+        "avant": "                                category = Review.categoryOf(categorie) ?: ReviewCategory.HABITUAL,",
+        "apres": "                                category = ReviewCategory.HABITUAL,",
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["AppScaffoldReviewEntryTest"],
     },
 ]
 

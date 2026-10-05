@@ -1,6 +1,5 @@
 package com.msoumaya.deepseekandroid.navigation
 
-import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -57,7 +56,10 @@ class AppScaffoldReaderEntryTest {
         // les confondre ferait perdre la progression : une lecture libre n'a rien à valider,
         // alors qu'une séance en a une. Sans ces branchements, ces cartes seraient des boutons
         // morts — la compilation passerait, et rien d'autre ne le dirait.
-        val programme = sourceDeLaCoquille().substringAfter("ProgramScreen(")
+        // Le bloc du programme est **borné** au `composable(` suivant : une découpe qui irait
+        // jusqu'à la fin du fichier serait satisfaite par le bloc du tableau de bord, qui suit et
+        // ouvre lui aussi le lecteur. Voir `blocApres`.
+        val programme = programmeDeLaCoquille()
 
         assertTrue(
             programme.contains("onOpenReader = { verseId ->"),
@@ -117,32 +119,6 @@ class AppScaffoldReaderEntryTest {
         )
     }
 
-    /**
-     * Le source de la coquille.
-     *
-     * Deux chemins sont essayés, et non un seul : la tâche `Test` de Gradle s'exécute dans le
-     * dossier **du module**, alors qu'un contrôle joué à la main depuis la racine du dépôt part
-     * de là.
-     */
-    private fun sourceDeLaCoquille(): String {
-        val relatif = "src/main/kotlin/com/msoumaya/deepseekandroid/navigation/AppScaffold.kt"
-        val candidats = listOf(File(relatif), File("navigation/$relatif"))
-        val fichier = candidats.firstOrNull { it.isFile }
-            ?: error(
-                "AppScaffold.kt introuvable. Chemins essayés : " +
-                    candidats.joinToString { it.absolutePath },
-            )
-        return fichier.readText()
-    }
-
-    /**
-     * Le bloc de l'accueil seul : ce qui suit `HomeScreen(`.
-     *
-     * Le contrôle porte sur **l'accueil**, et non sur le fichier : depuis la phase C le programme
-     * ouvre lui aussi le lecteur, avec la même lambda. Chercher dans tout le fichier ferait donc
-     * passer le contrôle pour la mauvaise raison — il trouverait le branchement du programme
-     * alors que celui de l'accueil aurait disparu.
-     */
-    private fun accueilDeLaCoquille(): String =
-        sourceDeLaCoquille().substringAfter("HomeScreen(")
+    // `sourceDeLaCoquille()` et `accueilDeLaCoquille()` sont dans `CoquilleSource.kt` : elles sont
+    // partagées avec le contrôle de l'entrée du tableau de bord, qui lit le même fichier.
 }

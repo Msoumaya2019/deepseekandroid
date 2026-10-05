@@ -440,6 +440,21 @@ object Review {
         val scheduledDate: String? = null,
     ) {
         val range: Range get() = Range(start, end)
+
+        /**
+         * Vrai si cette tâche est l'**étape de consolidation** d'un verset récemment appris, et
+         * non une révision ordinaire.
+         *
+         * C'est la **catégorie** qui le dit, et rien d'autre : le plan ne produit `recent` qu'à
+         * un seul endroit ([reviewPlan], groupe `recent`), pour les versets dont une étape de
+         * consolidation est due. Une révision ordinaire est `habitual` ou `priority`.
+         *
+         * La règle vivait chez chaque appelant — deux renderers la recopiaient, et la
+         * reconstruction d'une route allait en ajouter une troisième copie. Une règle recopiée
+         * est une règle qui divergera : le jour où l'une des copies changerait, un écran
+         * proposerait une consolidation que le lecteur refuserait, ou l'inverse.
+         */
+        val isConsolidation: Boolean get() = category == ReviewCategory.RECENT
     }
 
     data class ConsolidationStep(val offset: Int, val due: String, val completed: String?)
@@ -464,6 +479,22 @@ object Review {
         val cycle: ReviewCycle?,
         val cycleDay: Int,
     )
+
+    /**
+     * La catégorie dont la clé est [key], ou `null`.
+     *
+     * La clé est le nom de l'énumération en minuscules : c'est la convention que [grouped] emploie
+     * pour construire l'identifiant d'une tâche — `"${category.name.lowercase()}-<début>-<fin>"`.
+     * Le décodeur est donc posé **à côté** de l'encodeur, et non chez l'appelant : deux
+     * conventions écrites à deux endroits finiraient par diverger, et une route ne retrouverait
+     * plus sa tâche.
+     *
+     * Une clé inconnue rend `null` plutôt qu'une catégorie par défaut : mieux vaut une lecture
+     * libre, qui ne promet rien, qu'une révision enregistrée sous une catégorie que personne n'a
+     * choisie.
+     */
+    fun categoryOf(key: String?): ReviewCategory? =
+        ReviewCategory.entries.firstOrNull { it.name.equals(key, ignoreCase = true) }
 
     /** Regroupe des versets contigus d'une même sourate en une seule tâche. */
     internal fun grouped(ids: List<Int>, category: ReviewCategory): List<ReviewTask> {

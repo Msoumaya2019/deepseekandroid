@@ -11,7 +11,6 @@ import com.msoumaya.deepseekandroid.core.domain.Texts
 import com.msoumaya.deepseekandroid.core.domain.WeeklyProgress
 import com.msoumaya.deepseekandroid.core.model.AppState
 import com.msoumaya.deepseekandroid.core.model.MushafSource
-import com.msoumaya.deepseekandroid.core.model.ReviewCategory
 import com.msoumaya.deepseekandroid.core.model.Session
 import com.msoumaya.deepseekandroid.core.model.SessionStatus
 import com.msoumaya.deepseekandroid.core.model.StudyMode
@@ -48,12 +47,10 @@ import com.msoumaya.deepseekandroid.core.model.effectiveStudyProgress
 //      carte ouvrirait une lecture libre — et la révision faite ne serait enregistrée nulle
 //      part, donc le lendemain l'application redemanderait le même passage.
 //
-// **Les helpers de reprise portent les deux modes du composant d'origine.** Le filtre de
-// l'appelant ne laisse passer que l'apprentissage aujourd'hui, et [resume] **refuse** le reste
-// plutôt que de le mal servir ; les mots de la révision sont néanmoins conservés, parce qu'ils
-// sont la contrepartie exacte de `StudyResumeCard` et que `ProgramText.rowStatus` les épingle.
-// Les retirer obligerait à les réécrire au portage du tableau de bord des révisions — et c'est
-// le genre de réécriture qui perd un mot.
+// **Les helpers de reprise servent les deux modes du composant d'origine.** C'est le filtre de
+// l'appelant qui choisit : le programme ne retient que l'apprentissage, le tableau de bord des
+// révisions que la révision. [resume] écrit la reprise du mode qu'on lui donne, avec l'identité de
+// tâche qui convient — la séance pour l'un, la tâche de révision pour l'autre.
 //
 // **Le référentiel coranique doit être chargé avant d'appeler [render].** Tout passe par
 // `Quran`, qui rend un référentiel vide tant qu'il n'est pas initialisé. C'est au `ViewModel`
@@ -127,9 +124,9 @@ internal object ProgramRenderer {
                         compactPassage = review?.let { Quran.reference(it.range) } ?: "À jour",
                         compactDetails = review?.let { ProgramText.verseCount(it.range) }
                             ?: "Voir mes révisions",
-                        study = review?.let {
-                            StudySession.forTask(it, consolidation = it.category == ReviewCategory.RECENT)
-                        },
+                        // La tâche porte sa catégorie, donc elle porte aussi la distinction
+                        // consolidation / révision : `forTask` la lit lui-même.
+                        study = review?.let { StudySession.forTask(it) },
                         verseId = review?.start,
                     )
                 },
@@ -234,20 +231,23 @@ internal object ProgramRenderer {
     /**
      * Une reprise, ou `null` quand il n'y a rien à reprendre — ou rien à servir.
      *
-     * Deux refus, et les deux sont voulus. `remainingStudyRange` rend `null` quand tout est
+     * **Un seul refus, et il est de fond.** `remainingStudyRange` rend `null` quand tout est
      * validé : une reprise sans reste proposerait de relire ce qui est déjà appris, sous un titre
-     * qui annoncerait un travail déjà fait. Et une reprise de **révision** est refusée, parce que
-     * son identité de tâche n'est transportée par aucune route — voir le corps.
+     * qui annoncerait un travail déjà fait.
+     *
+     * **Les deux modes sont servis, et c'est le filtre de l'appelant qui choisit.** Le programme
+     * ne retient que l'apprentissage, le tableau de bord des révisions que la révision — deux
+     * ensembles disjoints, et un enregistrement ne peut pas être les deux. La fonction n'a donc
+     * pas à refuser un mode : elle écrit la reprise du mode qu'on lui donne, et c'est ce qui
+     * permet aux deux écrans de partager la carte sans la dupliquer.
+     *
+     * Ce qui **change** avec le mode est l'identité de la tâche, et elle n'est pas cosmétique :
+     * une reprise d'apprentissage se valide sous l'identifiant de sa **séance**, une reprise de
+     * révision sous l'identité de sa **tâche de révision**. Les confondre écrirait la validation
+     * sous une clé que personne ne relirait, et le lendemain l'application redemanderait le même
+     * passage sans que rien ne le dise.
      */
-    private fun resume(record: StudyProgress): ResumeLine? {
-        // Seule une reprise **d'apprentissage** est servie ici, et le refus est explicite plutôt
-        // que silencieux. Une reprise de révision se valide sous l'identité de sa tâche de
-        // révision, que ce client ne transporte encore par aucune route : lui prêter l'identifiant
-        // de la progression ferait écrire la validation sous une clé que personne ne relira, et le
-        // lendemain l'application redemanderait le même passage sans que rien ne le dise. C'est
-        // ici que la variante se branchera, avec le portage du tableau de bord des révisions.
-        if (record.mode != StudyMode.LEARNING) return null
-
+    internal fun resume(record: StudyProgress): ResumeLine? {
         val range = record.range
         val remaining = StudyProgressCalculator.remainingStudyRange(range, record) ?: return null
         val metrics = StudyProgressCalculator.studyMetrics(range, record.through, record.source)
@@ -288,11 +288,18 @@ internal object ProgramRenderer {
             progress = progress,
             ratio = metrics.ratio.toFloat(),
             done = validatedSoFar(metrics, record, learning),
-            // La plage est celle du **reste**, et l'identité est celle de la séance : c'est ce
-            // couple qui fait qu'une reprise continue la progression au lieu d'en recommencer
-            // une. Le filtre de l'appelant et le refus ci-dessus garantissent que `record` est
-            // bien une reprise d'apprentissage, donc que `record.id` est un identifiant de séance.
-            study = StudySession.Request(range = remaining, sessionId = record.id),
+            // La plage est celle du **reste** : c'est ce qui fait qu'une reprise continue la
+            // progression au lieu d'en recommencer une. L'identité, elle, dépend du mode — la
+            // séance pour un apprentissage, la tâche de révision pour une révision. Voir le
+            // commentaire de `resume`.
+            study = if (learning) {
+                StudySession.Request(range = remaining, sessionId = record.id)
+            } else {
+                StudySession.Request(
+                    range = remaining,
+                    reviewTask = StudyProgressCalculator.resumeStudyTask(record),
+                )
+            },
             total = "${metrics.total} ${metrics.unit} au total · Juz ${juzOf(record.start)}",
             rows = rows(record, metrics, learning),
         )

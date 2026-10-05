@@ -18,13 +18,16 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.msoumaya.deepseekandroid.core.domain.Review
 import com.msoumaya.deepseekandroid.core.domain.StudySession
 import com.msoumaya.deepseekandroid.core.model.Range
+import com.msoumaya.deepseekandroid.core.model.ReviewCategory
 import com.msoumaya.deepseekandroid.core.design.theme.AppTheme
 import com.msoumaya.deepseekandroid.feature.home.HomeScreen
 import com.msoumaya.deepseekandroid.feature.profile.ProfileMode
 import com.msoumaya.deepseekandroid.feature.profile.ProfileScreen
 import com.msoumaya.deepseekandroid.feature.program.ProgramScreen
+import com.msoumaya.deepseekandroid.feature.program.ReviewDashboardScreen
 import com.msoumaya.deepseekandroid.feature.progress.ProgressScreen
 import com.msoumaya.deepseekandroid.feature.quiz.QuizScreen
 import com.msoumaya.deepseekandroid.feature.reader.QuranScreen
@@ -137,10 +140,12 @@ fun AppScaffold(
 /**
  * Les routes de l'application.
  *
- * Les cinq onglets sont branchés sur leur écran. Les routes sans écran ne sont pas déclarées ici :
- * une route déclarée mais non servie planterait à la première navigation. Elles seront ajoutées
- * avec leur écran — `REVIEW`, `DAILY`, `RECITATIONS` et `ADMIN` sont déjà nommées dans
- * [AppRoutes] et attendent leur implémentation.
+ * Les cinq onglets sont branchés sur leur écran, et les écrans plein écran construits le sont
+ * aussi. Les routes **sans écran** ne sont pas déclarées ici : une route déclarée mais non servie
+ * planterait à la première navigation. C'est pourquoi `DAILY`, `RECITATIONS` et `ADMIN` — déjà
+ * nommées dans [AppRoutes] — n'apparaissent pas ci-dessous. Elles attendent leur écran, et les
+ * rappels qui y mèneraient restent à leur valeur par défaut : un appui ferait planter
+ * l'application, ce qui est pire qu'un bouton sans effet.
  */
 @Composable
 private fun AppNavHost(
@@ -162,21 +167,19 @@ private fun AppNavHost(
                 onOpenReader = { verseId ->
                     navController.navigate(AppRoutes.readerRoute(verseId))
                 },
-                // Une séance voyage avec son **identifiant** et ses bornes. Les trois sont
-                // posés : c'est `StudySession.plannedRange` qui redonne la priorité à la séance
-                // présente dans l'état, donc les bornes ne sont pas une seconde source de
-                // vérité — elles servent tant que l'état du compte n'est pas arrivé, sans quoi
-                // le lecteur ne saurait pas quelle page ouvrir.
-                onOpenStudy = { request ->
-                    navController.navigate(
-                        AppRoutes.readerRoute(
-                            verseId = request.range.start,
-                            sessionId = request.sessionId,
-                            from = request.range.start,
-                            to = request.range.end,
-                        ),
-                    )
-                },
+                // Une tâche voyage par **une seule** fonction, `studyRoute`, qui la transporte
+                // entière : son identité, sa catégorie et ses bornes. Écrire la route ici à la
+                // main a déjà produit un défaut muet — une révision partait en lecture libre,
+                // donc sans validation. Voir la note de `studyRoute`.
+                onOpenStudy = { request -> navController.navigate(AppRoutes.studyRoute(request)) },
+                // Trois rappels de l'accueil étaient laissés à leur valeur par défaut, donc trois
+                // boutons sans effet : le bandeau « Prochain objectif », la carte de progression
+                // et le rappel de révision. Deux basculent vers un onglet, le troisième ouvre le
+                // tableau de bord. Ils sont posés ici parce qu'ils sont **invoqués** par l'écran :
+                // un rappel déclaré mais jamais branché ne se voit nulle part.
+                onOpenProgram = { navController.navigateToTab(AppDestination.PROGRAM) },
+                onOpenProgress = { navController.navigateToTab(AppDestination.PROGRESS) },
+                onOpenReviews = { navController.navigate(AppRoutes.REVIEW) { launchSingleTop = true } },
             )
         }
         composable(AppDestination.QURAN.route) { QuranScreen() }
@@ -189,31 +192,43 @@ private fun AppNavHost(
                 onOpenReader = { verseId ->
                     navController.navigate(AppRoutes.readerRoute(verseId))
                 },
-                // Même règle qu'à l'accueil : la séance voyage avec son identifiant **et** ses
-                // bornes. C'est `StudySession.plannedRange` qui redonne la priorité à la séance
-                // présente dans l'état ; les bornes servent tant que l'état n'est pas arrivé.
-                onOpenStudy = { request ->
-                    navController.navigate(
-                        AppRoutes.readerRoute(
-                            verseId = request.range.start,
-                            sessionId = request.sessionId,
-                            from = request.range.start,
-                            to = request.range.end,
-                        ),
-                    )
-                },
+                // Même règle qu'à l'accueil, et c'est délibéré : les deux écrans, plus le tableau
+                // de bord, ouvrent leurs tâches par `studyRoute`. Une seule fonction pour trois
+                // appelants, donc aucune divergence possible entre eux.
+                onOpenStudy = { request -> navController.navigate(AppRoutes.studyRoute(request)) },
                 // Le crayon de la carte « Mon objectif ». `launchSingleTop` : appuyer deux fois
                 // sur le crayon ne doit pas empiler deux écrans d'objectif.
                 onOpenGoal = { navController.navigate(AppRoutes.GOAL) { launchSingleTop = true } },
-                // `onOpenReviews` reste à sa valeur par défaut, et c'est **délibéré** : la route
-                // du tableau de bord est déjà nommée (`AppRoutes.REVIEW`) mais aucun écran ne la
-                // sert encore, et la déclarer ici ferait planter la première navigation — c'est
-                // la règle posée plus haut. Le rappel sera branché avec `ReviewDashboard`, dans
-                // cette même phase.
+                // La carte de révision mène au tableau de bord quand aucun passage n'est dû.
+                // C'était le rappel laissé de côté ; il est branché depuis que l'écran existe.
+                onOpenReviews = { navController.navigate(AppRoutes.REVIEW) { launchSingleTop = true } },
             )
         }
         composable(AppDestination.PROGRESS.route) { ProgressScreen() }
         composable(AppDestination.FRIENDS.route) { SocialScreen() }
+
+        // Le tableau de bord des révisions. Plein écran — l'original le posait par-dessus tout —,
+        // donc il porte lui-même son bouton de retour, et c'est la coquille qui décide où l'on
+        // retourne : un écran qui appelle `popBackStack` lui-même ne peut plus être ouvert
+        // autrement que depuis la pile.
+        composable(AppRoutes.REVIEW) {
+            ReviewDashboardScreen(
+                onClose = { navController.popBackStack() },
+                // La tâche du jour s'ouvre par la même fonction que depuis le programme et
+                // l'accueil. C'est ce qui garantit qu'une consolidation, une révision et une
+                // séance arrivent au lecteur sous la même forme, quelle que soit la porte.
+                onOpenStudy = { request -> navController.navigate(AppRoutes.studyRoute(request)) },
+                // Les statistiques sont l'onglet « Progrès » : on y **bascule** comme depuis la
+                // barre basse, au lieu d'empiler un second exemplaire de l'onglet par-dessus le
+                // tableau de bord — ce qui laisserait le retour ramener sur un écran plein écran.
+                onStatistics = { navController.navigateToTab(AppDestination.PROGRESS) },
+                // `onRecitations` reste à sa valeur par défaut, et c'est **délibéré** : la route
+                // `RECITATIONS` est nommée, mais son écran n'existe pas encore (`SocialScreen`
+                // est un panneau de phase), et la déclarer ici ferait planter la première
+                // navigation — c'est la règle posée plus haut. Le rappel sera branché avec
+                // l'écran des récitations partagées, en phase D.
+            )
+        }
 
         // Le lecteur ne connaît pas la navigation : il demande à fermer, et c'est la coquille
         // qui décide où l'on retourne. Un écran qui appelle `popBackStack` lui-même ne peut
@@ -247,18 +262,54 @@ private fun AppNavHost(
                     type = NavType.IntType
                     defaultValue = 0
                 },
+                navArgument(AppRoutes.READER_TASK) {
+                    type = NavType.StringType
+                    defaultValue = ""
+                },
+                navArgument(AppRoutes.READER_CATEGORY) {
+                    type = NavType.StringType
+                    defaultValue = ""
+                },
             ),
         ) { entry ->
-            // La séance n'est reconstruite que si ses **trois** arguments sont là. Deux sur trois
-            // donneraient une plage inventée : mieux vaut une lecture libre, qui ne promet rien,
-            // qu'une séance qui annoncerait une progression fausse.
-            val seance = entry.arguments?.getString(AppRoutes.READER_SESSION)?.takeIf { it.isNotEmpty() }
+            // La tâche n'est reconstruite que si elle est **complète** : une identité sans ses
+            // bornes ne saurait pas quelle plage compter, et des bornes sans identité ne seraient
+            // pas validables. Deux arguments sur trois donneraient une plage inventée : mieux
+            // vaut une lecture libre, qui ne promet rien, qu'une séance qui annoncerait une
+            // progression fausse.
             val debut = entry.arguments?.getInt(AppRoutes.READER_FROM)?.takeIf { it > 0 }
             val fin = entry.arguments?.getInt(AppRoutes.READER_TO)?.takeIf { it > 0 }
+            val seance = entry.arguments?.getString(AppRoutes.READER_SESSION)?.takeIf { it.isNotEmpty() }
+            val tache = entry.arguments?.getString(AppRoutes.READER_TASK)?.takeIf { it.isNotEmpty() }
+            val categorie = entry.arguments?.getString(AppRoutes.READER_CATEGORY)?.takeIf { it.isNotEmpty() }
+
             ReaderRoute(
                 startVerse = entry.arguments?.getInt(AppRoutes.READER_VERSE)?.takeIf { it > 0 },
-                session = if (seance != null && debut != null && fin != null) {
-                    StudySession.Request(range = Range(debut, fin), sessionId = seance)
+                session = if (debut != null && fin != null) {
+                    when {
+                        seance != null -> StudySession.Request(
+                            range = Range(debut, fin),
+                            sessionId = seance,
+                        )
+                        // La catégorie est relue par le **décodeur** posé à côté de l'encodeur, et
+                        // non par une comparaison de chaînes écrite ici : une convention recopiée
+                        // à deux endroits finit par diverger, et c'est la copie qu'on ne relit pas
+                        // qui reste.
+                        //
+                        // Le repli sur `habitual` quand la clé est inconnue est délibéré, et il ne
+                        // contredit pas le refus de `categoryOf` : perdre la tâche ferait perdre la
+                        // validation, alors que la catégorie ne fait que préciser *quelle* révision
+                        // c'est. `StudySession.validate` prend d'ailleurs `habitual` par défaut.
+                        tache != null -> StudySession.forTask(
+                            Review.ReviewTask(
+                                start = debut,
+                                end = fin,
+                                id = tache,
+                                category = Review.categoryOf(categorie) ?: ReviewCategory.HABITUAL,
+                            ),
+                        )
+                        else -> null
+                    }
                 } else {
                     null
                 },

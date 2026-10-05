@@ -118,8 +118,19 @@ object StudySession {
     fun forSession(session: com.msoumaya.deepseekandroid.core.model.Session): Request =
         Request(range = session.range, sessionId = session.id)
 
-    /** Une tâche de révision. `consolidation` distingue l'étape des trois jours du cycle. */
-    fun forTask(task: Review.ReviewTask, consolidation: Boolean = false): Request =
+    /**
+     * Une tâche de révision.
+     *
+     * `consolidation` n'est **pas** à passer : il est déduit de la tâche — voir
+     * [Review.ReviewTask.isConsolidation]. La règle vivait auparavant chez chaque appelant, sous
+     * la forme `consolidation = task.category == ReviewCategory.RECENT`, recopiée par les deux
+     * renderers. Elle est ici, en une seule copie, et l'appelant écrit simplement `forTask(tâche)`.
+     *
+     * Le paramètre reste ouvert parce que la distinction existe dans le type [Request] : un banc
+     * qui éprouve le cas d'une étape de consolidation peut la demander sans que sa tâche porte la
+     * catégorie. Aucun appelant de production ne le fait.
+     */
+    fun forTask(task: Review.ReviewTask, consolidation: Boolean = task.isConsolidation): Request =
         Request(range = task.range, reviewTask = task, consolidation = consolidation)
 
     /** La progression enregistrée pour cette requête, ou `null` s'il n'y en a pas. */

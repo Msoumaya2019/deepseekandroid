@@ -7,6 +7,7 @@ import androidx.compose.material.icons.outlined.EventAvailable
 import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.ui.graphics.vector.ImageVector
+import com.msoumaya.deepseekandroid.core.domain.StudySession
 
 // ---------------------------------------------------------------------------
 // Destinations
@@ -77,11 +78,35 @@ object AppRoutes {
      */
     const val READER_SESSION = "seance"
 
-    /** Le premier verset de la plage servie, en argument facultatif. Repli de la séance. */
+    /**
+     * Le premier verset de la plage servie, en argument facultatif.
+     *
+     * Les bornes servent **les deux formes de tâche** — séance et révision —, et c'est pourquoi
+     * elles ne sont pas nommées d'après l'une d'elles. Elles ne voyagent jamais seules : une
+     * lecture libre n'en porte pas. Voir [readerRoute].
+     */
     const val READER_FROM = "de"
 
-    /** Le dernier verset de la plage servie, en argument facultatif. Repli de la séance. */
+    /** Le dernier verset de la plage servie, en argument facultatif. Voir [READER_FROM]. */
     const val READER_TO = "a"
+
+    /**
+     * L'identifiant de la **tâche de révision** servie, en argument facultatif.
+     *
+     * Un identifiant, et non la tâche entière : ses bornes sont déjà portées par `de` et `a`, et sa
+     * catégorie par [READER_CATEGORY]. Recopier la tâche entière ferait deux sources pour la même
+     * chose, et c'est celle qu'on ne relit pas qui resterait.
+     */
+    const val READER_TASK = "tache"
+
+    /**
+     * La catégorie de la tâche de révision — `recent`, `habitual` ou `priority`.
+     *
+     * Elle n'est pas décorative : c'est elle qui décide si le lecteur propose l'**étape de
+     * consolidation**. Une tâche transportée sans sa catégorie serait traitée comme une révision
+     * ordinaire, et une consolidation ne s'ouvrirait jamais — sans que rien ne le dise.
+     */
+    const val READER_CATEGORY = "categorie"
 
     /**
      * Le motif de la route du lecteur, argument compris.
@@ -94,7 +119,9 @@ object AppRoutes {
         "$READER?$READER_VERSE={$READER_VERSE}" +
             "&$READER_SESSION={$READER_SESSION}" +
             "&$READER_FROM={$READER_FROM}" +
-            "&$READER_TO={$READER_TO}"
+            "&$READER_TO={$READER_TO}" +
+            "&$READER_TASK={$READER_TASK}" +
+            "&$READER_CATEGORY={$READER_CATEGORY}"
 
     /**
      * La route du lecteur, ouverte sur [verseId] ou librement.
@@ -109,21 +136,69 @@ object AppRoutes {
         sessionId: String? = null,
         from: Int? = null,
         to: Int? = null,
+        reviewTaskId: String? = null,
+        reviewCategory: String? = null,
     ): String {
+        // Les bornes sont calculées **une fois**, puis posées par la branche de la tâche qui les
+        // porte. Elles ne voyagent jamais seules : une lecture libre n'a pas de progression à
+        // valider, et lui prêter des bornes ferait croire à une tâche — le lecteur écrirait alors
+        // une validation que personne n'a demandée.
+        val bornes = if (from != null && to != null) {
+            listOf("$READER_FROM=$from", "$READER_TO=$to")
+        } else {
+            emptyList()
+        }
         val arguments = buildList {
             if (verseId != null) add("$READER_VERSE=$verseId")
             // Les trois arguments d'une séance voyagent **ensemble** : une séance sans ses bornes
             // ne serait pas ouvrable, et des bornes sans séance ne seraient pas validables. Les
             // séparer produirait une route qui s'ouvre — donc un défaut muet, puisqu'on croirait
             // la séance servie alors qu'elle ne l'est pas.
-            if (sessionId != null && from != null && to != null) {
+            if (sessionId != null && bornes.isNotEmpty()) {
                 add("$READER_SESSION=$sessionId")
-                add("$READER_FROM=$from")
-                add("$READER_TO=$to")
+                addAll(bornes)
+            }
+            // Une tâche de révision voyage avec sa **catégorie**, et avec ses bornes : sans elles,
+            // le lecteur ne saurait pas quelle plage compter, et la validation serait perdue.
+            //
+            // C'est ici qu'un défaut a réellement été écrit, puis attrapé : les bornes étaient
+            // posées dans le seul bloc de la séance, donc une révision — qui n'a pas
+            // d'identifiant de séance — partait sans `de` ni `a`. La route s'ouvrait, la page
+            // s'affichait, et rien ne disait que la plage manquait.
+            if (reviewTaskId != null && reviewCategory != null && bornes.isNotEmpty()) {
+                add("$READER_TASK=$reviewTaskId")
+                add("$READER_CATEGORY=$reviewCategory")
+                addAll(bornes)
             }
         }
         return if (arguments.isEmpty()) READER else "$READER?" + arguments.joinToString("&")
     }
+
+    /**
+     * La route du lecteur pour une **tâche**, quelle qu'elle soit.
+     *
+     * Une seule fonction pour les trois formes — séance, révision, consolidation —, et c'est ce
+     * qui rend le transport fidèle. Écrire la route à la main chez l'appelant a déjà produit un
+     * défaut **muet** : [readerRoute] retire les trois arguments d'une séance quand `sessionId`
+     * est nul, donc une révision ouverte depuis le programme partait en lecture libre et n'était
+     * jamais enregistrée. Ici, ce que la requête porte est ce que la route porte.
+     *
+     * **`consolidation` n'est pas transporté, et c'est délibéré.** Il vaut « la catégorie est
+     * `recent` » — la règle du renderer, et celle du client d'origine. Le transporter créerait une
+     * seconde source pour la même décision, et les deux finiraient par diverger : une route
+     * pourrait annoncer une consolidation que sa catégorie dément.
+     *
+     * **`revisionId` n'est pas transporté non plus** : c'est un champ du modèle de révision
+     * « legacy », que ce client n'écrit jamais.
+     */
+    fun studyRoute(request: StudySession.Request): String = readerRoute(
+        verseId = request.range.start,
+        sessionId = request.sessionId,
+        from = request.range.start,
+        to = request.range.end,
+        reviewTaskId = request.reviewTask?.id,
+        reviewCategory = request.reviewTask?.category?.name?.lowercase(),
+    )
 
     /**
      * La route **sans** sa partie facultative.

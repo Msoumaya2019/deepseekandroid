@@ -63,16 +63,16 @@ class AppRoutesReaderTest {
     }
 
     @Test
-    fun `le motif declare les quatre arguments facultatifs`() {
+    fun `le motif declare les six arguments facultatifs`() {
         // L'argument est **facultatif** : c'est ce qui permet à la route nue de rester valide
         // tout en étant servie par le motif. Un argument requis ferait échouer l'ouverture
         // libre, et l'échec serait une exception de navigation, pas un écran vide.
         //
         // La comparaison est **exacte**, et non partielle : un motif déclaré à moitié laisserait
-        // passer un argument oublié, donc une séance qui s'ouvre sans que le lecteur sache
-        // laquelle — et il la servirait comme une lecture libre, sans le dire.
+        // passer un argument oublié, donc une séance — ou une révision — qui s'ouvre sans que le
+        // lecteur sache laquelle, et il la servirait comme une lecture libre, sans le dire.
         assertEquals(
-            "lecteur?verset={verset}&seance={seance}&de={de}&a={a}",
+            "lecteur?verset={verset}&seance={seance}&de={de}&a={a}&tache={tache}&categorie={categorie}",
             AppRoutes.READER_PATTERN,
         )
     }

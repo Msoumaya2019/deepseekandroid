@@ -59,9 +59,10 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.compose.material.icons.extended)
 
-    // Le seul test de ce module lit le source de `ReaderRoute.kt` : il est donc placé ici,
-    // où le fichier qu'il mesure vit, et non dans un autre module. Un test qui lit le source
-    // d'ailleurs ne serait pas rejoué quand ce source change, et resterait vert par oubli.
+    // Plusieurs tests de ce module lisent le source des fichiers qu'ils mesurent — `AppScaffold.kt`
+    // pour les points d'entrée, `ReaderRoute.kt` pour le lecteur. Ils sont donc placés ici, où ces
+    // fichiers vivent, et non dans un autre module : un test qui lit le source d'ailleurs ne
+    // serait pas rejoué quand ce source change, et resterait vert par oubli.
     testImplementation(libs.junit)
     testImplementation(libs.kotlin.test)
 }
