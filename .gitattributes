@@ -67,6 +67,11 @@ gradlew text eol=lf
 *.webp binary
 *.ttf binary
 *.otf binary
+# Les polices de la composition sont des WOFF2, et c'est la même famille que `ttf` et `otf`
+# ci-dessus : leur liste les couvrait, pas leur extension. Mesuré : Git les classe bien en
+# `-text` aujourd'hui, par sa détection d'octets nuls — donc la règle ne corrige rien, elle
+# **garantit** ce que la détection suppose, sur les 51 Mo d'actifs les plus lourds du dépôt.
+*.woff2 binary
 *.apk binary
 *.aab binary
 *.keystore binary
