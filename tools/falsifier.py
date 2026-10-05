@@ -1373,10 +1373,10 @@ CAS: list[dict] = [
         # l'accueil ne bougerait plus jamais, et rien d'autre ne le dirait.
         "nom": "memoire : la page quittee n'entre plus dans les pages lues",
         "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/ReaderMemory.kt",
-        "avant": "            readPages = (base.effectiveReadPages + page).distinct(),",
-        "apres": "            readPages = base.effectiveReadPages,",
+        "avant": "            readPages = (retenu.effectiveReadPages + page).distinct(),",
+        "apres": "            readPages = retenu.effectiveReadPages,",
         "tache": ":core:domain:test",
-        "attendus": ["ReaderMemoryTest"],
+        "attendus": ["la page quittee est ajoutee aux pages lues"],
     },
     {
         # Le verset memorise est repris sans verifier qu'il tient encore sur la page : la position
@@ -1394,10 +1394,10 @@ CAS: list[dict] = [
         # remplirait avec la page d'un moushaf en images, et l'ouverture suivante irait a cote.
         "nom": "memoire : la page memorisee est ecrite pour toutes les sources",
         "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/ReaderMemory.kt",
-        "avant": "            reader = if (source == MushafSource.CORAN_TEST) {\n                (base.reader ?: ReaderPreferences()).copy(\n                    mushaf = MushafSource.CORAN_TEST,\n                    followAudio = base.reader?.followAudio != false,\n                    testPage = page,\n                )\n            } else {\n                base.reader\n            },",
-        "apres": "            reader = (base.reader ?: ReaderPreferences()).copy(\n                mushaf = MushafSource.CORAN_TEST,\n                followAudio = base.reader?.followAudio != false,\n                testPage = page,\n            ),",
+        "avant": "        val retenu = if (source == MushafSource.CORAN_TEST) {\n            Program.adoptComposedSource(base, page)\n        } else {\n            base\n        }",
+        "apres": "        val retenu = Program.adoptComposedSource(base, page)",
         "tache": ":core:domain:test",
-        "attendus": ["ReaderMemoryTest"],
+        "attendus": ["une source en images ne recoit aucune page memorisee"],
     },
     {
         # L'etat n'est plus migre avant la decision : la source composee n'est plus reconnue, la
@@ -2247,6 +2247,116 @@ CAS: list[dict] = [
         "apres": "                onOpenReader = { navController.navigate(AppRoutes.READER) },",
         "tache": ":navigation:testDebugUnitTest",
         "attendus": ["l'ecran du Coran ouvre le lecteur par la porte commune"],
+    },
+    {
+        # Le denominateur de l'anneau et le compteur de versets ne comptent pas la meme unite :
+        # `verses.size` est un nombre de versets (6 236), `totalVolume` la somme des poids en
+        # lettres arabes (320 543). Les confondre n'empeche pas de compiler, ne fait rien planter,
+        # et affiche « / 320543 » sous un compteur de versets : cela ne se voit qu'a l'ecran.
+        "nom": "progres : le denominateur du compteur devient le volume en lettres",
+        "fichier": "feature/progress/src/main/kotlin/com/msoumaya/deepseekandroid/feature/progress/ProgressRenderer.kt",
+        "avant": "                totalVerses = Quran.verses.size,",
+        "apres": "                totalVerses = Quran.totalVolume,",
+        "tache": ":feature:progress:testDebugUnitTest",
+        "attendus": ["le denominateur du compteur est le nombre de versets"],
+    },
+    {
+        # Une sixieme fenetre mensuelle glisse d'une semaine le decoupage du mois : les barres
+        # restent plausibles, les totaux restent justes, mais le mois se lit sur six colonnes au
+        # lieu de cinq. Aucun test de total ne le verrait.
+        "nom": "progres : le graphique du mois compte une semaine de trop",
+        "fichier": "feature/progress/src/main/kotlin/com/msoumaya/deepseekandroid/feature/progress/ProgressRenderer.kt",
+        "avant": "        val count = if (monthly) 5 else 7",
+        "apres": "        val count = if (monthly) 6 else 7",
+        "tache": ":feature:progress:testDebugUnitTest",
+        "attendus": ["le graphique du mois compte cinq semaines"],
+    },
+    {
+        # « Jours actifs » compte des jours, pas des seances : trois seances le meme jour font un
+        # jour. Compter les seances compile et donne un nombre plus grand — donc flatteur, et faux.
+        "nom": "progres : le compteur de jours actifs compte les seances",
+        "fichier": "feature/progress/src/main/kotlin/com/msoumaya/deepseekandroid/feature/progress/ProgressRenderer.kt",
+        "avant": "                Counter(CounterKind.ACTIVE_DAYS, activity.dates.size),",
+        "apres": "                Counter(CounterKind.ACTIVE_DAYS, state.sessions.size),",
+        "tache": ":feature:progress:testDebugUnitTest",
+        "attendus": ["le compteur de jours actifs compte les jours, pas les seances"],
+    },
+    {
+        # Une derniere lecture sans liste de pages vient d'un ancien schema : le client d'origine
+        # affiche alors une page. Confondre « absent » et « vide » ferait tomber ce cas a zero, et
+        # personne ne verrait qu'une lecture reelle a disparu du compte.
+        "nom": "progres : la derniere lecture sans liste ne compte plus",
+        "fichier": "feature/progress/src/main/kotlin/com/msoumaya/deepseekandroid/feature/progress/ProgressRenderer.kt",
+        "avant": "            state.lastRead != null -> 1",
+        "apres": "            state.lastRead != null -> 0",
+        "tache": ":feature:progress:testDebugUnitTest",
+        "attendus": ["les pages lues distinguent une liste absente d'une liste vide"],
+    },
+    {
+        # Une seance suivie par sa progression fine ne doit pas etre comptee deux fois — une fois
+        # par la seance, une fois par ses validations. Inverser le filtre est une faute d'un
+        # caractere qui gonfle le graphique sans rien casser.
+        "nom": "progres : une seance suivie est comptee deux fois",
+        "fichier": "feature/progress/src/main/kotlin/com/msoumaya/deepseekandroid/feature/progress/ProgressRenderer.kt",
+        "avant": "            .filter { it.status == SessionStatus.DONE && it.id !in trackedIds }",
+        "apres": "            .filter { it.status == SessionStatus.DONE && it.id in trackedIds }",
+        "tache": ":feature:progress:testDebugUnitTest",
+        "attendus": ["une seance suivie par sa progression n'est pas comptee deux fois"],
+    },
+    {
+        # « Voir tout », dans l'en-tete des objectifs, ouvre l'ecran d'objectif. Y mettre une autre
+        # route compile parfaitement : c'est le defaut qu'un rappel de navigation laisse passer.
+        "nom": "progres : la carte d'objectif ne mene plus a l'objectif",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/AppScaffold.kt",
+        # L'ancre porte la ligne `ProgressScreen(` : le meme appel existe tel quel dans le bloc de
+        # l'accueil, et viser le mauvais bloc aurait mute un ecran que ce cas n'annonce pas.
+        "avant": "            ProgressScreen(\n                onOpenGoal = { navController.navigate(AppRoutes.GOAL) { launchSingleTop = true } },",
+        "apres": "            ProgressScreen(\n                onOpenGoal = { navController.navigate(AppRoutes.SETTINGS) { launchSingleTop = true } },",
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["la carte d'objectif mene a l'ecran d'objectif"],
+    },
+    {
+        # Sans `launchSingleTop`, deux appuis sur « Voir tout » empilent deux ecrans d'objectif :
+        # le retour en laisse un en travers. La difference ne se voit qu'a l'usage.
+        "nom": "progres : l'objectif s'ouvre sans launchSingleTop",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/AppScaffold.kt",
+        # Meme ancre que le cas precedent, et pour la meme raison : le bloc de l'accueil porte le
+        # meme appel, au caractere pres.
+        "avant": "            ProgressScreen(\n                onOpenGoal = { navController.navigate(AppRoutes.GOAL) { launchSingleTop = true } },",
+        "apres": "            ProgressScreen(\n                onOpenGoal = { navController.navigate(AppRoutes.GOAL) },",
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["l'ouverture de l'objectif n'empile pas deux ecrans"],
+    },
+    {
+        # Une revision n'est pas une seance terminee : elle ne doit pas ouvrir un jour actif. Le
+        # mode etant une enumeration a deux valeurs, inverser le test n'est pas une mutation
+        # equivalente — c'est exactement l'inversion qui fait entrer les revisions.
+        "nom": "progres : une revision compte comme un jour actif",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Activity.kt",
+        "avant": "            if (record.mode != StudyMode.LEARNING) continue",
+        "apres": "            if (record.mode == StudyMode.LEARNING) continue",
+        "tache": ":core:domain:test",
+        "attendus": ["une validation de revision ne compte pas"],
+    },
+    {
+        # Le client d'origine ecrit « jours » au pluriel quelle que soit la valeur, donc « 1 jours
+        # d'affilee » le premier jour. L'accord est conserve ici : ce cas tient le singulier.
+        "nom": "progres : la serie perd son singulier",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/ProgressText.kt",
+        "avant": '    fun streak(days: Int): String = "$days jour${if (days > 1) "s" else ""} d’affilée"',
+        "apres": '    fun streak(days: Int): String = "$days jours d’affilée"',
+        "tache": ":core:domain:test",
+        "attendus": ["la serie s'accorde au singulier et au pluriel"],
+    },
+    {
+        # « Jour » decrit une fenetre glissante de sept jours, pas la journee : reprendre le nom du
+        # selecteur serait plus simple et plus faux. Le titre est le seul endroit qui le dise.
+        "nom": "progres : le titre du graphique du jour reprend le nom du selecteur",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/ProgressText.kt",
+        "avant": '        Period.DAY -> "Les 7 derniers jours"',
+        "apres": '        Period.DAY -> "Jour"',
+        "tache": ":core:domain:test",
+        "attendus": ["le titre du graphique ne suit pas le nom de la periode"],
     },
 ]
 

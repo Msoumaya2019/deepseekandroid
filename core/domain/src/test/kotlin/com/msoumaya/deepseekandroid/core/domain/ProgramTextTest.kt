@@ -61,6 +61,28 @@ class ProgramTextTest {
     }
 
     @Test
+    fun `les trois lettres du jour sont en minuscules, pour une barre de graphique`() {
+        // Le client d'origine demande le jour abrégé puis en garde trois caractères : c'est un
+        // format **tronqué**, et le reproduire évite d'inventer un format que l'original n'a pas.
+        assertEquals("mar", ProgramText.weekdayInitials(mardi))
+        assertEquals("dim", ProgramText.weekdayInitials(dimanche))
+        assertEquals("mer", ProgramText.weekdayInitials(mercredi))
+    }
+
+    @Test
+    fun `les sept jours tiennent en trois lettres, sans perte a la troncature`() {
+        // Une troncature n'est sans perte que si elle est vraie pour les sept jours : « mer. » et
+        // « sam. » font trois lettres, mais rien ne le garantit sans le mesurer.
+        val semaine = (8..14).map { "2026-03-${it.toString().padStart(2, '0')}" }
+        val initiales = semaine.map { ProgramText.weekdayInitials(it) }
+        assertEquals(listOf("dim", "lun", "mar", "mer", "jeu", "ven", "sam"), initiales)
+        assertTrue(
+            initiales.all { it.length == 3 },
+            "chaque initiale doit faire trois caractères : $initiales",
+        )
+    }
+
+    @Test
     fun `une seance lointaine s'ecrit jour et mois`() {
         assertEquals("10 mars", ProgramText.dayMonth(mardi))
     }

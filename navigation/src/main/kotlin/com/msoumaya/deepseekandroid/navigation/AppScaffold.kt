@@ -220,7 +220,15 @@ private fun AppNavHost(
                 onOpenReviews = { navController.navigate(AppRoutes.REVIEW) { launchSingleTop = true } },
             )
         }
-        composable(AppDestination.PROGRESS.route) { ProgressScreen() }
+        // L'écran « Progrès ». Il est en **lecture seule** — il observe et il compte, il n'écrit
+        // rien —, mais deux portes mènent de sa carte d'objectif à l'écran d'objectif : l'action
+        // « Voir tout » de l'en-tête de section, et la carte elle-même. `launchSingleTop` comme
+        // depuis le programme et le Coran : appuyer deux fois ne doit pas empiler deux écrans.
+        composable(AppDestination.PROGRESS.route) {
+            ProgressScreen(
+                onOpenGoal = { navController.navigate(AppRoutes.GOAL) { launchSingleTop = true } },
+            )
+        }
         composable(AppDestination.FRIENDS.route) { SocialScreen() }
 
         // Le tableau de bord des révisions. Plein écran — l'original le posait par-dessus tout —,

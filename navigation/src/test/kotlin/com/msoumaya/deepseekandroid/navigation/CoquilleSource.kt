@@ -112,6 +112,20 @@ internal fun routeGoalDeLaCoquille(): String {
 internal fun coranDeLaCoquille(): String =
     sansCommentaires(blocApres("composable(AppDestination.QURAN.route)"))
 
+/**
+ * Le bloc de l'écran « Progrès » seul, **commentaires retirés**.
+ *
+ * Le retrait est nécessaire ici pour la même raison qu'au Coran : le bloc porte le commentaire qui
+ * explique pourquoi l'écran est en lecture seule, et ce commentaire nomme `AppRoutes.GOAL`. Un
+ * contrôle écrit sur le texte brut y trouverait sa propre documentation — il vérifierait ce qu'on
+ * attend de la route, pas ce qu'elle fait.
+ *
+ * La borne de [blocApres] s'applique : le `composable(` des amis suit celui du Progrès, donc le
+ * bloc est délimité et une assertion ne peut pas être satisfaite par la porte voisine.
+ */
+internal fun progresDeLaCoquille(): String =
+    sansCommentaires(blocApres("composable(AppDestination.PROGRESS.route)"))
+
 /** Le texte privé de ses lignes de commentaire — celles qui commencent par `//`. */
 internal fun sansCommentaires(texte: String): String =
     texte.lines().filterNot { it.trimStart().startsWith("//") }.joinToString("\n")

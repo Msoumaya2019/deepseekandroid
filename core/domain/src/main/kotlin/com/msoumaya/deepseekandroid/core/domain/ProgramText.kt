@@ -66,6 +66,16 @@ object ProgramText {
     /** Initiale du jour, en majuscules, pour la pastille d'une séance : « MAR. ». */
     fun shortWeekday(key: String): String = format(key, SHORT_WEEKDAY).uppercase(FR)
 
+    /**
+     * Trois premières lettres du jour, en minuscules, pour une barre de graphique : « lun ».
+     *
+     * C'est le seul format qui **tronque** au lieu de formater, parce que le client d'origine le
+     * fait ainsi : il demande le jour abrégé à `fr-FR` (« lun. ») puis en garde trois caractères.
+     * Les sept jours français s'écrivent en trois lettres suivies d'un point, la troncature est
+     * donc sans perte — et la reproduire évite d'inventer un format que l'original n'a pas.
+     */
+    fun weekdayInitials(key: String): String = format(key, SHORT_WEEKDAY).take(3)
+
     /** Jour et mois, pour une séance lointaine : « 12 mars ». */
     fun dayMonth(key: String): String = format(key, DAY_MONTH)
 
