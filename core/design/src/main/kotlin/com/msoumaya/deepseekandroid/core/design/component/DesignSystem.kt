@@ -54,6 +54,10 @@ import com.msoumaya.deepseekandroid.core.design.theme.AppTheme
  *
  * Remplace `Heading` : police de titre, graisse SemiBold, interligne **1,2 fois** la taille —
  * valeur explicite du dépôt d'origine, reprise telle quelle.
+ *
+ * @param lineHeight interligne explicite. `null` garde la règle du composant, soit 1,2 fois la
+ *   taille. Le seul appelant qui s'en écarte est la bande d'en-tête, dont le titre porte 35 px
+ *   pour un corps de 30 : la source y pose une valeur que le ratio ne redonne pas.
  */
 @Composable
 fun AppHeading(
@@ -61,6 +65,7 @@ fun AppHeading(
     modifier: Modifier = Modifier,
     size: TextUnit = AppTheme.typeScale.section,
     color: Color = AppTheme.colors.green,
+    lineHeight: TextUnit? = null,
 ) {
     Text(
         text = text,
@@ -68,7 +73,7 @@ fun AppHeading(
         style = TextStyle(
             color = color,
             fontSize = size,
-            lineHeight = (size.value * 1.2f).sp,
+            lineHeight = lineHeight ?: (size.value * 1.2f).sp,
             fontFamily = AppTheme.fonts.titleFamily,
             fontWeight = FontWeight.SemiBold,
         ),

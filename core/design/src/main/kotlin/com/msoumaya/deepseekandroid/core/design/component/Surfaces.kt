@@ -60,10 +60,18 @@ fun AppCard(
     bottomSpacing: Dp = AppTheme.spacing.md,
     onClick: (() -> Unit)? = null,
     background: Color = AppTheme.colors.paper,
+    /**
+     * Marge interne de la carte.
+     *
+     * Le dépôt d'origine la surchargeait écran par écran — 4 px pour une liste dont les traits
+     * doivent courir d'un bord à l'autre, 12 px pour un bandeau, 18 px pour une carte de contenu.
+     * Elle est exposée ici plutôt que laissée au parent : un `padding` posé **après** le fond
+     * rétrécirait la carte au lieu de son contenu, ce qui n'est pas la même chose.
+     */
+    padding: Dp = AppTheme.spacing.lg,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val colors = AppTheme.colors
-    val spacing = AppTheme.spacing
     val shape = RoundedCornerShape(AppTheme.radius.card)
 
     val surface = Modifier
@@ -80,7 +88,7 @@ fun AppCard(
         )
 
     Column(
-        modifier = modifier.then(surface).padding(spacing.lg),
+        modifier = modifier.then(surface).padding(padding),
         content = content,
     )
 }

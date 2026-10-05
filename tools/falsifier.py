@@ -1488,12 +1488,26 @@ CAS: list[dict] = [
         "attendus": ["AppRoutesReaderTest"],
     },
     {
-        # L'accueil n'ouvre plus le lecteur : le lecteur n'a plus aucune porte, et l'application
-        # n'a plus de Coran — sans qu'aucun autre controle ne le dise.
+        # L'accueil n'ouvre plus le lecteur. L'ancre porte le **nom de l'ecran** : le programme
+        # ouvre lui aussi le lecteur depuis la phase C, et une ancre reduite a la lambda
+        # apparaitrait deux fois — le remplacement toucherait alors un endroit qu'on n'a pas
+        # choisi.
         "nom": "memoire : l'accueil n'ouvre plus le lecteur",
         "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/AppScaffold.kt",
-        "avant": "                onOpenReader = { verseId ->\n                    navController.navigate(AppRoutes.readerRoute(verseId))\n                },",
-        "apres": "                onOpenReader = {},",
+        "avant": "            HomeScreen(\n                onOpenReader = { verseId ->\n                    navController.navigate(AppRoutes.readerRoute(verseId))\n                },",
+        "apres": "            HomeScreen(\n                onOpenReader = {},",
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["AppScaffoldReaderEntryTest"],
+    },
+    {
+        # Le programme n'ouvre plus le lecteur en lecture libre : ses lignes a venir et ses cartes
+        # sans seance deviennent des boutons morts. La compilation passe, et rien d'autre ne le
+        # dit — l'accueil garde sa porte, donc un controle portant sur le fichier entier resterait
+        # vert pour la mauvaise raison.
+        "nom": "memoire : le programme n'ouvre plus le lecteur",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/AppScaffold.kt",
+        "avant": "            ProgramScreen(\n                onOpenReader = { verseId ->\n                    navController.navigate(AppRoutes.readerRoute(verseId))\n                },",
+        "apres": "            ProgramScreen(\n                onOpenReader = {},",
         "tache": ":navigation:testDebugUnitTest",
         "attendus": ["AppScaffoldReaderEntryTest"],
     },
@@ -1699,6 +1713,86 @@ CAS: list[dict] = [
         "apres": "                    sessionGroups = emptyList(),",
         "tache": ":feature:reader:testDebugUnitTest",
         "attendus": ["ReaderScreenMarksTest"],
+    },
+    #
+    # Les cinq cas suivants couvrent l'ecran **programme**, le pivot de la phase C. Chacun
+    # epingle une decision qui, prise autrement, resterait parfaitement plausible a l'ecran :
+    # un repli qui annonce autre chose, un tri qui prend la place d'un renversement, une
+    # reprise servie sous la mauvaise identite, une seance du jour qui n'est plus celle du
+    # jour. Aucun de ces defauts ne se voit a la compilation, aucun ne leve, et aucun ne
+    # produit une valeur absurde : ils changent seulement ce que la personne lit.
+    #
+    # Les ancres sont **mono-lignes** a dessein. `jouer` decode le fichier sans normaliser les
+    # fins de ligne, alors que `precondition` les normalise : une ancre a cheval sur un saut de
+    # ligne passerait la verification puis ne remplacerait rien, et le cas conclurait « aucun
+    # test n'est tombe » sans que rien ne dise pourquoi. Le fichier est en LF aujourd'hui, mais
+    # une ancre d'une seule ligne ne depend pas de ce detail.
+    {
+        # Le couple du bas annonce « Objectif atteint » la ou la carte annonce « Aucune
+        # seance ». Les faire dire la meme chose ne casse rien et ne se voit pas : les deux
+        # absences se peignent alors pareil, alors que la source les distingue.
+        "nom": "programme : le couple du bas annonce une absence au lieu d'un objectif",
+        "fichier": "feature/program/src/main/kotlin/com/msoumaya/deepseekandroid/feature/program/ProgramRenderer.kt",
+        "avant": "?: \"Objectif atteint\",",
+        "apres": "?: \"Aucune séance\",",
+        "tache": ":feature:program:testDebugUnitTest",
+        "attendus": ["ProgramRendererTest"],
+    },
+    {
+        # La carte de revision a **deux** couples de replis, et ils ne disent pas la meme
+        # chose : « Revisions a jour » / « Aucun passage du » en haut, « A jour » / « Voir mes
+        # revisions » en bas. Confondre les deux seconds — ce que fait cette mutation — laisse
+        # la carte du bas annoncer un passage du qu'elle n'a pas, et le couple du bas perd sa
+        # raison d'etre.
+        "nom": "programme : les deux formes de la revision se confondent",
+        "fichier": "feature/program/src/main/kotlin/com/msoumaya/deepseekandroid/feature/program/ProgramRenderer.kt",
+        "avant": "?: \"Voir mes révisions\",",
+        "apres": "?: \"Aucun passage dû\",",
+        "tache": ":feature:program:testDebugUnitTest",
+        "attendus": ["ProgramRendererTest"],
+    },
+    {
+        # Une seance **reportee** redevient reprise : sa carte est un bouton mort, et le geste
+        # rouvre une seance que le programme ne propose plus. Le defaut ne se voit pas — le
+        # reste a valider existe, donc la ligne s'affiche et a l'air juste.
+        #
+        # Ce cas remplace celui qui devait viser le **refus d'une reprise de revision**. Ce refus
+        # est tenu par deux mecanismes independants : le filtre de l'appelant, qui n'admet que
+        # l'apprentissage, et la garde de `resume`, qui refuse le reste. Le premier ecarte
+        # l'enregistrement avant meme que `resume` soit appele, donc la garde est
+        # **inatteignable** — et aucune mutation d'un seul point ne peut faire tomber ce refus.
+        # Un cas qui ne tombe jamais serait pire qu'aucun cas : le comportement, lui, reste
+        # epingle par `une reprise de revision n'est pas servie`.
+        "nom": "programme : une seance reportee redevient reprise",
+        "fichier": "feature/program/src/main/kotlin/com/msoumaya/deepseekandroid/feature/program/ProgramRenderer.kt",
+        "avant": "it.id == record.id && it.status == SessionStatus.TODO",
+        "apres": "it.id == record.id",
+        "tache": ":feature:program:testDebugUnitTest",
+        "attendus": ["ProgramRendererTest"],
+    },
+    {
+        # La seance du jour devient celle qui **n'est pas** planifiee aujourd'hui : une seance
+        # en retard prend alors la place de celle du jour, et le rattrapage se vide de ce qu'il
+        # devait proposer. Le repli sur la premiere seance a venir masque une partie du defaut,
+        # ce qui le rend d'autant plus discret.
+        "nom": "programme : la seance du jour n'est plus celle d'aujourd'hui",
+        "fichier": "feature/program/src/main/kotlin/com/msoumaya/deepseekandroid/feature/program/ProgramRenderer.kt",
+        "avant": "WeeklyProgress.scheduledDate(it) == at",
+        "apres": "WeeklyProgress.scheduledDate(it) != at",
+        "tache": ":feature:program:testDebugUnitTest",
+        "attendus": ["ProgramRendererTest"],
+    },
+    {
+        # L'historique **trie** au lieu de renverser. Sur un etat range dans l'ordre du
+        # programme, les deux donnent la meme tete — mais pas le meme ordre des identifiants,
+        # et surtout pas la meme regle : un etat dont l'ordre ne serait pas l'ordre du programme
+        # ferait diverger les deux clients en silence.
+        "nom": "programme : l'historique trie au lieu de renverser",
+        "fichier": "feature/program/src/main/kotlin/com/msoumaya/deepseekandroid/feature/program/ProgramRenderer.kt",
+        "avant": ".takeLast(HISTORY_LIMIT)",
+        "apres": ".takeLast(HISTORY_LIMIT).sortedBy { it.id }",
+        "tache": ":feature:program:testDebugUnitTest",
+        "attendus": ["ProgramRendererTest"],
     },
 ]
 

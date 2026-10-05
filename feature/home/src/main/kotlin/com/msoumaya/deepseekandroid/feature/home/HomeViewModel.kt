@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.msoumaya.deepseekandroid.core.data.AppContainer
 import com.msoumaya.deepseekandroid.core.data.QuranState
+import com.msoumaya.deepseekandroid.core.data.quranFailureMessage
 import com.msoumaya.deepseekandroid.core.data.repository.UserRepository
 import com.msoumaya.deepseekandroid.core.domain.Dates
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -68,10 +69,13 @@ class HomeViewModel(
     }
 
     companion object {
-        /** Message affiché quand le référentiel coranique n'a pas pu être chargé. */
-        internal fun failureMessage(cause: Throwable): String =
-            "Le référentiel coranique n'a pas pu être chargé : " +
-                (cause.message ?: cause::class.simpleName.orEmpty())
+        /**
+         * Message affiché quand le référentiel coranique n'a pas pu être chargé.
+         *
+         * Délégué à `core:data`, à côté de l'état qu'il décrit : l'écran de programme pose la
+         * même phrase, et deux copies finiraient par décrire la même panne de deux façons.
+         */
+        internal fun failureMessage(cause: Throwable): String = quranFailureMessage(cause)
 
         /** Fabrique rattachée au conteneur, pour que l'écran n'ait pas à le connaître. */
         fun factory(container: AppContainer): ViewModelProvider.Factory =

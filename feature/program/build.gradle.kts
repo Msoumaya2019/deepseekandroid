@@ -32,10 +32,16 @@ kotlin {
 }
 
 dependencies {
-    // Ce module ne depend que du design et du modele : il ne connait ni le reseau, ni le
-    // stockage, ni les autres fonctionnalites. Quand il aura besoin de lire des donnees, il
-    // declarera `core:data` — comme `feature:home` — et rien d'autre.
+    // Ce module ne depend que du design, du domaine et du depot local : il ne connait ni le
+    // reseau, ni les autres fonctionnalites. Le programme est le premier ecran qui lit des
+    // donnees ici, d'ou `core:data` — comme `feature:home`, et rien d'autre.
     api(project(":core:design"))
+    implementation(project(":core:data"))
+
     implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.compose.material.icons.extended)
+
+    testImplementation(libs.junit)
+    testImplementation(libs.kotlin.test)
 }

@@ -35,14 +35,33 @@ fun themeArt(theme: AppTheme): Int = when (theme) {
 }
 
 /**
- * Opacité du fond de thème.
+ * Opacités du fond de thème.
  *
- * Le dépôt d'origine superposait le fond à 0,55 sur la bande d'accueil, et à 0,68 sur la bande
- * de l'écran Coran. Un fond trop opaque rendrait le titre illisible : ces valeurs sont reprises
- * telles quelles.
+ * Le dépôt d'origine superposait le fond à 0,55 sur la bande d'accueil, et — sur les bandes
+ * compactes — à `theme==='white'?0.68:0.28`. Un fond trop opaque rendrait le titre illisible :
+ * ces trois valeurs sont reprises telles quelles.
  */
 const val ThemeArtHeroOpacity = 0.55f
+
+/** Opacité d'une bande d'en-tête compacte sur le thème **blanc**. */
 const val ThemeArtHeroCompactOpacity = 0.68f
+
+/**
+ * Opacité d'une bande d'en-tête compacte sur un thème **coloré**.
+ *
+ * La règle de la source est asymétrique, et c'est la palette colorée qui l'impose : sur ces
+ * thèmes, un fond à 0,68 passerait devant le titre au lieu de l'accompagner.
+ */
+const val ThemeArtHeroColoredOpacity = 0.28f
+
+/**
+ * Opacité retenue pour la bande d'en-tête compacte d'un thème donné.
+ *
+ * Elle est nommée parce qu'un appelant qui écrirait [ThemeArtHeroCompactOpacity] en dur se
+ * tromperait sur **quatre thèmes sur cinq** — et le défaut ne se verrait que sur eux.
+ */
+fun themeArtHeroAlpha(theme: AppTheme): Float =
+    if (theme == AppTheme.WHITE) ThemeArtHeroCompactOpacity else ThemeArtHeroColoredOpacity
 
 /** Illustration « continuer ma lecture ». */
 @DrawableRes

@@ -152,10 +152,10 @@ private fun AppNavHost(
         startDestination = AppDestination.start.route,
         modifier = modifier,
     ) {
-        // L'accueil ouvre le lecteur : c'est le seul point d'entrée aujourd'hui, l'écran
-        // « Coran » n'étant pas encore construit. Le verset de la carte « Continuer » est
-        // **passé** plutôt que relu par la route : lui seul sait ce qui a été demandé, et c'est
-        // ce verset-là qui sera retenu en refermant — le relire ailleurs ferait mémoriser le
+        // L'accueil ouvre le lecteur, comme le programme depuis la phase C ; l'écran « Coran »,
+        // lui, n'est pas encore construit. Le verset de la carte « Continuer » est **passé**
+        // plutôt que relu par la route : lui seul sait ce qui a été demandé, et c'est ce
+        // verset-là qui sera retenu en refermant — le relire ailleurs ferait mémoriser le
         // premier verset de la page, et l'on reviendrait un verset plus haut à chaque fois.
         composable(AppDestination.HOME.route) {
             HomeScreen(
@@ -180,7 +180,38 @@ private fun AppNavHost(
             )
         }
         composable(AppDestination.QURAN.route) { QuranScreen() }
-        composable(AppDestination.PROGRAM.route) { ProgramScreen() }
+        // Le programme est le **pivot** de la phase C : ses cartes ouvrent le lecteur, et par
+        // deux chemins distincts — une séance, qui a une progression à valider, et une lecture
+        // libre, qui n'en a pas. Un rappel laissé de côté ne se verrait nulle part : la
+        // compilation passe, et la carte devient un bouton qui ne fait rien.
+        composable(AppDestination.PROGRAM.route) {
+            ProgramScreen(
+                onOpenReader = { verseId ->
+                    navController.navigate(AppRoutes.readerRoute(verseId))
+                },
+                // Même règle qu'à l'accueil : la séance voyage avec son identifiant **et** ses
+                // bornes. C'est `StudySession.plannedRange` qui redonne la priorité à la séance
+                // présente dans l'état ; les bornes servent tant que l'état n'est pas arrivé.
+                onOpenStudy = { request ->
+                    navController.navigate(
+                        AppRoutes.readerRoute(
+                            verseId = request.range.start,
+                            sessionId = request.sessionId,
+                            from = request.range.start,
+                            to = request.range.end,
+                        ),
+                    )
+                },
+                // Le crayon de la carte « Mon objectif ». `launchSingleTop` : appuyer deux fois
+                // sur le crayon ne doit pas empiler deux écrans d'objectif.
+                onOpenGoal = { navController.navigate(AppRoutes.GOAL) { launchSingleTop = true } },
+                // `onOpenReviews` reste à sa valeur par défaut, et c'est **délibéré** : la route
+                // du tableau de bord est déjà nommée (`AppRoutes.REVIEW`) mais aucun écran ne la
+                // sert encore, et la déclarer ici ferait planter la première navigation — c'est
+                // la règle posée plus haut. Le rappel sera branché avec `ReviewDashboard`, dans
+                // cette même phase.
+            )
+        }
         composable(AppDestination.PROGRESS.route) { ProgressScreen() }
         composable(AppDestination.FRIENDS.route) { SocialScreen() }
 

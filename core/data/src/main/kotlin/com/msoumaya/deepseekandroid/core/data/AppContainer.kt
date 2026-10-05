@@ -263,6 +263,17 @@ sealed interface QuranState {
 }
 
 /**
+ * Message affiché quand le référentiel coranique n'a pas pu être chargé.
+ *
+ * Il vit **ici**, à côté de l'état qu'il décrit, parce que deux écrans le posent désormais —
+ * l'accueil et le programme. Deux copies d'une même phrase finiraient par décrire la même panne
+ * de deux façons, et c'est la copie qu'on ne relit pas qui resterait.
+ */
+fun quranFailureMessage(cause: Throwable): String =
+    "Le référentiel coranique n'a pas pu être chargé : " +
+        (cause.message ?: cause::class.simpleName.orEmpty())
+
+/**
  * Le conteneur, accessible depuis n'importe quel `@Composable`.
  *
  * `staticCompositionLocalOf` et non `compositionLocalOf` : la valeur est posée une fois au

@@ -2,6 +2,7 @@ package com.msoumaya.deepseekandroid.feature.home
 
 import com.msoumaya.deepseekandroid.core.domain.Dates
 import com.msoumaya.deepseekandroid.core.domain.Program
+import com.msoumaya.deepseekandroid.core.domain.ProgramText
 import com.msoumaya.deepseekandroid.core.domain.Quran
 import com.msoumaya.deepseekandroid.core.domain.Review
 import com.msoumaya.deepseekandroid.core.domain.StudyProgressCalculator
@@ -138,9 +139,12 @@ internal object HomeRenderer {
 
     private data class Activity(val dates: Set<String>, val streak: Int)
 
-    /** Libellé du nombre de versets d'une plage, au pluriel si nécessaire. */
-    internal fun countText(range: Range): String {
-        val count = range.end - range.start + 1
-        return "$count verset${if (range.end == range.start) "" else "s"}"
-    }
+    /**
+     * Libellé du nombre de versets d'une plage, au pluriel si nécessaire.
+     *
+     * Délégué à `ProgramText` : l'accueil et le programme écrivent le même compte, et deux
+     * copies de cette phrase finiraient par accorder différemment. Le dépôt d'origine en avait
+     * une seule, au niveau du module (`MainScreens.tsx:16`), partagée par les deux écrans.
+     */
+    internal fun countText(range: Range): String = ProgramText.verseCount(range)
 }

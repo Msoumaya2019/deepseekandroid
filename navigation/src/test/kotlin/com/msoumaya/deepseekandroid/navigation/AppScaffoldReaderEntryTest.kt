@@ -38,10 +38,37 @@ class AppScaffoldReaderEntryTest {
         // Le verset n'est pas décoratif : c'est lui qui sera retenu en refermant. Une route nue
         // ferait ouvrir le lecteur à la page mémorisée, et mémoriserait le premier verset de
         // cette page — donc l'accueil reviendrait un cran plus haut à chaque aller-retour.
+        //
+        // L'assertion porte sur le bloc de **l'accueil**, et non sur le fichier entier : le
+        // programme ouvre lui aussi le lecteur. Une recherche sur tout le fichier resterait verte
+        // si l'accueil perdait son branchement — elle trouverait celui du programme, et le
+        // contrôle ne dirait plus ce qu'il annonce.
         assertTrue(
-            sourceDeLaCoquille().contains("navController.navigate(AppRoutes.readerRoute(verseId))"),
+            accueilDeLaCoquille().contains("navController.navigate(AppRoutes.readerRoute(verseId))"),
             "L'accueil n'ouvre plus le lecteur sur le verset demandé : le verset serait perdu, " +
                 "et la position mémorisée se décalerait à chaque ouverture.",
+        )
+    }
+
+    @Test
+    fun `le programme ouvre lui aussi le lecteur`() {
+        // Le programme est le pivot de la phase C : la carte du jour, les reprises, le rattrapage
+        // et les lignes à venir mènent tous au lecteur. Deux chemins distincts y sont posés, et
+        // les confondre ferait perdre la progression : une lecture libre n'a rien à valider,
+        // alors qu'une séance en a une. Sans ces branchements, ces cartes seraient des boutons
+        // morts — la compilation passerait, et rien d'autre ne le dirait.
+        val programme = sourceDeLaCoquille().substringAfter("ProgramScreen(")
+
+        assertTrue(
+            programme.contains("onOpenReader = { verseId ->"),
+            "Le programme n'ouvre plus le lecteur en lecture libre : ses lignes à venir et ses " +
+                "cartes sans séance deviendraient des boutons morts.",
+        )
+        assertTrue(
+            programme.contains("onOpenStudy = { request ->"),
+            "Le programme n'ouvre plus la séance : la carte du jour, les reprises et le " +
+                "rattrapage ne mèneraient plus à la lecture, et la progression ne serait plus " +
+                "validable.",
         )
     }
 
@@ -107,4 +134,15 @@ class AppScaffoldReaderEntryTest {
             )
         return fichier.readText()
     }
+
+    /**
+     * Le bloc de l'accueil seul : ce qui suit `HomeScreen(`.
+     *
+     * Le contrôle porte sur **l'accueil**, et non sur le fichier : depuis la phase C le programme
+     * ouvre lui aussi le lecteur, avec la même lambda. Chercher dans tout le fichier ferait donc
+     * passer le contrôle pour la mauvaise raison — il trouverait le branchement du programme
+     * alors que celui de l'accueil aurait disparu.
+     */
+    private fun accueilDeLaCoquille(): String =
+        sourceDeLaCoquille().substringAfter("HomeScreen(")
 }
