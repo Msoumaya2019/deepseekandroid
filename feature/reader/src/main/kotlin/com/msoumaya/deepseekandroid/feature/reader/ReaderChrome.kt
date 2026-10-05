@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.CenterFocusStrong
 import androidx.compose.material.icons.outlined.ChevronLeft
 import androidx.compose.material.icons.outlined.ChevronRight
@@ -26,10 +28,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.msoumaya.deepseekandroid.core.design.component.AppIconButton
 import com.msoumaya.deepseekandroid.core.design.theme.AppTheme
+import com.msoumaya.deepseekandroid.core.domain.BookmarksText
 import com.msoumaya.deepseekandroid.core.domain.ReaderOptionsText
 import kotlin.math.roundToInt
 
@@ -51,6 +55,14 @@ import kotlin.math.roundToInt
  *   propose pas : le lecteur ne connaît ni les sources ni le stockage, il demande.
  * @param onOpenOptions ouvre la feuille « Plus d'options ». `null` quand l'appelant n'a aucune
  *   destination à y proposer : le bouton est alors absent plutôt que présent et sans effet.
+ * @param onOpenBookmarks ouvre le panneau des marques-pages. `null` quand l'appelant ne sait pas
+ *   enregistrer de signet : le bouton est alors **absent**, comme les autres. Il ouvre le
+ *   **panneau** et non directement le mode de pose — c'est le détour du client d'origine, et
+ *   c'est lui qui empêche qu'un appui malencontreux arme le geste.
+ * @param bookmarkActive vrai pendant le mode de pose : le bouton reçoit alors un fond doux, ce
+ *   qui est la marque d'activité de la barre flottante d'origine. L'autre cas de l'original —
+ *   le panneau ouvert — ne s'applique pas ici : notre panneau est une fenêtre de dialogue, donc
+ *   la coquille est derrière son voile et n'est pas visible.
  */
 @Composable
 internal fun ReaderChrome(
@@ -67,6 +79,8 @@ internal fun ReaderChrome(
     onOpenSourcePicker: (() -> Unit)? = null,
     onListen: (() -> Unit)? = null,
     onOpenOptions: (() -> Unit)? = null,
+    onOpenBookmarks: (() -> Unit)? = null,
+    bookmarkActive: Boolean = false,
 ) {
     val colors = AppTheme.colors
 
@@ -130,6 +144,25 @@ internal fun ReaderChrome(
                     icon = Icons.Outlined.Headphones,
                     label = "Écouter cette page",
                     onClick = onListen,
+                )
+            }
+
+            // Poser un signet, ou retrouver ceux qu'on a posés. Le libellé est celui du
+            // panneau : c'est le même mot, et deux chaînes pour la même chose finiraient par
+            // diverger. Absent quand l'appelant ne sait pas enregistrer de signet.
+            if (onOpenBookmarks != null) {
+                AppIconButton(
+                    icon = if (bookmarkActive) {
+                        Icons.Filled.Bookmark
+                    } else {
+                        Icons.Outlined.BookmarkBorder
+                    },
+                    label = BookmarksText.PANEL_TITLE,
+                    onClick = onOpenBookmarks,
+                    // L'état actif est un **fond**, et non une teinte : c'est ce que fait la
+                    // barre d'origine, qui pose `colors.soft` derrière l'action sélectionnée.
+                    // Changer la couleur de l'icône inventerait un autre langage visuel.
+                    background = if (bookmarkActive) colors.soft else Color.Transparent,
                 )
             }
 

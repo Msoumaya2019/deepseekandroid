@@ -125,6 +125,11 @@ fun AppSectionHeader(
  *
  * Remplace `IconButton`. Le libellé n'est pas affiché : il sert de description pour TalkBack,
  * ce que le dépôt d'origine faisait déjà avec `accessibilityLabel`.
+ *
+ * @param background fond du bouton, transparent par défaut. Il sert à marquer une action
+ *   **active** : le client d'origine pose `colors.soft` derrière l'action sélectionnée de sa
+ *   barre flottante, sans changer la teinte de l'icône. Transparent, il ne change rien aux
+ *   appelants qui ne marquent aucun état.
  */
 @Composable
 fun AppIconButton(
@@ -135,11 +140,15 @@ fun AppIconButton(
     enabled: Boolean = true,
     tint: Color = AppTheme.colors.green,
     size: Dp = 44.dp,
+    // Fond **facultatif** : transparent par defaut, donc les appelants qui ne marquent aucun
+    // etat gardent exactement le rendu d'avant. Il sert a signaler une action **active**.
+    background: Color = Color.Transparent,
 ) {
     Box(
         modifier = modifier
             .size(size)
             .clip(RoundedCornerShape(16.dp))
+            .background(background)
             .clickable(enabled = enabled, role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {

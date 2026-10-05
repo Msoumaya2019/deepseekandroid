@@ -575,6 +575,144 @@ CAS: list[dict] = [
         "tache": ":core:model:test :core:domain:test",
         "attendus": ["MushafSourceKeyTest", "BookmarksScreenRulesTest"],
     },
+    {
+        # Le mode arme n'est plus exige pour enregistrer : en lecture normale, chaque appui
+        # poserait un signet au lieu de masquer la coquille. Le lecteur resterait utilisable, la
+        # page defilerait — et le seul symptome serait une liste de signets qui se remplit toute
+        # seule. Aucun autre controle ne le voit.
+        "nom": "lecteur : le mode de pose n'est plus exige pour enregistrer",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/ReaderScreen.kt",
+        "avant": "bookmarkMode && save != null -> {",
+        "apres": "save != null -> {",
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": ["ReaderBookmarkWiringTest"],
+    },
+    {
+        # La garde saute : un appui sur le fond de la page — qui ne designe aucun verset — est
+        # traite comme un verset, et un signet est pose sur le premier d'entre eux. Le mode se
+        # referme en annoncant « Marque-page enregistre ».
+        #
+        # La mutation porte sur **deux** lignes, et c'est mesure : remplacer la seule garde par
+        # `if (true) {` ne compile pas, `touched` restant de type `Int?` alors que `save` attend
+        # un `Int`. Un cas qui ne compile pas mesure le compilateur, pas la regle — d'ou le
+        # `?: 1`, qui rend la mutation compilable tout en supprimant la garde.
+        "nom": "lecteur : un appui qui ne designe aucun verset enregistre quand meme",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/ReaderScreen.kt",
+        "avant": "if (touched != null) {\n"
+                 "                                            save(touched)",
+        "apres": "if (true) {\n"
+                 "                                            save(touched ?: 1)",
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": ["ReaderBookmarkWiringTest"],
+    },
+    {
+        # Le verset trouve n'est plus rapporte a l'appelant : rien n'est enregistre, et la notice
+        # annonce pourtant la reussite. La page reste parfaitement utilisable, donc rien ne
+        # pousse a chercher.
+        "nom": "lecteur : le verset touche n'est plus rapporte",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/ReaderScreen.kt",
+        "avant": "save(touched)",
+        "apres": "Unit",
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": ["ReaderBookmarkWiringTest"],
+    },
+    {
+        # Armer le mode de pose sans refermer le panneau : le voile de la fenetre de dialogue
+        # reste devant la page qu'on demande de toucher. Le mode est arme, et impossible a
+        # satisfaire — l'impasse la plus probable de tout ce branchement.
+        "nom": "lecteur : armer le mode de pose ne referme plus le panneau",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/ReaderScreen.kt",
+        "avant": "                    panel = ReaderPanel.NONE\n                    bookmarkMode = true",
+        "apres": "                    bookmarkMode = true",
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": ["ReaderBookmarkWiringTest"],
+    },
+    {
+        # La coquille ne recoit plus l'ouverture des signets : le bouton disparait, puisque sa
+        # presence est conditionnee par cette destination. Rien d'autre ne le signale — la
+        # compilation passe, et le panneau n'a simplement plus de porte d'entree.
+        "nom": "lecteur : la coquille ne recoit plus l'ouverture des signets",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/ReaderScreen.kt",
+        "avant": "onOpenBookmarks = openBookmarks,",
+        "apres": "onOpenBookmarks = null,",
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": ["ReaderBookmarkWiringTest"],
+    },
+    {
+        # Le bouton perd la marque d'activite : en mode de pose, plus rien ne dit que la page
+        # attend un verset a toucher. Le geste fonctionne toujours — c'est ce qui rend la faute
+        # invisible a l'oeil comme au test de comportement.
+        "nom": "lecteur : le bouton ne marque plus l'activite",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/ReaderChrome.kt",
+        "avant": "background = if (bookmarkActive) colors.soft else Color.Transparent,",
+        "apres": "background = Color.Transparent,",
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": ["ReaderBookmarkWiringTest"],
+    },
+    {
+        # Le signet perd la source de sa page. Pour les 56 versets sur 6 236 qui changent de page
+        # entre les deux decoupages, il se rouvre sur la page voisine : la page s'affiche, elle
+        # n'est simplement pas la bonne. Le domaine reste vert partout ailleurs.
+        "nom": "route : le signet perd la source de sa page",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/ReaderRoute.kt",
+        "avant": "sourcePage = source.persistedKey to page,",
+        "apres": "sourcePage = \"traditional\" to page,",
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["ReaderRouteBookmarkTest"],
+    },
+    {
+        # Le de-zoom est oublie : sur une page agrandie, le doigt designe un verset d'autant plus
+        # eloigne que l'agrandissement est fort. L'erreur ne se lit pas comme un calcul faux mais
+        # comme un verset faux — la fiche en decrit un, le signet en pose un autre, et les deux
+        # sont plausibles.
+        "nom": "toucher : le de-zoom est oublie avant de chercher le verset",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/ReaderTouch.kt",
+        "avant": "val unzoomedX = (x - zoom.x) / scale",
+        "apres": "val unzoomedX = x - zoom.x",
+        "tache": ":core:domain:test",
+        "attendus": ["ReaderTouchTest"],
+    },
+    {
+        # Le decentrage est oublie : la page est centree dans un espace plus large qu'elle, et
+        # l'ecart n'est pas compte dans les rectangles. Le doigt designe alors un verset decale
+        # de la marge — faux de quelques lignes, donc faux de facon credible.
+        "nom": "toucher : le decentrage est oublie avant de chercher le verset",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/ReaderTouch.kt",
+        "avant": "x = unzoomedX - (availableWidth - pageWidth) / 2.0,",
+        "apres": "x = unzoomedX,",
+        "tache": ":core:domain:test",
+        "attendus": ["ReaderTouchTest"],
+    },
+    {
+        # La confirmation l'emporte sur l'instruction : on demande de toucher un verset sous un
+        # message qui annonce que c'est deja fait. La regle est une ternaire d'ordre, et c'est
+        # precisement l'ordre qui est faux ici.
+        "nom": "signets : la confirmation l'emporte sur l'instruction de pose",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/BookmarksText.kt",
+        "avant": "    fun notice(placing: Boolean, saved: Boolean): String? = when {\n"
+                 "        placing -> PLACE_NOTICE\n"
+                 "        saved -> SAVED_NOTICE\n"
+                 "        else -> null\n"
+                 "    }",
+        "apres": "    fun notice(placing: Boolean, saved: Boolean): String? = when {\n"
+                 "        saved -> SAVED_NOTICE\n"
+                 "        placing -> PLACE_NOTICE\n"
+                 "        else -> null\n"
+                 "    }",
+        "tache": ":core:domain:test",
+        "attendus": ["BookmarksPanelTest"],
+    },
+    {
+        # Le panneau ne filtre plus ses entrees : il propose les deux destinations meme quand
+        # aucune n'est branchee. L'entree « Mes marques-pages » se refermerait alors sur rien —
+        # et le bouton de la coquille s'afficherait pour un panneau vide.
+        "nom": "signets : le panneau ne filtre plus ses entrees",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/BookmarksText.kt",
+        "avant": "fun panelRows(available: Set<PanelAction>): List<PanelRow> = PANEL.filter { it.action in available }",
+        "apres": "fun panelRows(available: Set<PanelAction>): List<PanelRow> = PANEL",
+        "tache": ":core:domain:test",
+        "attendus": ["BookmarksPanelTest"],
+    },
 ]
 
 

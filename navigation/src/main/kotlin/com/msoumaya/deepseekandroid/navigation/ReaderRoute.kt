@@ -151,6 +151,24 @@ fun ReaderRoute(
                 runCatching { container.audioSettings.save(settings, reciterId) }
             }
         },
+        // Poser un signet : la règle est dans `core:domain`, l'écriture ici. La page
+        // notée est celle de la **source affichée** — c'est ce qui permettra de rouvrir
+        // le signet à la bonne page si la présentation change, les deux découpages ne
+        // plaçant pas les mêmes versets au même endroit. Un disque plein ne doit pas
+        // emporter le lecteur : le signet est perdu, mais l'écran reste utilisable.
+        onSaveBookmark = { verseId ->
+            scope.launch {
+                runCatching {
+                    container.userState.mutate { state ->
+                        Bookmarks.saveBookmark(
+                            state = state,
+                            id = verseId,
+                            sourcePage = source.persistedKey to page,
+                        )
+                    }
+                }
+            }
+        },
         bookmarkIds = bookmarkIds,
         difficultIds = difficultIds,
     )

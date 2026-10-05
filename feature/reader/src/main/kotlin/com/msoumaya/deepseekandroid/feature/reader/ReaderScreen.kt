@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -26,7 +27,9 @@ import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -38,6 +41,7 @@ import com.msoumaya.deepseekandroid.core.design.theme.AppTheme
 import com.msoumaya.deepseekandroid.core.domain.Audio
 import com.msoumaya.deepseekandroid.core.domain.AudioCount
 import com.msoumaya.deepseekandroid.core.domain.AudioSession
+import com.msoumaya.deepseekandroid.core.domain.BookmarksText
 import com.msoumaya.deepseekandroid.core.domain.MushafSourceNavigation
 import com.msoumaya.deepseekandroid.core.domain.PageNavigation
 import com.msoumaya.deepseekandroid.core.domain.Quran
@@ -45,6 +49,7 @@ import com.msoumaya.deepseekandroid.core.domain.ReaderData
 import com.msoumaya.deepseekandroid.core.domain.ReaderGesture
 import com.msoumaya.deepseekandroid.core.domain.ReaderLayout
 import com.msoumaya.deepseekandroid.core.domain.ReaderOptionsText
+import com.msoumaya.deepseekandroid.core.domain.ReaderTouch
 import com.msoumaya.deepseekandroid.core.domain.ReaderZoomGeometry
 import com.msoumaya.deepseekandroid.core.domain.TranslationPanel
 import com.msoumaya.deepseekandroid.core.model.MushafPageSource
@@ -52,6 +57,7 @@ import com.msoumaya.deepseekandroid.core.model.MushafSource
 import com.msoumaya.deepseekandroid.core.model.ReaderZoom
 import com.msoumaya.deepseekandroid.core.model.RepeatMode
 import com.msoumaya.deepseekandroid.core.model.Surah
+import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
 /** Le moushaf de Médine compte 604 pages. Sert de repli si le référentiel n'est pas chargé. */
@@ -106,11 +112,12 @@ private const val DEFAULT_TOTAL_PAGES = 604
  *
  * ## Ce qui viendra, et où
  *
- * Ce qui **reste** : la coquille d'étude — l'en-tête de séance et ses repères de marge,
- * qui supposent une séance ouverte — et le **mode** signet, c'est-à-dire poser un signet en
- * touchant un verset. Afficher les marques est fait ; les poser ne l'est pas. Chacune de
- * ces lignes s'ajoutera en passant sa destination à `ReaderOptionsSheet` : tant qu'elle vaut
- * `null`, la ligne ne s'affiche pas, et rien ne ment à l'écran.
+ * Ce qui **reste** : la coquille d'étude — l'en-tête de séance et ses repères de marge, qui
+ * supposent une séance ouverte — et l'**écran** des signets, c'est-à-dire la liste de ceux qu'on
+ * a posés. Le mode de pose, lui, est en place : la coquille ouvre le panneau des marques-pages,
+ * sa première entrée arme le geste, et le verset touché est rapporté à l'appelant, seul à savoir
+ * où l'enregistrer. La seconde entrée attend son écran et disparaît en attendant — une entrée
+ * qui ne mène nulle part n'est pas affichée.
  *
  * @param initialPage page ouverte au lancement. Bornée au moushaf.
  * @param source la source coranique affichée. Elle décide du **découpage** des pages : deux
@@ -134,6 +141,10 @@ private const val DEFAULT_TOTAL_PAGES = 604
  *   signet en marge. Vide par défaut — un appelant qui ne connaît pas les signets n'en
  *   dessine aucun.
  * @param difficultIds les versets marqués difficiles, quelle qu'en soit l'origine.
+ * @param onSaveBookmark enregistre un signet sur le verset touché. `null` quand l'appelant ne
+ *   sait pas le faire : ni le bouton de la coquille, ni l'entrée « Placer un marque-page » du
+ *   panneau n'existent alors.
+ * @param onOpenBookmarks ouvre la liste des signets. `null` tant qu'elle n'est pas écrite.
  */
 @Composable
 fun ReaderScreen(
@@ -147,6 +158,13 @@ fun ReaderScreen(
     initialSettings: AudioSession = AudioSession(),
     initialReciterId: String? = null,
     onAudioSettingsChanged: (AudioSession, String) -> Unit = { _, _ -> },
+    // Le verset à mettre en signet, rapporté à l'appelant : c'est le seul qui connaisse le
+    // conteneur, donc le seul qui puisse l'enregistrer. `null` quand il ne le sait pas — le
+    // panneau ne propose alors pas de poser de signet, et le bouton de la coquille disparaît.
+    onSaveBookmark: ((Int) -> Unit)? = null,
+    // Ouvre l'écran des signets. `null` tant que cet écran n'existe pas : l'entrée du panneau
+    // est alors retirée au lieu de mener nulle part.
+    onOpenBookmarks: (() -> Unit)? = null,
     bookmarkIds: Set<Int> = emptySet(),
     difficultIds: Set<Int> = emptySet(),
 ) {
@@ -166,6 +184,25 @@ fun ReaderScreen(
     // second rouvre la première. Deux fenêtres empilées donneraient deux voiles superposés et
     // un retour arrière qui ne rendrait pas la main au bon endroit.
     var panel by rememberSaveable { mutableStateOf(ReaderPanel.NONE) }
+
+    // Le mode de pose, et la confirmation qui le suit.
+    //
+    // Le mode est **sauvegardé** : une rotation ne doit pas désarmer un geste que la personne
+    // vient d'armer — elle toucherait un verset pour le marquer, et la coquille se masquerait
+    // à la place. La confirmation, elle, ne l'est pas : c'est un message transitoire, et son
+    // délai meurt avec l'écran, comme le `setTimeout` du client d'origine.
+    var bookmarkMode by rememberSaveable { mutableStateOf(false) }
+    var savedNotice by remember { mutableStateOf(false) }
+
+    // La confirmation s'efface toute seule. La **durée** vit à côté du mot qu'elle gouverne
+    // (`BookmarksText.SAVED_NOTICE_MS`) ; la règle d'affichage, elle, ne connaît pas d'horloge —
+    // c'est ce qui la rend éprouvable sans attendre.
+    LaunchedEffect(savedNotice) {
+        if (savedNotice) {
+            delay(BookmarksText.SAVED_NOTICE_MS)
+            savedNotice = false
+        }
+    }
 
     // Le lecteur audio vit aussi longtemps que l'écran : c'est la portée qui décide, et
     // `DisposableEffect` libère le lecteur natif quand on quitte. Sans service d'avant-plan,
@@ -243,6 +280,24 @@ fun ReaderScreen(
     } else {
         null
     }
+
+    // Les entrées du panneau des marques-pages réellement branchées. Le panneau n'est proposé
+    // que s'il en a au moins une : sans enregistrement branché, le bouton de la coquille serait
+    // une impasse, et le panneau se réduirait à son titre.
+    val bookmarkActions: Set<BookmarksText.PanelAction> = buildSet {
+        if (onSaveBookmark != null) add(BookmarksText.PanelAction.PLACE)
+        if (onOpenBookmarks != null) add(BookmarksText.PanelAction.OPEN_LIST)
+    }
+    val openBookmarks: (() -> Unit)? = if (BookmarksText.isPanelUseful(bookmarkActions)) {
+        { panel = ReaderPanel.BOOKMARKS }
+    } else {
+        null
+    }
+
+    // La notice au-dessus de la page : l'instruction du mode de pose, ou la confirmation d'un
+    // signet enregistré. La règle est dans `BookmarksText` — ici, on ne fait que lui dire si le
+    // mode est armé et si la confirmation est encore d'actualité.
+    val notice: String? = BookmarksText.notice(placing = bookmarkMode, saved = savedNotice)
 
     // Changer de page remet le zoom à la page entière et ferme la fiche du verset : garder
     // l'agrandissement d'une autre page n'aurait aucun sens, et une fiche ouverte décrirait un
@@ -354,34 +409,66 @@ fun ReaderScreen(
                                     height = pageHeight,
                                 )
                             },
-                            onTap = {
-                                // Une fiche de verset ouverte se ferme au premier appui :
-                                // c'est ce que la fiche annonce, et un appui qui ne ferait
-                                // que masquer la coquille laisserait la fiche en place.
-                                if (verseState.value != null) {
-                                    verseState.value = null
-                                } else {
-                                    chromeState.value = !chromeState.value
+                            onTap = { position ->
+                                // Le rappel est lu une fois : c'est lui qui décide si l'appui
+                                // peut enregistrer quelque chose. Le mode de pose n'est armable
+                                // que si l'enregistrement est branché — l'entrée du panneau
+                                // n'existe que dans ce cas — et l'écrire ici rend l'invariant
+                                // visible plutôt que de s'y fier.
+                                val save = onSaveBookmark
+                                when {
+                                    // En mode de pose, l'appui a un sens **déclaré** : il
+                                    // désigne le verset à marquer. Un appui qui ne désigne aucun
+                                    // verset ne fait rien et laisse le mode armé — c'est ce que
+                                    // dit la notice, et enregistrer autre chose serait pire que
+                                    // de ne rien faire.
+                                    bookmarkMode && save != null -> {
+                                        val current = zoomState.value
+                                        val shown = currentPage.value
+                                        val touched = ReaderTouch.verseAt(
+                                            x = position.x.toDouble(),
+                                            y = position.y.toDouble(),
+                                            zoom = current,
+                                            availableWidth = availableWidth.toDouble(),
+                                            availableHeight = availableHeight.toDouble(),
+                                            pageWidth = pageWidth.toDouble(),
+                                            pageHeight = pageHeight.toDouble(),
+                                            rows = shown.rows,
+                                            sourceWidth = shown.sourceWidth,
+                                            sourceHeight = shown.sourceHeight,
+                                        )
+                                        if (touched != null) {
+                                            save(touched)
+                                            bookmarkMode = false
+                                            savedNotice = true
+                                        }
+                                    }
+
+                                    // Une fiche de verset ouverte se ferme au premier appui :
+                                    // c'est ce que la fiche annonce, et un appui qui ne ferait
+                                    // que masquer la coquille laisserait la fiche en place.
+                                    verseState.value != null -> verseState.value = null
+
+                                    else -> chromeState.value = !chromeState.value
                                 }
                             },
                             onLongPress = { position ->
                                 // Le doigt est dans le repère de l'écran, le verset se cherche
-                                // dans celui de la page. Il faut donc retirer le zoom **et** le
-                                // centrage, sinon un appui sur une page agrandie désignerait le
-                                // mauvais verset — et la fiche afficherait une autre traduction.
-                                val current = zoomState.value
-                                val unzoomedX = (position.x - current.x) / current.scale
-                                val unzoomedY = (position.y - current.y) / current.scale
+                                // dans celui de la page : le dé-zoom, le dé-centrage et le
+                                // passage à l'espace de la source sont la règle de
+                                // `ReaderTouch`, éprouvée dans `core:domain`. Elle est partagée
+                                // avec le mode de pose, qui fait exactement le même calcul — et
+                                // deux copies auraient fini par désigner deux versets différents.
                                 val shown = currentPage.value
-                                verseState.value = ReaderData.verseAtImagePoint(
+                                verseState.value = ReaderTouch.verseAt(
+                                    x = position.x.toDouble(),
+                                    y = position.y.toDouble(),
+                                    zoom = zoomState.value,
+                                    availableWidth = availableWidth.toDouble(),
+                                    availableHeight = availableHeight.toDouble(),
+                                    pageWidth = pageWidth.toDouble(),
+                                    pageHeight = pageHeight.toDouble(),
                                     rows = shown.rows,
-                                    x = (unzoomedX - (availableWidth - pageWidth) / 2f).toDouble(),
-                                    y = (unzoomedY - (availableHeight - pageHeight) / 2f).toDouble(),
-                                    width = pageWidth.toDouble(),
-                                    height = pageHeight.toDouble(),
-                                    // Les rectangles sont exprimés dans l'espace de la source :
-                                    // les rapporter à celui de l'autre source désignerait un
-                                    // verset voisin, sur une page pourtant correcte.
                                     sourceWidth = shown.sourceWidth,
                                     sourceHeight = shown.sourceHeight,
                                 )
@@ -411,6 +498,24 @@ fun ReaderScreen(
                     bookmarkIds = bookmarkIds,
                     difficultIds = difficultIds,
                 )
+
+                // La notice du mode de pose, au-dessus de la page et non dans la coquille :
+                // elle décrit un geste à faire **sur la page**, et une coquille masquée
+                // l'emporterait avec elle. Un `Text` sans gestionnaire de pointeurs ne capte
+                // aucun toucher : le verset qu'elle invite à toucher reste atteignable dessous.
+                notice?.let { text ->
+                    Text(
+                        text = text,
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(top = 8.dp, start = 10.dp, end = 10.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(colors.soft)
+                            .padding(10.dp),
+                        color = colors.green,
+                        fontSize = AppTheme.typeScale.metadata,
+                    )
+                }
             }
         }
 
@@ -442,6 +547,8 @@ fun ReaderScreen(
                 onOpenSourcePicker = onOpenSourcePicker,
                 onListen = listenAction,
                 onOpenOptions = openOptions,
+                onOpenBookmarks = openBookmarks,
+                bookmarkActive = bookmarkMode,
             )
         }
     }
@@ -512,6 +619,25 @@ fun ReaderScreen(
             }
             TranslationPanelSheet(rows = rows, onClose = { panel = ReaderPanel.NONE })
         }
+
+        ReaderPanel.BOOKMARKS -> BookmarksSheet(
+            // Armer le mode de pose **referme** le panneau : c'est ce que fait le client
+            // d'origine, et sans cela le voile resterait devant la page qu'on demande de
+            // toucher.
+            onPlace = onSaveBookmark?.let {
+                {
+                    panel = ReaderPanel.NONE
+                    bookmarkMode = true
+                }
+            },
+            onOpenList = onOpenBookmarks?.let { open ->
+                {
+                    panel = ReaderPanel.NONE
+                    open()
+                }
+            },
+            onClose = { panel = ReaderPanel.NONE },
+        )
 
         ReaderPanel.SURAH -> SurahPickerScreen(
             // Un référentiel non chargé ne fait pas tomber l'écran : la première sourate est
@@ -634,6 +760,9 @@ private enum class ReaderPanel {
 
     /** La traduction française de la page. */
     TRANSLATION,
+
+    /** Les marques-pages : en poser un, ou ouvrir la liste. */
+    BOOKMARKS,
 }
 
 /**

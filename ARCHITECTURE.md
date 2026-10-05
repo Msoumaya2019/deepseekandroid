@@ -410,15 +410,15 @@ de tout le domaine — déjà testé — pour un gain nul. Elle n'est donc pas l
 | Suite | Nombre | Ce qu'elle couvre |
 |---|---|---|
 | `core:model` | 3 | les clés persistées des sources : le `@SerialName` de chacune est **lu sur le descripteur** au lieu d'être recopié dans une seconde table, et les huit valeurs sont figées par un test — ce sont elles que le client React Native écrit dans `sourcePages` |
-| `core:domain` | 369 | Coran, dates, programme, révisions, consolidations, signets, audio, file d'écoute et silences, quiz, lecteur et gestes, fusion hors ligne, file d'attente, composition de synchronisation, décision d'ouverture, messages de connexion, **libellés des écrans du lecteur** (feuille d'options, sélecteur de sourate, réglages d'écoute : titre aligné sur la ligne qui l'ouvre, vitesses en virgule française, note de marge technique, refus de la saisie libre), **règles du paquet « Coran 1441 »** (décision d'entrée, taille exacte, dimensions d'image, témoin d'installation, forme de la page selon la source, rectangles des versets, transition de source, mots du panneau), **panneau de traduction** (plage de séance prioritaire, plage ramenée au corpus au lieu de faire tomber l'écran, accord des 6 236 versets avec la traduction, référence d'un verset, titre aligné sur la ligne qui l'ouvre), **marques du lecteur** (le marqueur du professeur compte autant que celui de l'élève, un signet supprimé ne colore plus la page, une marque hors corpus est conservée telle quelle) et **priorité des teintes** (difficile, puis signet, puis lecture — l'ordre du rendu principal, quand le rendu immersif de la source ordonne autrement), et **règles de l'écran des signets** (une ligne bâtie sur le verset et non sur les champs enregistrés, un signet hors corpus **omis** au lieu de faire tomber l'écran, « Dernière reprise » **retriée**, et la page suivant le **découpage de la source affichée** : 56 versets sur 6 236 changent de page entre Médine et le paquet 1441) |
+| `core:domain` | 390 | Coran, dates, programme, révisions, consolidations, signets, audio, file d'écoute et silences, quiz, lecteur et gestes, fusion hors ligne, file d'attente, composition de synchronisation, décision d'ouverture, messages de connexion, **libellés des écrans du lecteur** (feuille d'options, sélecteur de sourate, réglages d'écoute : titre aligné sur la ligne qui l'ouvre, vitesses en virgule française, note de marge technique, refus de la saisie libre), **règles du paquet « Coran 1441 »** (décision d'entrée, taille exacte, dimensions d'image, témoin d'installation, forme de la page selon la source, rectangles des versets, transition de source, mots du panneau), **panneau de traduction** (plage de séance prioritaire, plage ramenée au corpus au lieu de faire tomber l'écran, accord des 6 236 versets avec la traduction, référence d'un verset, titre aligné sur la ligne qui l'ouvre), **marques du lecteur** (le marqueur du professeur compte autant que celui de l'élève, un signet supprimé ne colore plus la page, une marque hors corpus est conservée telle quelle) et **priorité des teintes** (difficile, puis signet, puis lecture — l'ordre du rendu principal, quand le rendu immersif de la source ordonne autrement), et **règles de l'écran des signets** (une ligne bâtie sur le verset et non sur les champs enregistrés, un signet hors corpus **omis** au lieu de faire tomber l'écran, « Dernière reprise » **retriée**, et la page suivant le **découpage de la source affichée** : 56 versets sur 6 236 changent de page entre Médine et le paquet 1441), et **le toucher de la page** (le dé-zoom puis le dé-centrage, sans quoi un appui sur une page agrandie désigne un verset d'autant plus éloigné que l'agrandissement est fort) et **les décisions du panneau des marques-pages** (quelles entrées il propose, et quelle notice l'emporte quand la pose et la confirmation se chevauchent) |
 | `core:data` | 67 | lecture locale, hors ligne, premier chargement, isolation des comptes, fichier d'état illisible, file, idempotence, remise à zéro, règle du propriétaire, **dépôt des réglages d'écoute** (premier démarrage, document complet, champ hors bornes isolé, document illisible mis de côté, relecture depuis le disque, échec d'écriture qui ne publie rien), **branchement du conteneur** (contrôle de forme : la relecture au démarrage et l'emplacement du document), **installation du paquet 1441** (reprise, témoin écrit en dernier, refus d'une archive douteuse) et **transport HTTP** (en-tête `Range`, `200` contre `206`, refus) |
 | `feature:home` | 22 | point de reprise, `scheduledDate` contre `date`, série de jours, période de chaque bandeau, objectif de la semaine, libellés de repli |
 | `core:design` | 19 | asymétrie de l'accent, fond secondaire, distinction des cinq palettes, échelles de `tokens.ts`, résolution des polices, écran Apparence |
-| `feature:reader` | 24 | nommage des pages, bornes du geste, **affichage du nombre d'écoutes** (ce que le moteur jouera, saisie abîmée comprise), **pose des quinze bandes** d'une page du paquet (hauteur, premier et dernière bande, chevauchement), et **branchement du panneau de traduction** (contrôle de forme : la ligne de la feuille l'ouvre, ses lignes sont calculées, et il est rendu), et **branchement des marques** (contrôle de forme : les deux ensembles reçus, les deux transmis à la page, et l'ensemble vide écrit en dur qui ne revient pas) |
+| `feature:reader` | 33 | nommage des pages, bornes du geste, **affichage du nombre d'écoutes** (ce que le moteur jouera, saisie abîmée comprise), **pose des quinze bandes** d'une page du paquet (hauteur, premier et dernière bande, chevauchement), et **branchement du panneau de traduction** (contrôle de forme : la ligne de la feuille l'ouvre, ses lignes sont calculées, et il est rendu), et **branchement des marques** (contrôle de forme : les deux ensembles reçus, les deux transmis à la page, et l'ensemble vide écrit en dur qui ne revient pas), et **branchement du mode de pose des signets** (contrôle de forme : le bouton de la coquille et sa marque d'activité, le panneau rendu, l'armement qui le referme, la garde du point qui ne désigne rien, et le verset rapporté à l'appelant) |
 | `core:audio` | 16 | conduite d'une séance sur horloge virtuelle : silence observé, reprises, arrêt, répétition illimitée, changement de récitateur, fin oubliée après fermeture, fichier illisible, **réglages appliqués à la séance en cours**, et **saisie d'écoutes illisible qui ne fige pas la séance** |
 | `feature:auth` | 9 | activation du formulaire : adresse, longueur du mot de passe, occupation, libellés |
-| `navigation` | 4 | calcul des marques par la route du lecteur (contrôle de forme : l'état du compte est observé, les deux règles du domaine sont appelées, les deux ensembles sont transmis au lecteur) |
-| **total** | **533** | 49 classes de test |
+| `navigation` | 9 | calcul des marques par la route du lecteur (contrôle de forme : l'état du compte est observé, les deux règles du domaine sont appelées, les deux ensembles sont transmis au lecteur), et **l'écriture d'un signet par la route** (contrôle de forme : la règle du domaine appelée, le magasin de l'état, la page de la source affichée, l'écriture protégée) |
+| **total** | **568** | 53 classes de test |
 
 Le domaine est éprouvé sur les **vraies données** — 6 236 versets, 114 sourates, 604 pages — et
 non sur une maquette de trois versets, qui laisserait passer une erreur d'indexation ou une
@@ -457,7 +457,7 @@ affiche aussi le **nombre de classes lues** : un relevé vide signalerait que le
 aucun test, et « tout vert » ne voudrait alors rien dire.
 
 **Un test vert ne dit pas qu'il détecte quoi que ce soit.** `tools/falsifier.py` casse
-volontairement une règle — quarante-neuf fois, chacune sur une règle différente — relance la suite, et
+volontairement une règle — soixante fois, chacune sur une règle différente — relance la suite, et
 vérifie que les tests qui tombent sont **ceux qui devaient tomber**. Il restaure ensuite le fichier
 et le prouve par empreinte, pas par la bonne volonté d'un `finally`. Deux pièges y sont traités
 nommément : les rapports XML restent sur le disque d'une exécution à l'autre, donc seuls ceux
@@ -510,6 +510,25 @@ relire la règle au lieu de la réparer. La seconde est écrite dans le KDoc de 
 avec sa date de péremption annoncée : le jour où `coranTest` aura son propre découpage. C'est la
 leçon des teintes — une règle qu'on ne peut pas interroger finit par mentir — à une nuance près :
 ici la règle **est** interrogeable, c'est son **effet** qui ne l'est pas encore.
+
+ici la règle **est** interrogeable, c'est son **effet** qui ne l'est pas encore.
+
+**Le mode de pose a été porté en deux temps, et le second a mesuré une erreur.** Le panneau, la
+notice et le verset touché vivent dans le lecteur, mais la conversion d'une position d'écran en
+verset y était écrite **en clair**, dans l'appui long. Le mode de pose avait besoin d'exactement
+la même : elle est devenue `ReaderTouch`, éprouvée dans `core:domain`, et les deux appelants y
+passent désormais. Deux copies auraient fini par désigner deux versets différents, et l'écart ne
+se serait pas lu comme une erreur de calcul mais comme un **verset faux** — la fiche en décrivant
+un, le signet en posant un autre, et les deux étant plausibles. Deux corrections s'y succèdent,
+le dé-zoom puis le dé-centrage, et chacune a son cas qui **échoue** si elle disparaît. Le harnais
+de falsification a d'ailleurs rendu là son verdict le plus utile : un de ses cas ne compilait
+pas — remplacer la garde `if (touched != null)` par `if (true)` laisse `touched` en `Int?` là où
+`save` attend un `Int` — et un cas qui ne compile pas mesure le compilateur, pas la règle. Il
+porte maintenant sur deux lignes, avec un `?: 1` qui le rend compilable tout en supprimant la
+garde. Le levier, lui, est resté : le panneau est une **fenêtre de dialogue**, donc son voile
+couvre la page ; armer le mode de pose sans le refermer demanderait de toucher un verset à
+travers ce voile, c'est-à-dire de ne rien pouvoir faire. C'est l'erreur la plus probable de ce
+branchement, et elle a son cas.
 
 **Ce qui reste hors de tout contrôle automatique, et qu'il faut donc lire dans un diff** : le
 lecteur adopte la valeur relue tant que rien n'a été réglé à la main, et il rapporte chaque
