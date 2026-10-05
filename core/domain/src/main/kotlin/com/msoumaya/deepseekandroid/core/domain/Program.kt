@@ -124,13 +124,42 @@ object Program {
         }
         val current = s.reader?.mushaf
         if (current != null && current != MushafSource.TAJWEED_PAGES) return s
-        return s.copy(
-            reader = (s.reader ?: ReaderPreferences()).copy(
-                mushaf = MushafSource.CORAN_TEST,
-                followAudio = s.reader?.followAudio != false,
-            ),
-        )
+        return adoptComposedSource(s)
     }
+
+    /**
+     * L'état après **adoption de la source composée** — le moushaf de Tajwid.
+     *
+     * Le client d'origine écrit ce même objet à **trois** endroits, sous trois formes qui ne
+     * diffèrent que par leur précondition : la migration (quand la source est l'ancien
+     * « Moushaf Tajweed » par images), la fermeture du lecteur, et la carte « Coran avec règles
+     * de Tajwid » de l'écran Coran. Le corps, lui, est identique dans les trois :
+     *
+     * ```
+     * {...state.reader, mushaf:'coranTest', followAudio: state.reader?.followAudio !== false}
+     * ```
+     *
+     * Il est donc nommé **une fois**, ici : trois copies d'une même écriture finiraient par
+     * décrire la même chose de trois façons, et c'est la copie qu'on ne relit pas qui resterait.
+     * Chaque appelant garde sa précondition, qui est sa décision propre.
+     *
+     * `followAudio` est **conservé**, et le `!= false` n'est pas une coquetterie : il rend `true`
+     * sur un état qui n'a pas encore de préférences de lecture. Le remplacer par `== true`
+     * changerait le comportement d'un état vierge — l'audio cesserait d'y suivre la lecture.
+     *
+     * @param testPage la page à mémoriser pour cette source, ou `null` pour **la laisser telle
+     *   quelle**. Les deux appelants en ont besoin différemment : fermer le lecteur passe la page
+     *   affichée, parce que c'est le geste qui mémorise où l'on s'est arrêté ; la carte de
+     *   l'écran Coran n'en passe aucune, parce qu'elle ne fait qu'**ouvrir** — inventer une page
+     *   à cet instant écraserait la position mémorisée par celle qu'on s'apprête à lire.
+     */
+    fun adoptComposedSource(state: AppState, testPage: Int? = null): AppState = state.copy(
+        reader = (state.reader ?: ReaderPreferences()).copy(
+            mushaf = MushafSource.CORAN_TEST,
+            followAudio = state.reader?.followAudio != false,
+            testPage = testPage ?: state.reader?.testPage,
+        ),
+    )
 
     /** Marque l'état comme modifié maintenant, après migration. */
     fun touch(state: AppState): AppState = migrateReaderState(state).copy(updatedAt = Dates.nowIso())

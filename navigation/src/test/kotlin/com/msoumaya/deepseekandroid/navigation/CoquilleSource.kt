@@ -96,3 +96,22 @@ internal fun routeGoalDeLaCoquille(): String {
     }
     return lignes.single()
 }
+
+/**
+ * Le bloc de l'écran « Coran » seul, **commentaires retirés**.
+ *
+ * Le retrait n'est pas une coquetterie : le bloc de cette route est le plus commenté de la
+ * coquille, et un contrôle qui cherche `QuranRoute(` ou `AppRoutes.GOAL` dans le texte brut
+ * trouverait sa propre documentation. Il lirait alors ce qu'on **attend** de la route au lieu de
+ * ce qu'elle **fait** — et resterait vert sur une route débranchée. C'est le même piège qu'un
+ * bloc YAML analysé sans en retirer les commentaires.
+ *
+ * La borne de [blocApres] s'applique ici : le `composable(` du programme suit celui du Coran, donc
+ * le bloc est délimité, et une assertion ne peut pas être satisfaite par la porte voisine.
+ */
+internal fun coranDeLaCoquille(): String =
+    sansCommentaires(blocApres("composable(AppDestination.QURAN.route)"))
+
+/** Le texte privé de ses lignes de commentaire — celles qui commencent par `//`. */
+internal fun sansCommentaires(texte: String): String =
+    texte.lines().filterNot { it.trimStart().startsWith("//") }.joinToString("\n")

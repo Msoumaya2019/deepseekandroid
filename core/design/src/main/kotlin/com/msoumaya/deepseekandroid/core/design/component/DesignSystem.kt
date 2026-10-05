@@ -40,8 +40,11 @@ import com.msoumaya.deepseekandroid.core.design.theme.AppTheme
 // Système de design
 // ---------------------------------------------------------------------------
 // Portage de `src/ui/DesignSystem.tsx`, limité aux composants dont l'accueil a besoin.
-// Les autres (`SegmentedControl`, `QuranNumberMedallion`, `ThemeSelector`, `AccentSelector`)
-// seront portés avec les écrans qui les utilisent, pour ne pas écrire de code sans appelant.
+//
+// Deux composants de ce fichier d'origine en sont sortis quand un écran les a demandés :
+// `SegmentedControl` vers `Segmented.kt`, `QuranNumberMedallion` vers `Medallion.kt`. Les deux
+// derniers, `ThemeSelector` et `AccentSelector`, attendent encore leur appelant — les écrire
+// maintenant serait écrire du code sans usage.
 //
 // Une différence assumée : React Native positionnait la pastille et le chevron d'une carte de
 // tâche en `position: absolute` avec des décalages en dur. Ici la carte est une `Box` dont le

@@ -87,6 +87,7 @@ Elle est en **lecture seule** : elle est lue pour comprendre, jamais modifiée.
 | Feuille d'options du lecteur | `src/ui/ReaderMoreSheet.tsx` | `feature/reader/ReaderOptionsSheet.kt`, `core/domain/ReaderOptionsText.kt` | — | **Livré** | le carrefour du lecteur, ouvert par le bouton « ⋯ » de la coquille. Les quatre lignes mènent quelque part : changer de sourate, la traduction française, les réglages d'écoute, et le choix de présentation quand l'appelant en propose un |
 | Panneau de traduction | `App.tsx:509` (`sessionPanel==='translation'`) | `feature/reader/TranslationPanelSheet.kt`, `core/domain/TranslationPanel.kt` | — | **Livré** | la page affichée, verset par verset : la référence en doré, puis la traduction, séparées d'un filet. Le renvoi de note `[1]` reste dans le texte et la note n'est pas déroulée, comme dans l'original. Une plage hors du corpus est **ramenée** aux versets qui existent au lieu de faire tomber l'écran — l'original, lui, lève. Quels versets exactement (la séance, sinon la page) est une règle de `core:domain`, éprouvée sur les 6 236 versets |
 | Marques de la page | `App.tsx:485` (`visibleBookmarks`, `difficultyMarkers`), `MushafPage.tsx:51` | `core/domain/ReaderTint.kt`, `navigation/ReaderRoute.kt` | `user_state` | **Livré** | la route observe l'état du compte et en tire les deux ensembles ; ce qui compte comme marqué — suppression logique du signet, marqueur posé par le professeur — est une règle de `core:domain`, éprouvée là où elle vit. **Écart assumé** : la source se contredit entre ses deux rendus (`MushafPage.tsx` donne le signet gagnant sur la lecture, `coranTest/html.ts` l'inverse) ; le portage suit le premier, et le dit dans `ReaderTint` |
+| Écran « Coran » — liste des sourates, des Juz’, des Hizb | `QuranScreen` (`src/ui/MainScreens.tsx:28-34`) | `feature/reader/QuranScreen.kt`, `QuranListRenderer.kt`, `QuranUiState.kt`, `core/domain/QuranText.kt`, `navigation/QuranRoute.kt`, `core/design/component/Medallion.kt` | `user_state` | **Livré** | les trois vues, la recherche, le filtre, la carte des connaissances, la carte Tajwid et le bouton « Dernière lecture ». C'est la **route** qui observe l'état et qui écrit : l'écran vit dans `feature:reader`, qui ne dépend pas de `core:data` — c'est ce qui permet au lecteur de s'ouvrir en avion. **Défaut de l'original corrigé** : la carte Tajwid ouvrait la page mémorisée dans le découpage du moushaf de Médine **après** avoir adopté la composition typographique ; les deux divergent sur 36 pages sur 604. Voir « L'écran Coran, et le découpage qu'il fallait suivre » |
 
 ### Un seul gestionnaire de gestes, et une règle unique
 
@@ -212,6 +213,61 @@ occupe `y 0…232`, la bande 3 `y 447,43…679,43`, la bande 11 `y 1640,57…187
 est `(2320 − 232) / 14 = 149,142857`, soit exactement la formule de `MushafPageGeometry`. Les
 bandes se **recouvrent** — quinze bandes de 232 pixels en couvrent 3 480 sur une page qui en
 mesure 2 320 — et c'est la disposition d'origine, pas une erreur d'assemblage.
+
+### L'écran Coran, et le découpage qu'il fallait suivre
+
+L'écran tient en trois vues — la liste des 114 sourates, les 30 Juz’, les 60 Hizb —, une
+recherche, un filtre de lieu de révélation, une carte qui dit jusqu'où l'on a appris, une carte
+Tajwid et un bouton « Dernière lecture ». Le calcul vit à part (`QuranListRenderer`) : il ne lit
+que l'état du compte et le référentiel, et ne produit que du texte, donc il s'éprouve en quelques
+millisecondes sur le vrai corpus. La **vue**, la **recherche** et le **filtre** lui sont *passés*
+et ne sont pas rangés dans l'état affichable : les garder des deux côtés ferait deux vérités pour
+la même chose, et l'une des deux finirait par mentir.
+
+**Un défaut de l'original, corrigé et mesuré.** La carte « Coran avec règles de Tajwid » écrivait
+`mushaf:'coranTest'` puis ouvrait `pageRange(testPage)` — la fonction **sans source**, donc le
+découpage du moushaf de Médine —, alors que la source qu'elle venait d'adopter est la composition
+typographique. Partout ailleurs, le projet passe par `sourcePageRange(source,page)`. L'écart n'est
+pas théorique :
+
+| Mesure sur les données livrées | Valeur |
+|---|---|
+| Pages découpées autrement, sur 604 | **36** |
+| Versets changeant de page, sur 6 236 | **56** |
+| Première divergence | page **120** — le moushaf s'arrête au verset **745**, la composition va jusqu'à **746** |
+| Conséquence | ouvrir la plage du mauvais découpage pour la page 121 désigne le verset 746, qui est sur la page **120** de la composition |
+
+La carte ouvrait donc à côté de la page mémorisée, sur plus d'une trentaine d'endroits du Mushaf.
+Le portage route la source vers son découpage, comme le reste du projet. Deux contrôles couvrent
+la règle, et un **falsificateur** les a éprouvés : en figeant le découpage dans le calcul, ces
+deux contrôles tombent, et eux seuls.
+
+**Le corollaire, qui a demandé une division fabriquée.** Aucune des 30 juz ni des 60 hizb ne
+change de page entre les trois découpages — **180 bornes** mesurées, toutes égales —, alors que
+56 versets, eux, changent de page. Le paramètre de source est donc **inexerçable** sur les données
+livrées : un contrôle écrit dessus passerait même si la source était ignorée. La règle s'éprouve
+donc sur une division écrite à la main dont une borne tombe sur le verset 746 — page 121 côté
+moushaf, page 120 côté composition —, et l'inertie des données est mesurée à part. Un contrôle qui
+ne passe jamais ne prouve rien ; celui-ci passe.
+
+**L'écriture est nommée une fois.** Le geste d'adopter la source composée
+(`{...state.reader, mushaf:'coranTest', followAudio: state.reader?.followAudio !== false}`) existe
+**trois** fois dans le client d'origine — la migration, la fermeture du lecteur, cette carte. Il
+est désormais écrit une seule fois (`Program.adoptComposedSource`), et chaque appelant garde sa
+seule précondition. Fermer le lecteur est le seul qui lui passe une page : c'est le geste qui
+mémorise où l'on s'est arrêté, tandis que la carte ne fait qu'ouvrir — inventer une page à cet
+instant écraserait la position mémorisée. L'écriture **précède** l'ouverture, et pour la raison
+déjà écrite pour la fermeture : la portée de la route meurt quand le lecteur la recouvre, donc
+ouvrir d'abord annulerait l'écriture en vol, et le lecteur s'afficherait avec l'ancienne source
+sans que rien ne le dise.
+
+**L'ornement des numéros.** `QuranNumberMedallion` s'appuie sur `medallion.png` : 1 254 × 1 254,
+encre **plate** (`rgb(166,119,43)`, écart-type 2,5 sur six couronnes radiales — ce n'est donc pas
+un dégradé), 90 % des pixels entièrement transparents, et un disque intérieur **vide** de 14 dp
+où se pose le chiffre. Réduit par `tools/import-medallion.py` en cinq densités — 44 / 66 / 88 /
+132 / 176 px —, l'ornement passe de **386 Ko à 21,9 Ko**, soit 94 % de moins, et l'alpha est
+**identique octet pour octet** à une réduction directe. Le script sait le revérifier
+(`--verifier`), ce qui vaut mieux qu'une capture d'écran.
 
 ---
 

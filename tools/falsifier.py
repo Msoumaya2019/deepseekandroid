@@ -2201,6 +2201,53 @@ CAS: list[dict] = [
         "tache": ":navigation:testDebugUnitTest",
         "attendus": ["l'ecran d'objectif recoit de quoi se fermer"],
     },
+    {
+        # Le parametre de source du calcul des pages est **inerte sur les donnees livrees** :
+        # mesure, aucune des 30 juz ni des 60 hizb ne change de page entre les trois decoupages
+        # du projet. Le controle sur les donnees reelles passerait donc meme si la source etait
+        # ignoree ; c'est ce cas-ci, sur une division fabriquee, qui prouve que la regle est
+        # suivie. Le retirer laisserait la regle sans garde.
+        "nom": "coran : le decoupage des pages ignore la source affichee",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/QuranListRenderer.kt",
+        "avant": "                    first = StudyProgressCalculator.studyPage(division.start, studySource),\n                    last = StudyProgressCalculator.studyPage(division.end, studySource),",
+        "apres": "                    first = StudyProgressCalculator.studyPage(division.start, \"traditional\"),\n                    last = StudyProgressCalculator.studyPage(division.end, \"traditional\"),",
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": ["les pages d'une division se calculent"],
+    },
+    {
+        # `studyPage` n'est pas lineaire : deduire la fin du debut donnerait un compte faux sur
+        # les divisions qui chevrochent une page. Le cas ne fait tomber que le controle des deux
+        # bouts — celui du decoupage, lui, reste vert, parce que sa division fabriquee a
+        # `start == end`.
+        "nom": "coran : la fin d'une division est deduite de son debut",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/QuranListRenderer.kt",
+        "avant": "                    last = StudyProgressCalculator.studyPage(division.end, studySource),",
+        "apres": "                    last = StudyProgressCalculator.studyPage(division.start, studySource),",
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": ["les deux bouts d'une division"],
+    },
+    {
+        # Le crayon de la carte « J'ai appris jusqu'a » ouvre l'ecran d'objectif. Le remplacer par
+        # une autre route compile parfaitement : c'est exactement le defaut qu'un rappel de
+        # navigation laisse passer.
+        "nom": "route : le crayon des connaissances ne mene plus a l'objectif",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/AppScaffold.kt",
+        "avant": "                    navController.navigate(AppRoutes.GOAL) { launchSingleTop = true }",
+        "apres": "                    navController.navigate(AppRoutes.SETTINGS) { launchSingleTop = true }",
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["le crayon de la carte des connaissances"],
+    },
+    {
+        # Une ligne de la liste doit ouvrir le lecteur par la porte commune. Naviguer vers la
+        # route nue compile aussi : le lecteur s'ouvrirait, mais sans le verset demande — donc
+        # sur une autre page, et sans rien dire.
+        "nom": "route : l'ecran du Coran n'ouvre plus le lecteur par la porte commune",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/AppScaffold.kt",
+        "avant": "                onOpenReader = { range -> navController.navigate(AppRoutes.readerRoute(range.start)) },",
+        "apres": "                onOpenReader = { navController.navigate(AppRoutes.READER) },",
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["l'ecran du Coran ouvre le lecteur par la porte commune"],
+    },
 ]
 
 

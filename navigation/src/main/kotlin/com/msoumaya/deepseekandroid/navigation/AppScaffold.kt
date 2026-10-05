@@ -31,7 +31,6 @@ import com.msoumaya.deepseekandroid.feature.program.ProgramScreen
 import com.msoumaya.deepseekandroid.feature.program.ReviewDashboardScreen
 import com.msoumaya.deepseekandroid.feature.progress.ProgressScreen
 import com.msoumaya.deepseekandroid.feature.quiz.QuizScreen
-import com.msoumaya.deepseekandroid.feature.reader.QuranScreen
 import com.msoumaya.deepseekandroid.feature.social.SocialScreen
 
 // ---------------------------------------------------------------------------
@@ -158,11 +157,11 @@ private fun AppNavHost(
         startDestination = AppDestination.start.route,
         modifier = modifier,
     ) {
-        // L'accueil ouvre le lecteur, comme le programme depuis la phase C ; l'écran « Coran »,
-        // lui, n'est pas encore construit. Le verset de la carte « Continuer » est **passé**
-        // plutôt que relu par la route : lui seul sait ce qui a été demandé, et c'est ce
-        // verset-là qui sera retenu en refermant — le relire ailleurs ferait mémoriser le
-        // premier verset de la page, et l'on reviendrait un verset plus haut à chaque fois.
+        // L'accueil ouvre le lecteur, comme le programme depuis la phase C — et comme l'écran
+        // « Coran » depuis qu'il existe. Le verset de la carte « Continuer » est **passé** plutôt
+        // que relu par la route : lui seul sait ce qui a été demandé, et c'est ce verset-là qui
+        // sera retenu en refermant — le relire ailleurs ferait mémoriser le premier verset de la
+        // page, et l'on reviendrait un verset plus haut à chaque fois.
         composable(AppDestination.HOME.route) {
             HomeScreen(
                 onOpenReader = { verseId ->
@@ -183,7 +182,23 @@ private fun AppNavHost(
                 onOpenReviews = { navController.navigate(AppRoutes.REVIEW) { launchSingleTop = true } },
             )
         }
-        composable(AppDestination.QURAN.route) { QuranScreen() }
+        // L'écran « Coran » : la liste des sourates, celle des Juz', celle des Hizb. Il est porté
+        // par une route du même module, et non appelé directement : l'écran vit dans
+        // `feature:reader`, qui ne dépend pas de `core:data` — c'est ce qui permet au lecteur de
+        // s'ouvrir en avion — donc il ne peut atteindre ni l'état du compte, ni le référentiel.
+        //
+        // Une ligne ouvre le lecteur par la **même** fonction que l'accueil et le programme : une
+        // seule porte pour le lecteur, donc aucune divergence possible entre les trois écrans. Le
+        // crayon de la carte « J'ai appris jusqu'à » mène à l'écran d'objectif, `launchSingleTop`
+        // comme depuis le programme — l'appuyer deux fois ne doit pas empiler deux écrans.
+        composable(AppDestination.QURAN.route) {
+            QuranRoute(
+                onOpenReader = { range -> navController.navigate(AppRoutes.readerRoute(range.start)) },
+                onEditKnowledge = {
+                    navController.navigate(AppRoutes.GOAL) { launchSingleTop = true }
+                },
+            )
+        }
         // Le programme est le **pivot** de la phase C : ses cartes ouvrent le lecteur, et par
         // deux chemins distincts — une séance, qui a une progression à valider, et une lecture
         // libre, qui n'en a pas. Un rappel laissé de côté ne se verrait nulle part : la

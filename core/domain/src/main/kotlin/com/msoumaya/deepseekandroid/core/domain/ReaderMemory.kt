@@ -3,7 +3,6 @@ package com.msoumaya.deepseekandroid.core.domain
 import com.msoumaya.deepseekandroid.core.model.AppState
 import com.msoumaya.deepseekandroid.core.model.LastRead
 import com.msoumaya.deepseekandroid.core.model.MushafSource
-import com.msoumaya.deepseekandroid.core.model.ReaderPreferences
 import com.msoumaya.deepseekandroid.core.model.effectiveReadPages
 
 /**
@@ -103,23 +102,24 @@ object ReaderMemory {
         val verseId = versetRetenu(source, base.lastRead?.verseId, page)
             ?: versetRetenu(source, start, page)
             ?: range.start
-        return base.copy(
+        // L'adoption de la source composée est appliquée **avant** le reste, et non au milieu du
+        // `copy` final : la règle vit dans `Program`, partagée avec la carte « Coran avec règles
+        // de Tajwid » de l'écran Coran. Fermer le lecteur est le seul appelant qui lui passe une
+        // page — c'est le geste qui mémorise où l'on s'est arrêté —, et l'adoption n'a lieu que
+        // si la source affichée **est** la source composée.
+        val retenu = if (source == MushafSource.CORAN_TEST) {
+            Program.adoptComposedSource(base, page)
+        } else {
+            base
+        }
+        return retenu.copy(
             updatedAt = at,
             // La page est **ajoutée** à la suite, comme le `Array.from(new Set([...]))` du
             // client d'origine : l'ordre d'insertion est celui des lectures, et un tri ici
             // écrirait un état différent du sien pour la même suite d'actions. La réunion qui
             // sert à la synchronisation trie de son côté, et c'est elle qui fait foi.
-            readPages = (base.effectiveReadPages + page).distinct(),
+            readPages = (retenu.effectiveReadPages + page).distinct(),
             lastRead = LastRead(page = page, verseId = verseId, readAt = at),
-            reader = if (source == MushafSource.CORAN_TEST) {
-                (base.reader ?: ReaderPreferences()).copy(
-                    mushaf = MushafSource.CORAN_TEST,
-                    followAudio = base.reader?.followAudio != false,
-                    testPage = page,
-                )
-            } else {
-                base.reader
-            },
         )
     }
 
