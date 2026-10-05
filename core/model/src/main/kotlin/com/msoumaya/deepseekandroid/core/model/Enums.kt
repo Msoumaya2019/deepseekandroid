@@ -270,6 +270,25 @@ enum class MushafSource {
     /** Vrai si la valeur provient d'une version antérieure et doit être migrée. */
     val isLegacy: Boolean
         get() = this == LEGACY_TAWJEED_TEST_2 || this == LEGACY_TAJWEED_TEST_2 || this == LEGACY_MEDINE_TEST
+
+    /**
+     * L'identifiant de cette source **tel qu'il est écrit dans l'état synchronisé**.
+     *
+     * C'est la valeur de son `@SerialName`, **lue sur le descripteur** au lieu d'être recopiée
+     * dans une seconde table. Une table recopiée finirait par diverger du format réellement
+     * écrit, et la divergence serait muette : le lecteur chercherait une clé que personne n'a
+     * posée, la carte `sourcePages` d'un signet rendrait `null`, et le signet s'ouvrirait
+     * simplement à la mauvaise page — sans exception, sans message. `MushafSourceKeyTest` fige
+     * les huit valeurs pour qu'un renommage, lui, se voie.
+     *
+     * À ne pas confondre avec `StudyProgressCalculator.sourceKey`, qui **replie** trois sources
+     * sur `"traditional"` : ce repli sert aux pages d'étude, où une source que ce client ne
+     * rend pas encore est remplacée par le découpage canonique en 604 pages. Une page de signet,
+     * elle, est enregistrée sous la source **réellement affichée** — replier ferait relire une
+     * page d'un autre découpage.
+     */
+    val persistedKey: String
+        get() = MushafSource.serializer().descriptor.getElementName(ordinal)
 }
 
 /** Fond de page du moushaf. */

@@ -284,9 +284,11 @@ C'est la différence entre une liste de rappels et un outil de mémorisation.
 
 | Fonctionnalité RN | Source RN | Équivalent Android | Tables | Statut | Points d'attention |
 |---|---|---|---|---|---|
-| Signets | `src/core/bookmarks.ts` | `core/domain/Bookmarks.kt` | `user_state` | **Porté** | suppression **douce** (`deletedAt`) : un signet supprimé sur un appareil ne ressuscite pas depuis l'autre |
+| Signets | `src/core/bookmarks.ts` | `core/domain/Bookmarks.kt` | `user_state` | **Porté** | suppression **douce** (`deletedAt`) : un signet supprimé sur un appareil ne ressuscite pas depuis l'autre ; l'écran a ses règles ici aussi — page **dans la source affichée** (clé de lecture : le `@SerialName` de la source, celui-là même que la source écrit), « Dernière reprise » **retriée** et non lue en tête de liste, signet hors corpus **omis** au lieu de faire tomber l'écran. **Écart assumé** : le nom de sourate et le numéro de verset sont lus sur le **verset**, là où `BookmarksScreen.tsx` affiche les champs enregistrés du signet — les deux ne peuvent diverger que pour un état venu d'ailleurs, et dans ce cas c'est le référentiel qui a raison |
 | Dernière lecture | `lastRead` | `AppState.lastRead` | `user_state` | **Porté** | |
-| Écran des signets | `src/BookmarksScreen.tsx` | `feature:reader` | — | **À faire** | phase B |
+| Mots de l'écran des signets | `src/BookmarksScreen.tsx`, `App.tsx:503-512` | `core/domain/BookmarksText.kt` | — | **Porté** | titre, sous-titre, carte d'explication, état vide, « Dernière reprise », « Reprendre », et les deux entrées du panneau (« Placer un marque-page sur un verset », « Mes marques-pages ») — repris caractère pour caractère, guillemets et trait d'union compris |
+| Panneau « Marques-pages » et mode de pose | `App.tsx:503`, `App.tsx:485`, `App.tsx:504` | — | — | **Partiel** | les mots du panneau et la durée de la notice (2 500 ms) sont portés ; le panneau, la notice et la pose du signet au toucher restent à écrire |
+| Écran des signets | `src/BookmarksScreen.tsx` | `feature:reader` | — | **À faire** | phase B — ses règles sont portées et éprouvées, l'écran lui-même reste à écrire |
 
 ---
 

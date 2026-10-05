@@ -409,7 +409,8 @@ de tout le domaine — déjà testé — pour un gain nul. Elle n'est donc pas l
 
 | Suite | Nombre | Ce qu'elle couvre |
 |---|---|---|
-| `core:domain` | 357 | Coran, dates, programme, révisions, consolidations, signets, audio, file d'écoute et silences, quiz, lecteur et gestes, fusion hors ligne, file d'attente, composition de synchronisation, décision d'ouverture, messages de connexion, **libellés des écrans du lecteur** (feuille d'options, sélecteur de sourate, réglages d'écoute : titre aligné sur la ligne qui l'ouvre, vitesses en virgule française, note de marge technique, refus de la saisie libre), **règles du paquet « Coran 1441 »** (décision d'entrée, taille exacte, dimensions d'image, témoin d'installation, forme de la page selon la source, rectangles des versets, transition de source, mots du panneau), **panneau de traduction** (plage de séance prioritaire, plage ramenée au corpus au lieu de faire tomber l'écran, accord des 6 236 versets avec la traduction, référence d'un verset, titre aligné sur la ligne qui l'ouvre), **marques du lecteur** (le marqueur du professeur compte autant que celui de l'élève, un signet supprimé ne colore plus la page, une marque hors corpus est conservée telle quelle) et **priorité des teintes** (difficile, puis signet, puis lecture — l'ordre du rendu principal, quand le rendu immersif de la source ordonne autrement) |
+| `core:model` | 3 | les clés persistées des sources : le `@SerialName` de chacune est **lu sur le descripteur** au lieu d'être recopié dans une seconde table, et les huit valeurs sont figées par un test — ce sont elles que le client React Native écrit dans `sourcePages` |
+| `core:domain` | 369 | Coran, dates, programme, révisions, consolidations, signets, audio, file d'écoute et silences, quiz, lecteur et gestes, fusion hors ligne, file d'attente, composition de synchronisation, décision d'ouverture, messages de connexion, **libellés des écrans du lecteur** (feuille d'options, sélecteur de sourate, réglages d'écoute : titre aligné sur la ligne qui l'ouvre, vitesses en virgule française, note de marge technique, refus de la saisie libre), **règles du paquet « Coran 1441 »** (décision d'entrée, taille exacte, dimensions d'image, témoin d'installation, forme de la page selon la source, rectangles des versets, transition de source, mots du panneau), **panneau de traduction** (plage de séance prioritaire, plage ramenée au corpus au lieu de faire tomber l'écran, accord des 6 236 versets avec la traduction, référence d'un verset, titre aligné sur la ligne qui l'ouvre), **marques du lecteur** (le marqueur du professeur compte autant que celui de l'élève, un signet supprimé ne colore plus la page, une marque hors corpus est conservée telle quelle) et **priorité des teintes** (difficile, puis signet, puis lecture — l'ordre du rendu principal, quand le rendu immersif de la source ordonne autrement), et **règles de l'écran des signets** (une ligne bâtie sur le verset et non sur les champs enregistrés, un signet hors corpus **omis** au lieu de faire tomber l'écran, « Dernière reprise » **retriée**, et la page suivant le **découpage de la source affichée** : 56 versets sur 6 236 changent de page entre Médine et le paquet 1441) |
 | `core:data` | 67 | lecture locale, hors ligne, premier chargement, isolation des comptes, fichier d'état illisible, file, idempotence, remise à zéro, règle du propriétaire, **dépôt des réglages d'écoute** (premier démarrage, document complet, champ hors bornes isolé, document illisible mis de côté, relecture depuis le disque, échec d'écriture qui ne publie rien), **branchement du conteneur** (contrôle de forme : la relecture au démarrage et l'emplacement du document), **installation du paquet 1441** (reprise, témoin écrit en dernier, refus d'une archive douteuse) et **transport HTTP** (en-tête `Range`, `200` contre `206`, refus) |
 | `feature:home` | 22 | point de reprise, `scheduledDate` contre `date`, série de jours, période de chaque bandeau, objectif de la semaine, libellés de repli |
 | `core:design` | 19 | asymétrie de l'accent, fond secondaire, distinction des cinq palettes, échelles de `tokens.ts`, résolution des polices, écran Apparence |
@@ -417,7 +418,7 @@ de tout le domaine — déjà testé — pour un gain nul. Elle n'est donc pas l
 | `core:audio` | 16 | conduite d'une séance sur horloge virtuelle : silence observé, reprises, arrêt, répétition illimitée, changement de récitateur, fin oubliée après fermeture, fichier illisible, **réglages appliqués à la séance en cours**, et **saisie d'écoutes illisible qui ne fige pas la séance** |
 | `feature:auth` | 9 | activation du formulaire : adresse, longueur du mot de passe, occupation, libellés |
 | `navigation` | 4 | calcul des marques par la route du lecteur (contrôle de forme : l'état du compte est observé, les deux règles du domaine sont appelées, les deux ensembles sont transmis au lecteur) |
-| **total** | **518** | 47 classes de test |
+| **total** | **533** | 49 classes de test |
 
 Le domaine est éprouvé sur les **vraies données** — 6 236 versets, 114 sourates, 604 pages — et
 non sur une maquette de trois versets, qui laisserait passer une erreur d'indexation ou une
@@ -456,7 +457,7 @@ affiche aussi le **nombre de classes lues** : un relevé vide signalerait que le
 aucun test, et « tout vert » ne voudrait alors rien dire.
 
 **Un test vert ne dit pas qu'il détecte quoi que ce soit.** `tools/falsifier.py` casse
-volontairement une règle — quarante-trois fois, chacune sur une règle différente — relance la suite, et
+volontairement une règle — quarante-neuf fois, chacune sur une règle différente — relance la suite, et
 vérifie que les tests qui tombent sont **ceux qui devaient tomber**. Il restaure ensuite le fichier
 et le prouve par empreinte, pas par la bonne volonté d'un `finally`. Deux pièges y sont traités
 nommément : les rapports XML restent sur le disque d'une exécution à l'autre, donc seuls ceux
@@ -494,6 +495,21 @@ s'affiche correctement : cela se lit dans un diff, et c'est écrit dans le code 
 **Les marques de la page ont suivi le même chemin, avec une nuance.** Le lecteur reçoit les versets en signet et les versets difficiles, avec pour valeur par défaut l'ensemble **vide** : si le passage disparaissait, la page compilerait et perdrait simplement ses marques, sans qu'aucun test ne rougisse — `ReaderScreenMarksTest` le tient donc, dans le module du lecteur. Le calcul, lui, vit dans la route, seul endroit à connaître le conteneur : `ReaderRouteMarksTest` le tient, et c'est **pour cela que `navigation` a reçu son premier `src/test`**. Un contrôle qui lirait le source d'un autre module ne serait pas rejoué quand ce source change — la tâche `Test` ne suit que les entrées de son propre module — et resterait vert par oubli.
 
 **La priorité des teintes, elle, n'est pas restée dans la vue.** Elle y était écrite sous forme de `when` sur des couleurs, donc inatteignable : une fonction privée, dans un composable. Or c'est une règle, et une règle mesurable — un verset peut porter deux marques, une seule couleur l'emporte. Elle vit maintenant dans `ReaderTint`, où `ReaderTintTest` l'éprouve, et la vue n'a gardé que la traduction d'un cas en couleur. Le gain n'est pas cosmétique : **la source se contredit** entre ses deux rendus — `MushafPage.tsx` donne le signet gagnant sur la lecture, `coranTest/html.ts` donne l'inverse — et c'est exactement le cas qu'un test peut figer, là où un `when` privé ne se serait jamais laissé interroger. L'ordre retenu est celui du rendu principal, et le fait que l'autre existe est écrit dans `ReaderTint`, pas seulement ici.
+
+**Les règles de l'écran des signets ont été portées avant l'écran, et deux d'entre elles sont
+mesurées inertes.** Ce qui décide d'une ligne — le nom de sourate, la page, l'ordre, la marque
+« Dernière reprise », l'omission d'un signet hors corpus — vit dans `Bookmarks`, et
+`BookmarksScreenRulesTest` l'éprouve. Deux règles n'ont **pas** pu être éprouvées par leur effet,
+et le dire vaut mieux que d'écrire un test qui les simulerait. La branche « conserver la page
+notée » de `MushafSourceNavigation.versePage` est **inatteignable** avec les bornes livrées :
+un verset n'y occupe qu'une seule page par découpage. Le choix de la clé persistée plutôt que du
+repli `StudyProgressCalculator.sourceKey` rend, lui, le **même résultat** pour toute source
+atteignable. La première est tout de même mesurée — par le test `dans le decoupage livre, un
+verset n'occupe qu'une seule page`, qui échouera le jour où les données changeront et forcera à
+relire la règle au lieu de la réparer. La seconde est écrite dans le KDoc de `Bookmarks.pageFor`,
+avec sa date de péremption annoncée : le jour où `coranTest` aura son propre découpage. C'est la
+leçon des teintes — une règle qu'on ne peut pas interroger finit par mentir — à une nuance près :
+ici la règle **est** interrogeable, c'est son **effet** qui ne l'est pas encore.
 
 **Ce qui reste hors de tout contrôle automatique, et qu'il faut donc lire dans un diff** : le
 lecteur adopte la valeur relue tant que rien n'a été réglé à la main, et il rapporte chaque

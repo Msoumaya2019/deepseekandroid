@@ -494,6 +494,87 @@ CAS: list[dict] = [
         "tache": ":navigation:testDebugUnitTest",
         "attendus": ["ReaderRouteMarksTest"],
     },
+    {
+        # La page du signet est prise dans le decoupage de Medine quoi qu'affiche : 56 versets
+        # sur 6 236 changent de page entre les deux decoupages, donc pour ceux-la le signet
+        # s'ouvre sur la page voisine. Aucun autre controle ne le voit — la page s'affiche,
+        # simplement pas la bonne.
+        "nom": "signets : la page du signet ignore la source affichee",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Bookmarks.kt",
+        "avant": "            source = source,",
+        "apres": "            source = MushafSource.MEDINA,",
+        "tache": ":core:domain:test",
+        "attendus": ["BookmarksScreenRulesTest"],
+    },
+    {
+        # « Derniere reprise » est lue en tete de liste au lieu d'etre retriee : le signet le
+        # plus recemment MODIFIE est annonce comme le plus recemment REPRIS, alors qu'il ne l'a
+        # jamais ete. Le domaine reste vert partout ailleurs.
+        "nom": "signets : la derniere reprise est lue en tete de liste",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Bookmarks.kt",
+        "avant": "        visibleBookmarks(state)\n"
+                 "            .mapNotNull { item -> item.lastUsedAt?.let { item.verseId to it } }\n"
+                 "            .maxByOrNull { it.second }\n"
+                 "            ?.first",
+        "apres": "        visibleBookmarks(state).firstOrNull()?.verseId",
+        "tache": ":core:domain:test",
+        "attendus": ["BookmarksScreenRulesTest"],
+    },
+    {
+        # La garde de bornes saute : un signet venu d'un autre appareil, qui designe un verset
+        # que ce referentiel ne connait pas, fait tomber la construction de l'ecran entier au
+        # lieu d'etre omis. C'est exactement l'etat synchronise que rien d'autre ne valide.
+        "nom": "signets : la ligne hors corpus n'est plus ecartee",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Bookmarks.kt",
+        "avant": "            if (id !in 1..Quran.verses.size) return@mapNotNull null",
+        "apres": "            if (id == -1) return@mapNotNull null",
+        "tache": ":core:domain:test",
+        "attendus": ["BookmarksScreenRulesTest"],
+    },
+    {
+        # La ligne reprend les champs enregistres du signet au lieu du verset : une etiquette
+        # fausse s'affiche a cote du bon texte arabe. Le client d'origine fait pourtant ce
+        # choix-la, et c'est un ecart assume — le test doit donc le tenir.
+        "nom": "signets : la ligne suit les champs enregistres au lieu du verset",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Bookmarks.kt",
+        "avant": "                surahName = Quran.surahAt(id).name,\n"
+                 "                ayah = verse.ayah,",
+        "apres": "                surahName = Quran.surahs.getOrNull(item.surah - 1)?.name ?: \"\",\n"
+                 "                ayah = item.ayah,",
+        "tache": ":core:domain:test",
+        "attendus": ["BookmarksScreenRulesTest"],
+    },
+    {
+        # La liste repasse par la carte brute : la suppression logique est oubliee, et un signet
+        # supprime revient dans la liste. Le marqueur `deletedAt` subsiste pourtant dans l'etat,
+        # ce qui rend la faute invisible a tout autre controle.
+        "nom": "signets : un signet supprime reapparait dans la liste",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Bookmarks.kt",
+        "avant": "        return visibleBookmarks(state).mapNotNull { item ->",
+        "apres": "        return (state.bookmarks ?: emptyMap()).values.mapNotNull { item ->",
+        "tache": ":core:domain:test",
+        "attendus": ["BookmarksScreenRulesTest"],
+    },
+    {
+        # Les cles de source se replient sur deux valeurs au lieu d'etre celles du format ecrit :
+        # `sourcePages` devient ambigu, et un etat deja synchronise n'est plus relu au bon mot.
+        # Le cas joue les DEUX modules : c'est ce qui prouve que l'accord entre l'identifiant du
+        # paquet et la cle persistee est reellement tenu, et pas seulement ecrit.
+        #
+        # Deux regles de `Bookmarks.pageFor` n'ont volontairement PAS de cas, parce qu'elles ont
+        # ete mesurees inertes : (1) la branche « conserver la page notee » de
+        # `MushafSourceNavigation.versePage` est inatteignable, un verset n'occupant qu'une page
+        # par decoupage dans les bornes livrees ; (2) remplacer `persistedKey` par le repli
+        # `StudyProgressCalculator.sourceKey` rend le meme resultat pour toute source
+        # atteignable. Un cas qui ne fait rien tomber est un faux, pas un cas de plus — c'est
+        # l'hypothese (1) qui est mesuree par `BookmarksScreenRulesTest`.
+        "nom": "signets : les cles de source se replient sur deux valeurs",
+        "fichier": "core/model/src/main/kotlin/com/msoumaya/deepseekandroid/core/model/Enums.kt",
+        "avant": "        get() = MushafSource.serializer().descriptor.getElementName(ordinal)",
+        "apres": "        get() = if (this == SIMPLIFIED) \"tajweed\" else \"traditional\"",
+        "tache": ":core:model:test :core:domain:test",
+        "attendus": ["MushafSourceKeyTest", "BookmarksScreenRulesTest"],
+    },
 ]
 
 
