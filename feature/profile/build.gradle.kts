@@ -36,6 +36,18 @@ dependencies {
     // stockage, ni les autres fonctionnalites. Quand il aura besoin de lire des donnees, il
     // declarera `core:data` — comme `feature:home` — et rien d'autre.
     api(project(":core:design"))
+
+    // L'ecran d'objectif est le premier de ce module a lire des donnees : il declare donc
+    // `core:data` (le conteneur applicatif, comme `feature:home`) et `core:domain` (le
+    // programme, le Coran et les libelles, comme `feature:program`). Le profil, les reglages
+    // et l'apparence continuent de n'en avoir besoin d'aucun.
+    implementation(project(":core:data"))
+    implementation(project(":core:domain"))
+
     implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.compose.material.icons.extended)
+
+    testImplementation(libs.junit)
+    testImplementation(libs.kotlin.test)
 }

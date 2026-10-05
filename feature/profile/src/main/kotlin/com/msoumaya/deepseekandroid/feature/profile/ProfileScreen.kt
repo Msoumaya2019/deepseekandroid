@@ -5,13 +5,16 @@ import androidx.compose.ui.Modifier
 import com.msoumaya.deepseekandroid.core.design.component.PhasePlaceholder
 
 /**
- * Les quatre écrans d'outil que le dépôt d'origine rangeait sous un seul état `utilityView`.
+ * Les écrans d'outil que le dépôt d'origine rangeait sous un seul état `utilityView`.
  *
  * `ProfileScreen` recevait déjà un paramètre `mode` en React Native ; il est conservé sous forme
- * d'énumération plutôt que de chaîne, pour que les quatre valeurs soient connues du compilateur.
- * `APPEARANCE` et `GOAL` avaient leur propre fichier à l'origine (`AppearanceScreen`,
- * `GoalScreen`) : ils rejoindront leur module quand ils seront écrits, et cette énumération
- * perdra alors ses deux dernières valeurs.
+ * d'énumération plutôt que de chaîne, pour que les valeurs soient connues du compilateur.
+ * `APPEARANCE` avait son propre fichier à l'origine (`AppearanceScreen`) : il rejoindra son module
+ * quand il sera écrit, et cette énumération perdra alors sa dernière valeur.
+ *
+ * `GOAL` a disparu le jour où l'écran d'objectif a été livré : il a désormais son propre fichier —
+ * `GoalScreen.kt` —, et la route `AppRoutes.GOAL` le sert directement. Une valeur d'énumération
+ * qu'aucune route n'atteint serait un branchement mort.
  */
 enum class ProfileMode {
     /** Le profil : identité, photo, déconnexion. */
@@ -22,9 +25,6 @@ enum class ProfileMode {
 
     /** L'apparence : thème, accent, police d'interface. */
     APPEARANCE,
-
-    /** L'objectif d'apprentissage : sourates connues, rythme, objectif de la semaine. */
-    GOAL,
 }
 
 /**
@@ -34,7 +34,7 @@ enum class ProfileMode {
  * qui est déjà décidé. Il doit disparaître quand la Phase D livre le contenu réel, et
  * `ANDROID_MIGRATION.md` porte la ligne correspondante.
  *
- * @param mode laquelle des quatre sections afficher.
+ * @param mode laquelle des trois sections restantes afficher.
  */
 @Composable
 fun ProfileScreen(
@@ -50,9 +50,6 @@ fun ProfileScreen(
 
         ProfileMode.APPEARANCE ->
             "Apparence" to "Thème, accent et police d'interface."
-
-        ProfileMode.GOAL ->
-            "Mon objectif" to "Sourates connues, rythme d'apprentissage et objectif de la semaine."
     }
 
     PhasePlaceholder(

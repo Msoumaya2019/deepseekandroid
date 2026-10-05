@@ -2073,6 +2073,134 @@ CAS: list[dict] = [
         "tache": ":feature:sources:testDebugUnitTest",
         "attendus": ["QuranSourcePickerEntryTest"],
     },
+    {
+        # L'objectif remplace l'objet entier au lieu de son libelle et de ses plages. L'echeance
+        # posee a l'etape precedente du brouillon est alors perdue : l'ecran garde la date
+        # affichee, et le repere enregistre est vide. C'est le defaut que ce cas a fait tomber
+        # pendant l'ecriture de l'ecran — la source, elle, ecrit `{ ...next.goal, label, ranges }`.
+        "nom": "objectif : le brouillon perd l'echeance en changeant d'objectif",
+        "fichier": "feature/profile/src/main/kotlin/com/msoumaya/deepseekandroid/feature/profile/GoalRenderer.kt",
+        "avant": "            next = next.copy(goal = next.goal.copy(label = goal.label, ranges = goal.ranges))",
+        "apres": "            next = next.copy(goal = goal)",
+        "tache": ":feature:profile:testDebugUnitTest",
+        "attendus": ["le brouillon porte les quatre pieces"],
+    },
+    {
+        # L'objectif ne part plus du premier verset. Le programme commencerait alors au milieu de
+        # la division visee, et l'apercu annoncerait un passage que l'enregistrement ne
+        # programmerait pas.
+        "nom": "objectif : la plage ne part plus du premier verset",
+        "fichier": "feature/profile/src/main/kotlin/com/msoumaya/deepseekandroid/feature/profile/GoalRenderer.kt",
+        "avant": "        previous.copy(label = choice.label, ranges = listOf(Range(1, choice.end)))",
+        "apres": "        previous.copy(label = choice.label, ranges = listOf(Range(choice.number, choice.end)))",
+        "tache": ":feature:profile:testDebugUnitTest",
+        "attendus": ["l'objectif part toujours du premier verset"],
+    },
+    {
+        # L'unite de rythme est deduite d'une condition recopiee de la source, qui oublie
+        # `halfHizb` et `hizb`. C'est le defaut d'origine, et ce cas verifie qu'il est bien
+        # detecte : un rythme enregistre en hizb s'afficherait « Par page », et un appui sur
+        # « + » le remplacerait silencieusement par une demi-page.
+        "nom": "rythme : l'unite est deduite d'une condition qui oublie deux rythmes",
+        "fichier": "feature/profile/src/main/kotlin/com/msoumaya/deepseekandroid/feature/profile/GoalRenderer.kt",
+        "avant": "        GoalPaceUnit.entries.firstOrNull { pace in paceOptions(it) } ?: GoalPaceUnit.PER_PAGE",
+        "apres": "        when {\n            pace in listOf(Pace.VERSE1, Pace.VERSE2, Pace.VERSE3, Pace.VERSE4, Pace.VERSE5) ->\n                GoalPaceUnit.PER_VERSE\n            pace == Pace.QUARTER -> GoalPaceUnit.PER_RUBU\n            else -> GoalPaceUnit.PER_PAGE\n        }",
+        "tache": ":feature:profile:testDebugUnitTest",
+        "attendus": ["les deux rythmes que la source oublie"],
+    },
+    {
+        # L'apercu est calcule sur l'etat enregistre et non sur le brouillon. La carte
+        # « Programme genere » annoncerait alors un passage, et l'enregistrement en ecrirait un
+        # autre — sans que rien ne le dise, puisque les deux ecrans seraient plausibles.
+        "nom": "rendu : l'apercu est calcule sur l'etat enregistre",
+        "fichier": "feature/profile/src/main/kotlin/com/msoumaya/deepseekandroid/feature/profile/GoalRenderer.kt",
+        "avant": "        preview = preview(brouillon(state, fields), at),",
+        "apres": "        preview = preview(state, at),",
+        "tache": ":feature:profile:testDebugUnitTest",
+        "attendus": ["l'apercu annonce la seance que la sauvegarde programme"],
+    },
+    {
+        # Les revisions initiales ne sont plus ouvertes. L'application croirait alors neufs des
+        # versets declares connus, et les reproposerait a l'apprentissage.
+        "nom": "enregistrement : les revisions initiales ne sont plus ouvertes",
+        "fichier": "feature/profile/src/main/kotlin/com/msoumaya/deepseekandroid/feature/profile/GoalRenderer.kt",
+        "avant": "        Program.generateProgram(Program.seedInitialRevisions(Program.touch(draft), at), at)",
+        "apres": "        Program.generateProgram(Program.touch(draft), at)",
+        "tache": ":feature:profile:testDebugUnitTest",
+        "attendus": ["l'enregistrement ajoute les revisions initiales"],
+    },
+    {
+        # Le champ de verset est offert pour toutes les unites. On pourrait alors declarer
+        # « hizb 12, verset 200 », qui ne veut rien dire.
+        "nom": "rendu : le champ de verset est offert pour toutes les unites",
+        "fichier": "feature/profile/src/main/kotlin/com/msoumaya/deepseekandroid/feature/profile/GoalRenderer.kt",
+        "avant": "        verseChoices = if (fields.knownUnit == GoalUnit.SURAH) {\n            verseChoices(fields.surah)\n        } else {\n            emptyList()\n        },",
+        "apres": "        verseChoices = verseChoices(fields.surah),",
+        "tache": ":feature:profile:testDebugUnitTest",
+        "attendus": ["le rendu ne propose de versets que pour une sourate"],
+    },
+    {
+        # Le pas de rythme n'est plus borne a son unite : au dernier cran, l'index sort de la
+        # liste. Le defaut ne rend pas un mauvais rythme, il fait tomber l'ecran.
+        "nom": "rythme : le pas n'est plus borne a son unite",
+        "fichier": "feature/profile/src/main/kotlin/com/msoumaya/deepseekandroid/feature/profile/GoalRenderer.kt",
+        "avant": "        val cible = (depart + delta).coerceIn(0, options.size - 1)",
+        "apres": "        val cible = (depart + delta).coerceAtLeast(0)",
+        "tache": ":feature:profile:testDebugUnitTest",
+        "attendus": ["le pas de rythme est borne a son unite"],
+    },
+    {
+        # Une sourate se declare par une division : le champ unique proposerait des sourates
+        # « connues » sans dire jusqu'ou, ce qui est exactement ce que le second champ existe
+        # pour eviter.
+        "nom": "connaissance : une sourate se declare par une division",
+        "fichier": "feature/profile/src/main/kotlin/com/msoumaya/deepseekandroid/feature/profile/GoalRenderer.kt",
+        "avant": "        GoalUnit.SURAH -> emptyList()",
+        "apres": "        GoalUnit.SURAH -> knownSurahChoices()",
+        "tache": ":feature:profile:testDebugUnitTest",
+        "attendus": ["une sourate ne se declare pas par une division"],
+    },
+    {
+        # Les options d'objectif d'une sourate perdent leur nom : « Finir le Sourate 2 » au lieu de
+        # « Finir Al-Baqara ».
+        "nom": "objectif : les options de sourate perdent leur nom",
+        "fichier": "feature/profile/src/main/kotlin/com/msoumaya/deepseekandroid/feature/profile/GoalRenderer.kt",
+        "avant": "            choice(it.number, GoalText.finishSurah(it.name), it.end)",
+        "apres": "            choice(it.number, GoalText.finishDivision(GoalText.SURAH, it.number), it.end)",
+        "tache": ":feature:profile:testDebugUnitTest",
+        "attendus": ["les options d'objectif nomment la division selon son unite"],
+    },
+    {
+        # L'aller-retour de la date est retire. Un analyseur permissif accepte alors le 31 fevrier
+        # et le rend au 28 : l'echeance enregistree ne serait pas celle qu'on a tapee.
+        "nom": "date : l'aller-retour de la date est retire",
+        "fichier": "feature/profile/src/main/kotlin/com/msoumaya/deepseekandroid/feature/profile/GoalRenderer.kt",
+        "avant": "        return Dates.dateKey(date) == text",
+        "apres": "        return true",
+        "tache": ":feature:profile:testDebugUnitTest",
+        "attendus": ["un jour inexistant est refuse"],
+    },
+    {
+        # La route de l'objectif rend de nouveau un panneau de phase. L'ecran livre serait
+        # inatteignable — et la compilation ne dirait rien, puisque `ProfileScreen` existe
+        # toujours.
+        "nom": "route : l'ecran d'objectif n'est plus branche",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/AppScaffold.kt",
+        "avant": "        composable(AppRoutes.GOAL) { GoalScreen(onClose = { navController.popBackStack() }) }",
+        "apres": "        composable(AppRoutes.GOAL) { ProfileScreen(mode = ProfileMode.PROFILE) }",
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["AppScaffoldGoalEntryTest"],
+    },
+    {
+        # L'ecran d'objectif est branche sans `onClose`. Plein ecran, sans onglet ni barre
+        # superieure, il n'aurait plus aucun moyen de revenir en arriere.
+        "nom": "route : l'ecran d'objectif ne recoit plus de quoi se fermer",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/AppScaffold.kt",
+        "avant": "        composable(AppRoutes.GOAL) { GoalScreen(onClose = { navController.popBackStack() }) }",
+        "apres": "        composable(AppRoutes.GOAL) { GoalScreen() }",
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["l'ecran d'objectif recoit de quoi se fermer"],
+    },
 ]
 
 

@@ -78,3 +78,21 @@ internal fun tableauDeBordDeLaCoquille(): String = blocApres("composable(AppRout
 
 /** Le bloc du programme seul. */
 internal fun programmeDeLaCoquille(): String = blocApres("ProgramScreen(")
+
+/**
+ * La ligne qui sert la route de l'objectif.
+ *
+ * Elle est **la dernière** du `NavHost` : il n'y a pas de `composable(` après elle, donc la borne
+ * de [blocApres] n'existe pas et son `check` refuserait — à raison, puisque rien ne délimiterait
+ * le bloc. La route tient sur une seule ligne, et c'est cette ligne qu'on lit.
+ *
+ * `check` plutôt que `single` : une route disparue et une route dupliquée sont deux défauts
+ * différents, et le message doit dire lequel.
+ */
+internal fun routeGoalDeLaCoquille(): String {
+    val lignes = sourceDeLaCoquille().lines().filter { it.contains("composable(AppRoutes.GOAL)") }
+    check(lignes.size == 1) {
+        "La route de l'objectif doit être servie exactement une fois ; elle l'est ${lignes.size} fois."
+    }
+    return lignes.single()
+}

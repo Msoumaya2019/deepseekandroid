@@ -24,6 +24,7 @@ import com.msoumaya.deepseekandroid.core.model.Range
 import com.msoumaya.deepseekandroid.core.model.ReviewCategory
 import com.msoumaya.deepseekandroid.core.design.theme.AppTheme
 import com.msoumaya.deepseekandroid.feature.home.HomeScreen
+import com.msoumaya.deepseekandroid.feature.profile.GoalScreen
 import com.msoumaya.deepseekandroid.feature.profile.ProfileMode
 import com.msoumaya.deepseekandroid.feature.profile.ProfileScreen
 import com.msoumaya.deepseekandroid.feature.program.ProgramScreen
@@ -321,7 +322,10 @@ private fun AppNavHost(
         composable(AppRoutes.PROFILE) { ProfileScreen(mode = ProfileMode.PROFILE) }
         composable(AppRoutes.SETTINGS) { ProfileScreen(mode = ProfileMode.SETTINGS) }
         composable(AppRoutes.APPEARANCE) { ProfileScreen(mode = ProfileMode.APPEARANCE) }
-        composable(AppRoutes.GOAL) { ProfileScreen(mode = ProfileMode.GOAL) }
+        // L'écran d'objectif a son propre fichier depuis qu'il est livré : il n'est plus une
+        // section de `ProfileScreen`. La fermeture est fournie par la route, comme pour les autres
+        // écrans d'outil — c'est ici qu'on sait où l'on retourne.
+        composable(AppRoutes.GOAL) { GoalScreen(onClose = { navController.popBackStack() }) }
     }
 }
 
