@@ -52,6 +52,7 @@ import com.msoumaya.deepseekandroid.core.domain.ReaderLayout
 import com.msoumaya.deepseekandroid.core.domain.ReaderOptionsText
 import com.msoumaya.deepseekandroid.core.domain.ReaderTouch
 import com.msoumaya.deepseekandroid.core.domain.ReaderZoomGeometry
+import com.msoumaya.deepseekandroid.core.domain.ReviewText
 import com.msoumaya.deepseekandroid.core.domain.StudySession
 import com.msoumaya.deepseekandroid.core.domain.TestPageOverlay
 import com.msoumaya.deepseekandroid.core.domain.Texts
@@ -207,6 +208,21 @@ fun ReaderScreen(
     // ne sait pas écrire : le bandeau est alors **absent**, comme les autres actions sans
     // destination. Un bandeau qui s'annonce sans rien permettre serait un bouton mort.
     onValidateStudy: ((Int, ReviewGrade) -> Unit)? = null,
+    // Valide l'étape de consolidation proposée. `null` retire l'entrée du panneau de séance : une
+    // étape de consolidation ne se valide pas comme une révision, et il n'y a pas de repli — la
+    // règle qui l'enregistre n'est pas la même.
+    onValidateConsolidation: (() -> Unit)? = null,
+    // Déclare qu'il faut réapprendre le passage : la révision repart à un jour. `null` retire
+    // l'entrée, qui n'existe de toute façon que pour une révision historique — un modèle que ce
+    // client n'écrit jamais.
+    onRelearn: (() -> Unit)? = null,
+    // Clôt la séance en la déclarant inachevée, ou la reporte entière. Les deux sont facultatifs
+    // **séparément** : le bloc « Après ma séance » se contente d'un seul de ses deux boutons.
+    onWorkAgain: (() -> Unit)? = null,
+    onPostpone: (() -> Unit)? = null,
+    // La demande d'ouvrir le panneau de séance. Voir la note du compteur, plus bas : ce n'est pas
+    // un état mais un **événement**, et c'est pourquoi c'est un entier et non un booléen.
+    sessionPanelRequest: Int = 0,
 ) {
     val colors = AppTheme.colors
     val totalPages = remember { Quran.pages.size.takeIf { it > 0 } ?: DEFAULT_TOTAL_PAGES }
@@ -396,6 +412,23 @@ fun ReaderScreen(
     // une séance dont le geste n'ouvre rien est exactement le bouton mort que ce lecteur refuse.
     val seance = study?.takeIf { onValidateStudy != null }
 
+    // Le panneau de séance a **deux portes**, et une seule est ici. Le bandeau l'ouvre pour une
+    // étape de consolidation — son bouton de validation y vit. La seconde est le sélecteur de
+    // présentation, qui est rendu par la **route** et ne peut donc pas toucher `panel`, l'état de
+    // ce composable : la route le lui demande, et c'est ce que porte `sessionPanelRequest`.
+    //
+    // La demande est un **compteur**, et non un booléen. Deux ouvertures successives de la même
+    // chose doivent compter pour deux demandes ; un booléen ne le peut pas, puisqu'il vaut déjà
+    // vrai à la seconde — il faudrait que la route le remette à zéro, donc un second état à tenir
+    // en accord avec le premier, et un aller-retour pour rien. Une valeur qui change dit
+    // exactement ce qu'elle est : un événement.
+    //
+    // L'effet est **clé sur la valeur** : il ne s'exécute qu'une fois par demande reçue, et non à
+    // chaque recomposition — sans quoi le panneau se rouvrirait à chaque frappe ailleurs.
+    LaunchedEffect(sessionPanelRequest) {
+        if (sessionPanelRequest > 0) panel = ReaderPanel.SESSION
+    }
+
     // Ce que la source composée reçoit pour colorer sa page. Le **mode de pose** y figure, et il
     // y décide de deux choses à la fois : ce que le document colore, et ce qu'un appui désigne.
     // Les séparer les ferait diverger — la page colorerait autre chose que ce qu'un appui
@@ -499,7 +532,22 @@ fun ReaderScreen(
         // reste entière. Le poser par-dessus masquerait le premier verset — celui qu'on vient
         // de commencer à apprendre, donc celui qu'on relit le plus.
         if (seance != null) {
-            StudyBanner(banner = seance.banner, onPress = { completionOpen = true })
+            // Le geste du bandeau suit le **genre** de la tâche, comme dans le client d'origine :
+            // une étape de consolidation ouvre le panneau de séance — c'est là que vit son bouton
+            // de validation, et le bandeau l'annonce déjà (« Valider la consolidation J+3 ») —
+            // tandis qu'une séance ou une révision ouvre directement la feuille du point d'arrêt,
+            // qui est le geste qu'on vient faire. Le panneau reste atteignable dans les deux cas,
+            // par le sélecteur de présentation.
+            StudyBanner(
+                banner = seance.banner,
+                onPress = {
+                    if (seance.request.consolidation) {
+                        panel = ReaderPanel.SESSION
+                    } else {
+                        completionOpen = true
+                    }
+                },
+            )
         }
 
         BoxWithConstraints(
@@ -954,6 +1002,81 @@ fun ReaderScreen(
             }
         }
 
+        // Le panneau de séance. Sa garde est `seance?.let` et non `seance != null`, comme celle du
+        // panneau du verset juste au-dessus : il n'a rien à montrer sans sa valeur. Et c'est
+        // `SessionPanelText.entries` qui décide s'il a quelque chose à proposer — une lecture libre
+        // n'a aucune entrée, et le panneau ne se dessine alors pas du tout.
+        ReaderPanel.SESSION -> seance?.let { etat ->
+            SessionPanelSheet(
+                request = etat.request,
+                consolidationOffset = etat.consolidationOffset,
+                onClose = { panel = ReaderPanel.NONE },
+                // Valider une consolidation **quitte le lecteur**, comme les autres validations :
+                // la route écrit l'étape, puis referme. Laisser le panneau ouvert le ferait
+                // réapparaître par-dessus un écran qu'on est en train de quitter.
+                // L'entrée n'est proposée que si **une étape reste à valider**. Les trois faites,
+                // le client d'origine affiche quand même un bouton « J+7 » — le libellé retombe
+                // sur la dernière échéance — et ce bouton ne fait rien : sa garde sort avant
+                // d'écrire. C'est un bouton mort, et c'est exactement ce que ce lecteur refuse
+                // ailleurs. La condition appartient donc à l'appelant, qui seul sait ce qu'il peut
+                // réellement faire.
+                onValidateConsolidation = onValidateConsolidation
+                    ?.takeIf { etat.consolidationOffset != null }
+                    ?.let { valider ->
+                        {
+                            panel = ReaderPanel.NONE
+                            valider()
+                        }
+                    },
+                // Le grade est **reçu et ignoré**, et c'est la mesure du client d'origine : sa
+                // lambda de notation jette son argument et ouvre la feuille, qui redemande la note
+                // et enregistre celle qu'on y choisit. Voir la note de `RevisionActionBar`.
+                onGrade = { _ ->
+                    panel = ReaderPanel.NONE
+                    completionOpen = true
+                },
+                // « Écouter » démarre la lecture de la page affichée et **referme** le panneau :
+                // c'est ce que fait `openAudio` du source, qui termine par `setSessionPanel(null)`.
+                // Sans cela, le voile resterait devant la page pendant qu'on l'écoute.
+                onAudio = listenAction?.let { ecouter ->
+                    {
+                        panel = ReaderPanel.NONE
+                        ecouter()
+                    }
+                },
+                // Aucun enregistreur dans ce client : le paramètre reste `null`, et « Ma voix »
+                // disparaît de la barre au lieu d'y figurer sans effet. C'est ici qu'elle se
+                // rebranchera.
+                onRelearn = onRelearn?.let { action ->
+                    {
+                        panel = ReaderPanel.NONE
+                        action()
+                    }
+                },
+                onValidate = {
+                    panel = ReaderPanel.NONE
+                    completionOpen = true
+                },
+                // Les deux gestes de clôture **quittent le lecteur** — la route écrit, puis
+                // referme : une séance close ou reportée n'a plus rien à faire à l'écran.
+                onWorkAgain = onWorkAgain?.let { action ->
+                    {
+                        panel = ReaderPanel.NONE
+                        action()
+                    }
+                },
+                onPostpone = onPostpone?.let { action ->
+                    {
+                        panel = ReaderPanel.NONE
+                        action()
+                    }
+                },
+                // Le geste en cours : « Écouter » quand le lecteur audio est ouvert. C'est le
+                // `audioDock ? 'audio' : null` du source, et le seul état qu'il passe jamais.
+                active = if (audioState.isOpen) ReviewText.Action.LISTEN else null,
+            )
+        }
+
         ReaderPanel.SURAH -> SurahPickerScreen(
             // Un référentiel non chargé ne fait pas tomber l'écran : la première sourate est
             // surlignée et la liste est vide, ce que le sélecteur sait déjà montrer.
@@ -1105,6 +1228,16 @@ private enum class ReaderPanel {
 
     /** Les actions du verset touché : écouter, répéter, marquer. */
     VERSE,
+
+    /**
+     * Le panneau de séance : noter, valider, clore ou reporter.
+     *
+     * Il a **deux portes** — le bandeau, pour une étape de consolidation, et le sélecteur de
+     * présentation, pour tout le reste. Il figure dans cette énumération, et non dans un état à
+     * part, parce que le client d'origine n'a qu'un seul `sessionPanel` : ouvrir celui-ci doit
+     * donc **refermer** celui qui était ouvert, et non s'empiler avec lui.
+     */
+    SESSION,
 }
 
 /**

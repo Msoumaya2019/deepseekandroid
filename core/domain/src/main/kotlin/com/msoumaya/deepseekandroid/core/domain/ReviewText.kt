@@ -387,6 +387,30 @@ object ReviewText {
         actionLabel(Action.entries.first { it.grade == grade })
 
     /**
+     * Les gestes de la barre, **dans l'ordre du client d'origine**, restreints à ceux dont
+     * l'appelant sait quoi faire.
+     *
+     * ## Pourquoi un ensemble de disponibilité, et non un simple `Action.entries`
+     *
+     * L'ordre seul ne suffit pas : deux des cinq gestes ont besoin d'une destination que le
+     * portage n'a pas toujours. « Écouter » demande un lecteur — il existe. « Ma voix » demande
+     * un enregistreur — il n'est pas porté, et le panneau qui l'ouvrirait non plus. Un geste
+     * absent de [available] est donc **retiré**, et non grisé : c'est la règle du dépôt pour
+     * toute entrée sans destination, et la raison est toujours la même — un bouton grisé laisse
+     * croire que le geste existe et qu'il est momentanément indisponible, alors qu'il n'existe
+     * pas.
+     *
+     * ## Ce que l'ordre protège
+     *
+     * Le trait de séparation de la barre tombe sur le **quatrième** rang, donc entre les trois
+     * grades et les deux gestes d'écoute. Une liste qui ne respecterait pas l'ordre de [Action]
+     * déplacerait ce trait, ou le ferait porter par un grade. C'est la seule chose que ce
+     * fichier ne peut pas éprouver — le trait vit dans le rendu — et c'est pourquoi [Action]
+     * reste un `enum` dont l'ordre est écrit noir sur blanc.
+     */
+    fun actionBar(available: Set<Action>): List<Action> = Action.entries.filter { it in available }
+
+    /**
      * Met une clé `AAAA-MM-JJ` en forme, ou la rend **telle quelle** si ce n'en est pas une.
      *
      * Même repli que dans [ProgramText], et pour la même raison : le client d'origine écrirait

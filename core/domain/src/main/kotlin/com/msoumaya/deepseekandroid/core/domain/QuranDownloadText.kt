@@ -58,6 +58,25 @@ object QuranDownloadText {
     const val PICKER_TITLE = "Affichage du Coran"
 
     /**
+     * L'entrée du sélecteur qui mène aux actions de la tâche en cours.
+     *
+     * ## Pourquoi elle est **dans** le sélecteur de présentation
+     *
+     * C'est le client d'origine qui l'y met (`App.tsx:515`), et ce n'est pas un hasard : le
+     * sélecteur est le seul écran qu'on ouvre **pendant** une tâche sans la quitter, et la tâche
+     * est justement ce dont on peut vouloir changer le sort. Le déplacer ailleurs aurait demandé
+     * un second bouton sur le bandeau, à côté de celui qui ouvre déjà la validation.
+     *
+     * ## Pourquoi la référence est un paramètre
+     *
+     * Le libellé porte la **plage** de la tâche — « Actions de la séance · Al-Baqara 5–10 » — et
+     * non son genre : le sélecteur ne dit pas si c'est un apprentissage ou une révision, et deux
+     * tâches différentes peuvent se suivre dans la même journée. La référence est donc la seule
+     * chose qui distingue l'entrée d'une ouverture à l'autre.
+     */
+    fun sessionActions(reference: String): String = "Actions de la séance · $reference"
+
+    /**
      * Ce qui est dit pendant qu'une source est préparée.
      *
      * Une préparation peut durer — le paquet fait 102 Mo — et un écran qui ne dit rien pendant

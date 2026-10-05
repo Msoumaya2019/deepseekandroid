@@ -64,9 +64,15 @@ class StudyChromeWiringTest {
         // **Dans** la colonne : c'est ce qui lui fait prendre sa hauteur, donc ce qui laisse la
         // page entière. Le poser par-dessus masquerait le premier verset — celui qu'on vient de
         // commencer à apprendre.
+        //
+        // L'ancre est `banner = seance.banner,` et non la signature d'appel entière : le bandeau a
+        // reçu une **seconde** ligne, le branchement de son geste, et une ancre écrite sur
+        // `StudyBanner(banner = …` serait tombée pour une raison qui n'a rien à voir avec ce que
+        // ce contrôle mesure. C'est le piège documenté du dépôt : une ancre encode souvent ce
+        // qu'on **attendait lire**, pas ce que l'artefact **dit**.
         val source = sourceDuLecteur()
         val colonne = source.indexOf("BoxWithConstraints(")
-        val bandeau = source.indexOf("StudyBanner(banner = seance.banner")
+        val bandeau = source.indexOf("banner = seance.banner,")
         assertTrue(colonne >= 0, "Le lecteur n'a plus de colonne de page.")
         assertTrue(bandeau >= 0, "Le bandeau n'est plus posé dans le lecteur.")
         assertTrue(
@@ -77,11 +83,53 @@ class StudyChromeWiringTest {
     }
 
     @Test
-    fun `la feuille de validation est ouverte par le bandeau`() {
+    fun `le geste du bandeau suit le genre de la tache`() {
+        // Le client d'origine écrit `reader.consolidation ? setSessionPanel('session') :
+        // setCompletionOpen(true)`. La branche compte, et pas seulement son existence : une étape
+        // de consolidation se valide **dans le panneau de séance**, où vit son bouton, tandis
+        // qu'une séance ou une révision ouvre directement la feuille du point d'arrêt. L'aplatir
+        // sur `completionOpen = true` rendrait une consolidation invalidable, et rien à l'écran
+        // ne le dirait — le bouton existe, mais nulle part où l'atteindre.
+        val geste = gesteDuBandeau()
         assertTrue(
-            sourceDuLecteur().contains("onPress = { completionOpen = true }"),
-            "Le bandeau n'ouvre plus la feuille de validation : son geste ne mène nulle part.",
+            geste.contains("seance.request.consolidation"),
+            "Le geste du bandeau ne distingue plus une consolidation : son bouton de validation " +
+                "serait inatteignable.",
         )
+        assertTrue(
+            geste.contains("panel = ReaderPanel.SESSION"),
+            "Le geste du bandeau n'ouvre plus le panneau de séance pour une consolidation.",
+        )
+        assertTrue(
+            geste.contains("completionOpen = true"),
+            "Le geste du bandeau n'ouvre plus la feuille de validation pour une séance ou une " +
+                "révision.",
+        )
+    }
+
+    /**
+     * Le geste du bandeau, et lui seul.
+     *
+     * **Borné**, et pour une raison mesurée : `completionOpen = true` apparaît deux fois de plus
+     * dans le fichier — dans le panneau de séance, où c'est le geste qui ouvre la feuille. Une
+     * recherche sur le fichier entier resterait donc verte même si le bandeau n'ouvrait plus rien.
+     *
+     * La borne est accompagnée de son propre contrôle : `substringBefore` **sans repli** rend la
+     * chaîne entière quand le délimiteur est absent, et le bloc lu serait alors le fichier — où
+     * l'autre `completionOpen` se trouve justement **après** celui du bandeau.
+     */
+    private fun gesteDuBandeau(): String {
+        val source = sourceDuLecteur()
+        val marqueur = "onPress = {"
+        val debut = source.indexOf(marqueur)
+        assertTrue(debut >= 0, "Le bandeau n'a plus de geste.")
+        val bloc = source.substring(debut).substringBefore("\n            )")
+        assertTrue(
+            bloc.length < source.length,
+            "La borne du geste n'a pas mordu : le bloc lu est le fichier entier, et le " +
+                "`completionOpen` trouvé serait celui du panneau de séance.",
+        )
+        return bloc
     }
 
     @Test

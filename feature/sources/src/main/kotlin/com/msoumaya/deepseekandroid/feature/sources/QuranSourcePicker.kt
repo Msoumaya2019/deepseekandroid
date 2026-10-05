@@ -47,6 +47,14 @@ fun QuranSourcePickerDialog(
     onDismiss: () -> Unit,
     currentPage: Int,
     modifier: Modifier = Modifier,
+    // L'entrée « Actions de la séance », quand le lecteur sert une tâche. `null` — le cas d'une
+    // lecture libre — et l'entrée n'existe pas : c'est la règle du dépôt, une entrée sans
+    // destination est **retirée** et non grisée.
+    //
+    // Elle est ici, et non sur le bandeau du lecteur, parce que c'est le client d'origine qui l'y
+    // met : le sélecteur est le seul écran qu'on ouvre pendant une tâche sans la quitter. Voir la
+    // note de `QuranDownloadText.sessionActions`.
+    sessionActions: SessionActions? = null,
     viewModel: QuranSourceViewModel = viewModel(
         factory = QuranSourceViewModel.factory(LocalAppContainer.current),
     ),
@@ -108,6 +116,18 @@ fun QuranSourcePickerDialog(
                     viewModel = viewModel,
                 )
 
+                // L'entrée de la tâche en cours vient **après** les présentations : elle ne change
+                // pas ce qu'on lit, elle change ce qu'on fait de ce qu'on lit. La placer avant
+                // aurait fait lire une action de séance comme une présentation de plus.
+                sessionActions?.let { actions ->
+                    AppButton(
+                        text = QuranDownloadText.sessionActions(actions.reference),
+                        secondary = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = actions.onOpen,
+                    )
+                }
+
                 if (switching) {
                     AppLabel(
                         text = QuranDownloadText.LOADING_SOURCE,
@@ -132,3 +152,27 @@ fun QuranSourcePickerDialog(
         }
     }
 }
+
+/**
+ * L'entrée « Actions de la séance » du sélecteur de présentation.
+ *
+ * ## Pourquoi un type, et non deux paramètres
+ *
+ * La référence et l'ouverture vont **ensemble** : une entrée qui afficherait une plage sans
+ * pouvoir l'ouvrir serait un bouton mort, et l'inverse une entrée sans nom. Deux paramètres
+ * facultatifs auraient laissé croire qu'on peut n'en passer qu'un — et c'est exactement ce que le
+ * dépôt refuse ailleurs.
+ *
+ * ## Pourquoi la référence, et non le libellé
+ *
+ * Le texte est construit par `QuranDownloadText.sessionActions`, à côté des autres mots de ce
+ * sélecteur. Passer une chaîne déjà mise en forme aurait déplacé la règle de texte chez
+ * l'appelant, et deux appelants auraient fini par écrire deux libellés pour la même entrée.
+ *
+ * @param reference la plage que la tâche couvre — « Al-Baqara 5–10 ». Elle vient de
+ *   `Quran.reference`, et l'appelant ne propose l'entrée que s'il a pu la résoudre : une référence
+ *   irrésoluble ne donne pas une entrée, elle n'en donne aucune.
+ * @param onOpen ouvre le panneau de la séance. Il appartient à l'appelant de **refermer** ce
+ *   sélecteur — c'est lui qui le tient à l'écran.
+ */
+class SessionActions(val reference: String, val onOpen: () -> Unit)

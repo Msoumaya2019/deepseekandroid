@@ -17,6 +17,8 @@ import com.msoumaya.deepseekandroid.core.data.LocalAppContainer
 import com.msoumaya.deepseekandroid.core.domain.Audio
 import com.msoumaya.deepseekandroid.core.domain.Bookmarks
 import com.msoumaya.deepseekandroid.core.domain.MushafSourceNavigation
+import com.msoumaya.deepseekandroid.core.domain.Program
+import com.msoumaya.deepseekandroid.core.domain.Quran
 import com.msoumaya.deepseekandroid.core.domain.QuranSourceReady
 import com.msoumaya.deepseekandroid.core.domain.ReaderMemory
 import com.msoumaya.deepseekandroid.core.domain.StudyProgressCalculator
@@ -25,6 +27,7 @@ import com.msoumaya.deepseekandroid.core.domain.ReciterPreference
 import com.msoumaya.deepseekandroid.core.domain.Review
 import com.msoumaya.deepseekandroid.core.domain.VerseActionsText
 import com.msoumaya.deepseekandroid.core.model.AudioPreferences
+import com.msoumaya.deepseekandroid.core.model.LegacyReviewGrade
 import com.msoumaya.deepseekandroid.core.model.MushafPageSource
 import com.msoumaya.deepseekandroid.feature.reader.BookmarksScreen
 import com.msoumaya.deepseekandroid.feature.reader.EmbeddedMushafPages
@@ -33,6 +36,7 @@ import com.msoumaya.deepseekandroid.feature.reader.StudyChromeState
 import com.msoumaya.deepseekandroid.feature.sources.QuranDownloadPanel
 import com.msoumaya.deepseekandroid.feature.sources.QuranSourcePickerDialog
 import com.msoumaya.deepseekandroid.feature.sources.QuranSourceViewModel
+import com.msoumaya.deepseekandroid.feature.sources.SessionActions
 import com.msoumaya.deepseekandroid.feature.sources.archiveMushafPages
 import kotlinx.coroutines.launch
 
@@ -231,6 +235,17 @@ fun ReaderRoute(
     var page by rememberSaveable { mutableIntStateOf(ReaderMemory.FIRST_PAGE) }
     var pickerOpen by rememberSaveable { mutableStateOf(false) }
 
+    // La demande d'ouvrir le panneau de séance, adressée au lecteur. C'est un **compteur**, et non
+    // un booléen : deux demandes successives de la même chose doivent compter pour deux, et un
+    // booléen vaudrait déjà vrai à la seconde — il faudrait alors le remettre à zéro, donc un
+    // second état à tenir en accord avec le premier, et un aller-retour pour rien.
+    //
+    // Il est en `remember` et non `rememberSaveable`, et c'est la différence avec les trois états
+    // au-dessus : c'est un **événement**, pas un état. Une rotation ne doit pas rouvrir un panneau
+    // qu'on venait de refermer — et le client d'origine ne le rouvre pas non plus, son panneau
+    // étant un état de composant qui ne survit pas au remontage.
+    var sessionPanelRequest by remember { mutableIntStateOf(0) }
+
     // La personne a-t-elle **tourné** une page ? Tant que non, la page mémorisée est adoptée
     // quand l'état du compte finit d'arriver — et non au premier rendu, où il vaut encore
     // `null`. Le drapeau est sauvegardé : une rotation ne doit pas ramener quelqu'un à la page
@@ -327,10 +342,18 @@ fun ReaderRoute(
         } else {
             StudyChromeState(
                 banner = StudySession.banner(etat, session, sourceEtude),
-                learning = session.learning,
+                // La requête voyage **entière**, et non seulement ce qu'on en a tiré : le panneau
+                // de séance a besoin de ses quatre faits pour décider de ses entrées, et aucun
+                // couple de bornes ne dit si la tâche était un apprentissage ou une révision.
+                request = session,
                 range = StudySession.plannedRange(etat, session),
                 through = StudySession.through(etat, session),
                 source = sourceEtude,
+                // L'étape de consolidation, lue **une fois** pour les deux endroits qui l'affichent :
+                // le bandeau en fait son titre, et le bouton du panneau son libellé. Deux appels
+                // séparés à la même règle liraient deux fois le même état — donc deux vérités à
+                // tenir en accord, pour rien.
+                consolidationOffset = StudySession.consolidationOffset(etat, session),
             )
         }
     }
@@ -407,6 +430,10 @@ fun ReaderRoute(
         // passe. Il ne sert qu'à la source **composée** : les images du moushaf portent le leur.
         paper = userState?.reader?.paper,
         study = etude,
+        // La demande d'ouvrir le panneau de séance, adressée au lecteur. Elle est passée **telle
+        // quelle** : c'est le lecteur qui sait si le panneau est déjà ouvert, et c'est lui qui
+        // possède l'état.
+        sessionPanelRequest = sessionPanelRequest,
         // Valider la séance : la règle est dans `core:domain`, l'écriture ici. Comme pour la
         // sortie, on **écrit d'abord** — la portée meurt avec l'écran, donc fermer avant
         // annulerait l'écriture en vol, et le symptôme serait celui d'une validation qui
@@ -432,6 +459,90 @@ fun ReaderRoute(
                     // La sortie écrit la mémoire du lecteur, puis referme. C'est `quitter`, et
                     // non `onClose` : le même chemin que le bouton et le retour système — sans
                     // quoi valider une séance oublierait où l'on s'était arrêté.
+                    quitter()
+                }
+            }
+        },
+        // Valider une étape de consolidation. L'étape visée est **relue** ici, et non reçue du
+        // panneau : elle peut avoir changé depuis son ouverture — une synchronisation, une autre
+        // validation — et c'est l'état présent qui dit quelle étape reste à faire.
+        //
+        // Elle est passée en `targetOffset`, et ce n'est pas un détail : sans elle,
+        // `completeConsolidation` valide la première étape non faite, si bien qu'un second appui
+        // validerait l'étape **suivante**. Le client d'origine passe le même argument, en
+        // cinquième position.
+        onValidateConsolidation = {
+            val requete = session
+            val cible = requete?.let { r -> userState?.let { etat -> StudySession.consolidationOffset(etat, r) } }
+            // Les trois étapes faites, il n'y a plus rien à valider : on ne fait rien, et surtout
+            // on **n'écrit pas**. Le lecteur ne propose d'ailleurs plus le bouton dans ce cas —
+            // voir sa garde —, donc ce chemin n'est pas atteignable ; il est écrit quand même,
+            // parce qu'un état peut changer entre le rendu et l'appui.
+            if (requete != null && cible != null) {
+                scope.launch {
+                    runCatching {
+                        container.userState.mutate { state ->
+                            Review.completeConsolidation(
+                                state = state,
+                                range = requete.range,
+                                targetOffset = cible,
+                            )
+                        }
+                    }
+                    // La consolidation **quitte le lecteur** : l'étape est faite, et il n'y a plus
+                    // rien à valider sur cette plage. Même chemin que les autres validations.
+                    quitter()
+                }
+            }
+        },
+        // « À réapprendre » : la révision repart à un jour, **et** le programme est régénéré.
+        // Les deux, et dans cet ordre : c'est ce que fait le client d'origine, où `grade('relearn')`
+        // enchaîne `generateProgram`. Sans la régénération, le verset repartirait à un jour sans
+        // que le programme en tienne compte, et il ne serait proposé nulle part — un verset marqué
+        // « à réapprendre » que plus rien ne reproposerait.
+        onRelearn = {
+            val revision = session?.revisionId
+            if (revision != null) {
+                scope.launch {
+                    runCatching {
+                        container.userState.mutate { state ->
+                            Program.generateProgram(
+                                Program.gradeRevision(state, revision, LegacyReviewGrade.RELEARN),
+                            )
+                        }
+                    }
+                    quitter()
+                }
+            }
+        },
+        // « Je dois encore le travailler » : la séance n'est **pas** finie. C'est
+        // `completeSession` avec `memorized = false`, qui reporte — le verset déjà validé reste
+        // appris, et le programme reproposera la séance. Le client d'origine passe exactement ce
+        // booléen, et c'est aussi ce que fait sa fonction de clôture.
+        onWorkAgain = {
+            val seance = session?.sessionId
+            if (seance != null) {
+                scope.launch {
+                    runCatching {
+                        container.userState.mutate { state ->
+                            Program.completeSession(state, seance, memorized = false)
+                        }
+                    }
+                    quitter()
+                }
+            }
+        },
+        // « Reporter cette séance » : la séance entière repart au programme. Le report ne change
+        // que le statut — la date prévue et les séances voisines ne bougent pas — et une séance
+        // partiellement apprise reste reprise plutôt que reportée, ce que porte la règle du
+        // domaine.
+        onPostpone = {
+            val seance = session?.sessionId
+            if (seance != null) {
+                scope.launch {
+                    runCatching {
+                        container.userState.mutate { state -> Program.postponeSession(state, seance) }
+                    }
                     quitter()
                 }
             }
@@ -484,9 +595,36 @@ fun ReaderRoute(
     }
 
     if (pickerOpen) {
+        // L'entrée « Actions de la séance ». Elle n'existe que si le lecteur **sert une tâche** —
+        // c'est le `focused` du client d'origine, une séance d'apprentissage ou une révision — et
+        // que sa plage a pu être nommée. Une référence irrésoluble ne donne pas une entrée
+        // fautive : elle n'en donne aucune, et le sélecteur reste ce qu'il est, un choix de
+        // présentation.
+        //
+        // La plage annoncée est celle **ouverte** — le reste d'une tâche reprise —, comme dans le
+        // client d'origine, où le libellé est `reference(reader.range)` et où `reader.range` est
+        // la plage de reprise. L'écrire sur la plage demandée annoncerait des versets qu'on ne
+        // relira pas.
+        val actionsSeance = session?.takeIf { it.focused }?.let { requete ->
+            val ouverte = userState?.let { StudySession.opening(it, requete) } ?: requete
+            runCatching { Quran.reference(ouverte.range) }.getOrNull()
+        }?.let { reference ->
+            SessionActions(
+                reference = reference,
+                onOpen = {
+                    // Refermer **d'abord**, puis demander : deux fenêtres empilées donneraient
+                    // deux voiles superposés, et un retour arrière qui ne rendrait pas la main au
+                    // bon endroit. C'est l'ordre du client d'origine.
+                    pickerOpen = false
+                    sessionPanelRequest++
+                },
+            )
+        }
+
         QuranSourcePickerDialog(
             onDismiss = { pickerOpen = false },
             currentPage = page,
+            sessionActions = actionsSeance,
             viewModel = viewModel,
         )
     }

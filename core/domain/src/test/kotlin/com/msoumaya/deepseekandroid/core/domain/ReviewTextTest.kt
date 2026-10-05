@@ -271,6 +271,30 @@ class ReviewTextTest {
         assertEquals("Parfait", ReviewText.gradeLabel(ReviewGrade.PERFECT))
     }
 
+    @Test
+    fun `un geste sans destination est retire de la barre`() {
+        // La règle du dépôt, et sa raison : un geste grisé laisse croire qu'il existe et qu'il est
+        // momentanément indisponible, alors qu'il n'existe pas. « Ma voix » demande un enregistreur
+        // que ce client n'a pas : elle disparaît de la barre au lieu d'y figurer sans effet.
+        val sansEnregistrement = ReviewText.Action.entries.toSet() - ReviewText.Action.RECORD
+        assertEquals(
+            listOf(
+                ReviewText.Action.PERFECT,
+                ReviewText.Action.HESITANT,
+                ReviewText.Action.REWORK,
+                ReviewText.Action.LISTEN,
+            ),
+            ReviewText.actionBar(sansEnregistrement),
+        )
+        // Le retrait porte sur **un** geste, et laisse les autres — y compris l'ordre, que le trait
+        // de séparation du rendu protège. Une liste vide serait aussi « un geste retiré », et elle
+        // ne dirait rien de ce qui reste.
+        assertEquals(
+            ReviewText.Action.entries,
+            ReviewText.actionBar(ReviewText.Action.entries.toSet()),
+        )
+    }
+
     // -----------------------------------------------------------------------
     // Apostrophes et ordre du résumé
     // -----------------------------------------------------------------------

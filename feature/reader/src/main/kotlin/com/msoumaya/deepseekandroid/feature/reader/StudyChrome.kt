@@ -162,21 +162,36 @@ internal fun StudyBanner(
 /**
  * Ce que la coquille d'étude a besoin de savoir de la séance en cours.
  *
- * Un seul objet plutôt que cinq paramètres, et c'est délibéré : les cinq valeurs
+ * Un seul objet plutôt que plusieurs paramètres, et c'est délibéré : ces valeurs
  * viennent **ensemble** de la même requête, et les faire voyager séparément laisserait
- * croire qu'on peut n'en passer que quatre. Le jour où l'une manquerait, la feuille
+ * croire qu'on peut n'en passer que quelques-unes. Le jour où l'une manquerait, la feuille
  * calculerait un point d'arrêt sur la mauvaise plage — un défaut silencieux, puisqu'il
  * produirait un verset plausible.
  *
+ * ## La requête est là, et pas seulement ce qu'on en a tiré
+ *
+ * `range` et `through` sont **déjà calculés** à partir de la requête et de l'état ; la requête,
+ * elle, est la valeur brute. Les deux sont utiles, et pour deux usages différents : le bandeau et
+ * la feuille de validation veulent les valeurs résolues, tandis que le panneau « Ma séance » a
+ * besoin des **quatre faits** de la tâche — apprentissage, révision, consolidation, révision
+ * historique — parce que c'est d'eux que dépendent ses entrées.
+ *
+ * Les recomposer à partir des valeurs résolues serait impossible : `range` est la plage **prévue**,
+ * et rien dans un couple de bornes ne dit si la tâche était une révision ou un apprentissage. C'est
+ * pourquoi la requête voyage entière plutôt que d'être démontée puis devinée.
+ *
  * @param banner les textes du bandeau, résolus par le domaine.
- * @param learning vrai pour un apprentissage : décide des mots de la feuille, et rien
- *   d'autre.
+ * @param request la tâche servie. C'est elle qui décide des entrées du panneau de séance.
  * @param range la plage **prévue** — celle que le bandeau compte, et non celle qui a
  *   été demandée. Voir `StudySession.plannedRange`.
  * @param through le dernier verset déjà validé.
  * @param source la source de lecture, **déjà repliée** par
  *   `StudyProgressCalculator.sourceKey` : c'est sous cette forme que les règles
  *   d'étude cherchent leurs tables de pages.
+ * @param consolidationOffset l'étape de consolidation proposée, ou `null` quand les trois sont
+ *   faites. Elle est **résolue ici** parce que deux endroits l'affichent — le bandeau, qui en tire
+ *   son titre, et le bouton du panneau, qui en tire son libellé — et que deux appels séparés à la
+ *   même règle finiraient par lire deux états différents.
  *
  * ## Pourquoi ce type est **public**, et non interne
  *
@@ -187,11 +202,20 @@ internal fun StudyBanner(
  */
 data class StudyChromeState(
     val banner: StudySession.Banner,
-    val learning: Boolean,
+    val request: StudySession.Request,
     val range: Range,
     val through: Int,
     val source: String,
-)
+    val consolidationOffset: Int?,
+) {
+    /**
+     * Vrai pour un apprentissage : décide des mots de la feuille, et rien d'autre.
+     *
+     * C'est un **raccourci** de [request], et non une seconde vérité : le jour où les deux
+     * divergeraient, c'est cette propriété qu'il faudrait corriger, pas l'appelant.
+     */
+    val learning: Boolean get() = request.learning
+}
 
 /** Le rayon de la pastille. L'original pose 22. */
 private val STUDY_BANNER_RADIUS = 22.dp

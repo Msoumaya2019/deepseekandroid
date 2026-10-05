@@ -1591,11 +1591,14 @@ CAS: list[dict] = [
         "attendus": ["StudyChromeWiringTest"],
     },
     {
-        # Le bandeau n'ouvre plus la feuille : son geste ne mene nulle part, et rien ne le dit.
+        # Le bandeau n'ouvre plus rien : son geste ne mene nulle part, et rien ne le dit. L'ancre
+        # a ete reecrite quand le geste est devenu conditionnel — deux branches au lieu d'une —
+        # car la forme d'origine, sur une seule ligne, n'existait plus : c'est le piege de
+        # l'ancre perimee, qui ne se voit qu'au `--verifier`.
         "nom": "seance d'etude : le bandeau devient un bouton mort",
         "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/ReaderScreen.kt",
-        "avant": "            StudyBanner(banner = seance.banner, onPress = { completionOpen = true })",
-        "apres": "            StudyBanner(banner = seance.banner, onPress = {})",
+        "avant": "                onPress = {\n                    if (seance.request.consolidation) {\n                        panel = ReaderPanel.SESSION\n                    } else {\n                        completionOpen = true\n                    }\n                },",
+        "apres": "                onPress = {},",
         "tache": ":feature:reader:testDebugUnitTest",
         "attendus": ["StudyChromeWiringTest"],
     },
@@ -1903,6 +1906,172 @@ CAS: list[dict] = [
         "apres": "                                category = ReviewCategory.HABITUAL,",
         "tache": ":navigation:testDebugUnitTest",
         "attendus": ["AppScaffoldReviewEntryTest"],
+    },
+
+    # ------------------------------------------------- le panneau « Ma seance », et sa barre
+
+    {
+        # La consolidation se voit offrir **en plus** « Valider une partie ou toute la seance » :
+        # deux chemins pour un meme geste, dont un seul enregistre l'etape. C'est le
+        # `focused && !reader.consolidation` du client d'origine, perdu.
+        "nom": "panneau : une consolidation se voit offrir la cloture d'apprentissage",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/SessionPanelText.kt",
+        "avant": "        if (request.focused && !request.consolidation && Entry.VALIDATE in available) {",
+        "apres": "        if (request.focused && Entry.VALIDATE in available) {",
+        "tache": ":core:domain:test",
+        "attendus": ["SessionPanelTextTest"],
+    },
+    {
+        # La barre des notes apparait sur une consolidation. Une etape de consolidation ne se note
+        # pas : elle se valide. La note choisie ne serait enregistree nulle part, et la barre
+        # proposerait une action qui n'existe pas pour cette tache.
+        "nom": "panneau : la barre des notes apparait sur une consolidation",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/SessionPanelText.kt",
+        "avant": "        if (request.reviewing && !request.consolidation && Entry.GRADES in available) {",
+        "apres": "        if (request.reviewing && Entry.GRADES in available) {",
+        "tache": ":core:domain:test",
+        "attendus": ["SessionPanelTextTest"],
+    },
+    {
+        # « A reapprendre » depend de `revisionId` — l'identifiant du modele de revision
+        # « legacy » —, et non de `reviewing`. Sur `reviewing`, l'entree apparaitrait sur toute
+        # revision ordinaire, et un appui ferait repartir a un jour un verset qu'on n'a pas marque.
+        "nom": "panneau : « a reapprendre » apparait sur toute revision",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/SessionPanelText.kt",
+        "avant": "        if (request.revisionId != null && Entry.RELEARN in available) add(Entry.RELEARN)",
+        "apres": "        if (request.reviewing && Entry.RELEARN in available) add(Entry.RELEARN)",
+        "tache": ":core:domain:test",
+        "attendus": ["SessionPanelTextTest"],
+    },
+    {
+        # Le libelle perd l'echance : le bouton annonce « J+7 » alors qu'il valide J+1, ou
+        # l'inverse. C'est l'ecart entre ce que le bouton dit et ce qu'il fait, et rien d'autre ne
+        # le dirait — le bouton fonctionne, il annonce seulement la mauvaise etape.
+        "nom": "panneau : le libelle de consolidation annonce toujours J+7",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/SessionPanelText.kt",
+        "avant": "            (offset ?: StudySession.LAST_CONSOLIDATION_OFFSET)",
+        "apres": "            StudySession.LAST_CONSOLIDATION_OFFSET",
+        "tache": ":core:domain:test",
+        "attendus": ["SessionPanelTextTest"],
+    },
+    {
+        # Un geste sans destination reste dans la barre : « Ma voix » s'affiche et ne fait rien.
+        # C'est ce que ce lecteur refuse ailleurs — une entree sans destination se **retire**, elle
+        # ne se grise pas et ne reste pas inerte.
+        "nom": "barre : un geste sans destination reste dans la barre",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/ReviewText.kt",
+        "avant": "    fun actionBar(available: Set<Action>): List<Action> = Action.entries.filter { it in available }",
+        "apres": "    fun actionBar(available: Set<Action>): List<Action> = Action.entries",
+        "tache": ":core:domain:test",
+        "attendus": ["ReviewTextTest"],
+    },
+    {
+        # Le trait de separation glisse d'un rang : il tombe au milieu des trois notes, et separe
+        # deux gestes de meme nature au lieu de separer les notes de l'ecoute.
+        "nom": "barre : le trait de separation ne tombe plus au quatrieme rang",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/RevisionActionBar.kt",
+        "avant": "private const val SEPARATOR_BEFORE = 3",
+        "apres": "private const val SEPARATOR_BEFORE = 4",
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": ["RevisionActionBarWiringTest"],
+    },
+    {
+        # Le geste du bandeau ne suit plus le genre de la tache : une consolidation ouvre la
+        # feuille de validation au lieu de son panneau, et l'etape des trois jours n'est plus
+        # validable depuis le bandeau qui l'a proposee.
+        "nom": "bandeau : le geste ne suit plus le genre de la tache",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/ReaderScreen.kt",
+        "avant": "                    if (seance.request.consolidation) {",
+        "apres": "                    if (false) {",
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": ["StudyChromeWiringTest"],
+    },
+    {
+        # La garde du bouton mort tombe : les trois etapes faites, le panneau propose quand meme
+        # « Valider la consolidation », et l'appui ne fait rien — sa garde sort avant d'ecrire.
+        # Un bouton qui ne fait rien, sans que rien ne le dise.
+        "nom": "lecteur : le bouton mort de consolidation revient",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/ReaderScreen.kt",
+        "avant": "                    ?.takeIf { etat.consolidationOffset != null }",
+        "apres": "                    ?.takeIf { true }",
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": ["SessionPanelWiringTest"],
+    },
+    {
+        # L'etape visee n'est plus epinglee : `completeConsolidation` valide la premiere etape non
+        # faite, donc un second appui validerait l'etape **suivante** — et l'ecran se ferme comme si
+        # tout allait bien. Rien ne distingue les deux cas a l'ecran.
+        "nom": "route : l'etape de consolidation n'est plus epinglee",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/ReaderRoute.kt",
+        "avant": "                                targetOffset = cible,",
+        "apres": "                                targetOffset = null,",
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["ReaderRouteSessionTest"],
+    },
+    {
+        # Le programme est regenere sans l'etat note. C'est exactement le defaut que le client
+        # d'origine evite en enchainant `generateProgram` **sur** le resultat de `gradeRevision` :
+        # le verset marque repart a un jour sans que le programme en tienne compte.
+        "nom": "route : le programme est regenere sans l'etat note",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/ReaderRoute.kt",
+        "avant": "                            Program.generateProgram(\n                                Program.gradeRevision(state, revision, LegacyReviewGrade.RELEARN),\n                            )",
+        "apres": "                            Program.gradeRevision(state, revision, LegacyReviewGrade.RELEARN)",
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["ReaderRouteSessionTest"],
+    },
+    {
+        # La demande d'ouverture devient un **etat sauvegarde** : une rotation rouvre le panneau
+        # qu'on venait de refermer, alors que le client d'origine ne le rouvre pas. C'est la
+        # difference entre un evenement et un etat.
+        "nom": "route : la demande d'ouverture est sauvegardee",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/ReaderRoute.kt",
+        "avant": "    var sessionPanelRequest by remember { mutableIntStateOf(0) }",
+        "apres": "    var sessionPanelRequest by rememberSaveable { mutableIntStateOf(0) }",
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["ReaderRouteSessionTest"],
+    },
+    {
+        # L'entree du selecteur existe pour une lecture libre : elle propose des actions de seance
+        # sur une plage qui n'en a pas, et le panneau s'ouvre sur les gestes d'une tache qui
+        # n'existe pas.
+        "nom": "route : l'entree du selecteur existe pour une lecture libre",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/ReaderRoute.kt",
+        "avant": "        val actionsSeance = session?.takeIf { it.focused }?.let { requete ->",
+        "apres": "        val actionsSeance = session?.let { requete ->",
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["ReaderRouteSessionTest"],
+    },
+    {
+        # L'entree nomme la plage **demandee** au lieu de la plage **ouverte** : elle annonce des
+        # versets que la reprise ne relira pas, ce qui est pire qu'un libelle muet — il est faux.
+        "nom": "route : l'entree du selecteur nomme la plage demandee",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/ReaderRoute.kt",
+        "avant": "            val ouverte = userState?.let { StudySession.opening(it, requete) } ?: requete",
+        "apres": "            val ouverte = requete",
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["ReaderRouteSessionTest"],
+    },
+    {
+        # La route ecrit puis ferme ; inversees, l'ecriture est annulee en vol par la mort de la
+        # portee — et le symptome est exactement celui d'une ecriture qui n'a jamais eu lieu :
+        # l'ecran se ferme normalement, et la seance reste a reporter.
+        "nom": "route : la seance est reportee apres la fermeture",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/ReaderRoute.kt",
+        "avant": "                    runCatching {\n                        container.userState.mutate { state -> Program.postponeSession(state, seance) }\n                    }\n                    quitter()",
+        "apres": "                    quitter()\n                    runCatching {\n                        container.userState.mutate { state -> Program.postponeSession(state, seance) }\n                    }",
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["ReaderRouteSessionTest"],
+    },
+    {
+        # L'entree du selecteur ne nomme plus la plage : « Actions de la seance · » sans rien. Le
+        # libelle ne dit plus sur quoi on va agir, et c'est la seule chose qu'il apporte — le
+        # selecteur, lui, est un choix de presentation.
+        "nom": "selecteur : l'entree de seance ne nomme plus la plage",
+        "fichier": "feature/sources/src/main/kotlin/com/msoumaya/deepseekandroid/feature/sources/QuranSourcePicker.kt",
+        "avant": "                        text = QuranDownloadText.sessionActions(actions.reference),",
+        "apres": "                        text = QuranDownloadText.sessionActions(\"\"),",
+        "tache": ":feature:sources:testDebugUnitTest",
+        "attendus": ["QuranSourcePickerEntryTest"],
     },
 ]
 
