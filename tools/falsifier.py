@@ -1501,6 +1501,105 @@ CAS: list[dict] = [
         "tache": ":navigation:testDebugUnitTest",
         "attendus": ["AppScaffoldReaderEntryTest"],
     },
+    # ------------------------------------------------------------------ la seance d'etude
+    #
+    # Les huit cas suivants couvrent le branchement de la seance, dont la **regle** est eprouvee
+    # pour de vrai dans `core:domain` (`StudySessionTest`, quarante-trois cas sur le referentiel
+    # entier). Ce qui ne s'eprouve nulle part ailleurs, c'est le **passage** : une lambda bien
+    # branchee, une plage resolue par le domaine, un ordre d'ecriture.
+    {
+        # La validation ferme **avant** d'ecrire. La portee meurt avec l'ecran : l'ecriture est
+        # annulee en vol, et le symptome est celui d'une validation qui n'existe pas — donc d'un
+        # programme qui redemande le meme passage indefiniment.
+        #
+        # La mutation est une **insertion pure** : l'ancre survit. C'est le cas qui a fait tomber
+        # la premiere version du controle, laquelle cherchait `quitter()` dans le rappel entier et
+        # trouvait celui de la **garde** — avant l'ecriture, dans un code juste. Le controle borne
+        # desormais sa mesure au chemin d'ecriture ; ce cas prouve que la borne laisse encore
+        # passer le vrai defaut.
+        "nom": "seance d'etude : la validation ferme avant d'ecrire",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/ReaderRoute.kt",
+        "avant": "        onValidateStudy = { through, note ->\n            val requete = session\n            if (requete == null) {\n                quitter()\n            } else {\n                scope.launch {\n                    runCatching {",
+        "apres": "        onValidateStudy = { through, note ->\n            val requete = session\n            if (requete == null) {\n                quitter()\n            } else {\n                scope.launch {\n                    quitter()\n                    runCatching {",
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["ReaderRouteStudyTest"],
+    },
+    {
+        # Une seance s'ouvre la ou la lecture s'etait arretee, au lieu de **son** premier verset.
+        # La personne relit un passage qui n'est pas celui du jour, et rien ne le dit : la page
+        # affichee est plausible.
+        "nom": "seance d'etude : la page d'ouverture revient a la lecture memorisee",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/ReaderRoute.kt",
+        "avant": "        val cible = if (session != null) {\n            val ouverte = userState?.let { StudySession.opening(it, session) } ?: session\n            runCatching { MushafSourceNavigation.versePage(source, ouverte.range.start) }.getOrNull()\n        } else {\n            userState?.let { ReaderMemory.openingPage(it, source) }\n        } ?: return@LaunchedEffect",
+        "apres": "        val cible = userState?.let { ReaderMemory.openingPage(it, source) }\n            ?: return@LaunchedEffect",
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["ReaderRouteStudyTest"],
+    },
+    {
+        # La source d'etude est nommee par l'**enumeration** au lieu de sa cle persistee : le mot
+        # ne correspond a aucune branche, et les regles d'etude cherchent leurs tables sous une
+        # cle qui n'en a pas. La page annoncee est celle de Medine pour une source qui a son
+        # propre decoupage — et une page fausse est plausible, donc invisible.
+        "nom": "seance d'etude : la source n'est plus repliee par la regle du domaine",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/ReaderRoute.kt",
+        "avant": "    val sourceEtude = StudyProgressCalculator.sourceKey(source)",
+        "apres": "    val sourceEtude = source.name",
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["ReaderRouteStudyTest"],
+    },
+    {
+        # La plage de la feuille est celle **demandee**, et non celle **prevue**. Une reprise
+        # partielle ecrirait alors ses propres bornes, et `validateStudyProgress` refuse
+        # l'ecriture quand elles different de celles de la plage — donc toutes les validations
+        # suivantes seraient perdues en silence.
+        "nom": "seance d'etude : la plage de la feuille est celle demandee",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/ReaderRoute.kt",
+        "avant": "                range = StudySession.plannedRange(etat, session),",
+        "apres": "                range = session.range,",
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["ReaderRouteStudyTest"],
+    },
+    {
+        # Le bandeau s'affiche sans que rien ne puisse le valider : un appelant qui omet
+        # `onValidateStudy` obtient un bandeau qui s'annonce comme une seance et dont le geste ne
+        # mene nulle part. C'est le bouton mort que ce lecteur refuse partout ailleurs.
+        "nom": "seance d'etude : le bandeau s'affiche sans que rien ne puisse le valider",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/ReaderScreen.kt",
+        "avant": "    val seance = study?.takeIf { onValidateStudy != null }",
+        "apres": "    val seance = study",
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": ["StudyChromeWiringTest"],
+    },
+    {
+        # Le bandeau n'ouvre plus la feuille : son geste ne mene nulle part, et rien ne le dit.
+        "nom": "seance d'etude : le bandeau devient un bouton mort",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/ReaderScreen.kt",
+        "avant": "            StudyBanner(banner = seance.banner, onPress = { completionOpen = true })",
+        "apres": "            StudyBanner(banner = seance.banner, onPress = {})",
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": ["StudyChromeWiringTest"],
+    },
+    {
+        # La feuille n'est plus gardee par le drapeau : elle s'ouvre des que la seance existe,
+        # donc sans geste. C'est l'inverse du bouton mort, et tout aussi faux.
+        "nom": "seance d'etude : la feuille s'ouvre sans le drapeau",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/ReaderScreen.kt",
+        "avant": "    if (completionOpen && seance != null && onValidateStudy != null) {",
+        "apres": "    if (seance != null && onValidateStudy != null) {",
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": ["StudyChromeWiringTest"],
+    },
+    {
+        # La feuille recoit une page constante au lieu de celle qu'on vient de lire : le point
+        # d'arret propose est la fin d'une autre page — un verset d'un autre endroit, et il est
+        # plausible, donc jamais signale.
+        "nom": "seance d'etude : la feuille propose la page 1 au lieu de celle qu'on lit",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/ReaderScreen.kt",
+        "avant": "            currentPage = page,\n            onClose = { completionOpen = false },",
+        "apres": "            currentPage = 1,\n            onClose = { completionOpen = false },",
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": ["StudyChromeWiringTest"],
+    },
 ]
 
 

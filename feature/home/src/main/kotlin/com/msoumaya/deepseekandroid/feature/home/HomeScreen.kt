@@ -50,6 +50,7 @@ import com.msoumaya.deepseekandroid.core.design.theme.AppTheme
 import com.msoumaya.deepseekandroid.core.design.theme.ReadingArt
 import com.msoumaya.deepseekandroid.core.design.theme.ThemeArtHeroOpacity
 import com.msoumaya.deepseekandroid.core.design.theme.themeArt
+import com.msoumaya.deepseekandroid.core.domain.StudySession
 
 // ---------------------------------------------------------------------------
 // Écran d'accueil
@@ -85,6 +86,10 @@ import com.msoumaya.deepseekandroid.core.design.theme.themeArt
 fun HomeScreen(
     modifier: Modifier = Modifier,
     onOpenReader: (Int) -> Unit = {},
+    // Ouvre le lecteur **sur une séance**. Distinct de `onOpenReader`, et non un cas
+    // particulier de celui-ci : une lecture libre n'a pas de progression à valider, une séance
+    // en a une, et les confondre ferait perdre la seconde sans que rien ne le dise.
+    onOpenStudy: (StudySession.Request) -> Unit = {},
     onOpenProgram: () -> Unit = {},
     onOpenProgress: () -> Unit = {},
     onOpenReviews: () -> Unit = {},
@@ -96,6 +101,7 @@ fun HomeScreen(
         state = state,
         modifier = modifier,
         onOpenReader = onOpenReader,
+        onOpenStudy = onOpenStudy,
         onOpenProgram = onOpenProgram,
         onOpenProgress = onOpenProgress,
         onOpenReviews = onOpenReviews,
@@ -107,6 +113,7 @@ private fun HomeContent(
     state: HomeUiState,
     modifier: Modifier = Modifier,
     onOpenReader: (Int) -> Unit = {},
+    onOpenStudy: (StudySession.Request) -> Unit = {},
     onOpenProgram: () -> Unit = {},
     onOpenProgress: () -> Unit = {},
     onOpenReviews: () -> Unit = {},
@@ -152,9 +159,18 @@ private fun HomeContent(
                         title = "Apprentissage",
                         passage = state.learning.passage,
                         details = state.learning.details,
+                        // Une séance d'apprentissage s'ouvre **comme séance** : le lecteur doit
+                        // savoir ce qu'il sert, sinon le bandeau ne s'affiche pas et rien ne peut
+                        // être validé. Le verset reste le repli d'une carte qui n'aurait pas de
+                        // séance — et le programme, celui d'une carte qui n'aurait rien du tout.
                         onPress = {
+                            val seance = state.learning.study
                             val target = state.learning.verseId
-                            if (target != null) onOpenReader(target) else onOpenProgram()
+                            when {
+                                seance != null -> onOpenStudy(seance)
+                                target != null -> onOpenReader(target)
+                                else -> onOpenProgram()
+                            }
                         },
                         modifier = Modifier.weight(1f),
                     )

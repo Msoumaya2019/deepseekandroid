@@ -248,7 +248,8 @@ mesure 2 320 — et c'est la disposition d'origine, pas une erreur d'assemblage.
 | Progression par unité d'étude | `src/core/studyProgress.ts` | `core/domain/StudyProgressCalculator.kt` | `user_state` | **Porté** | |
 | Connaissances | `markKnowledge`, `toggleKnownRange` | `core/domain/Program.kt` | — | **Porté** | |
 | Statistiques | `stats`, `completedHizbs` | `core/domain/Program.kt` | — | **Porté** | |
-| Écran de séance | `src/ui/StudySession.tsx`, `src/ui/QuranSessionHeader.tsx` | `feature:program` | — | **À faire** | phase C |
+| **Requête de séance** (`Reader`) | `src/App.tsx:66` | `core/domain/StudySession.kt` (`StudySession.Request`) | — | **Porté** | le type `Reader` de l'original — `range`, `sessionId`, `revisionId`, `reviewTask`, `consolidation` — est porté tel quel, et ses trois lectures dérivées le sont aussi : `learning` (une séance d'apprentissage), `reviewing` (une révision, une consolidation, ou une tâche de révision) et `focused` (l'une ou l'autre). C'est lui qui décide de ce que le lecteur sert : un bandeau, un geste, une écriture. **Écart assumé** : `initialLanguage` n'est pas porté — le lecteur de ce client n'a pas de bascule de langue de traduction, et un champ qui ne changerait rien serait un mensonge |
+| Écran de séance | `src/ui/StudySession.tsx`, `src/ui/QuranSessionHeader.tsx` | `core/domain/StudySession.kt`, `feature/reader/StudyChrome.kt`, `feature/reader/StudyCompletionSheet.kt` | `user_state` | **Livré** (côté lecteur) | le **bandeau** de séance et la **feuille de validation** sont portés : titre (`Consolidation · J+n`, `Apprentissage du jour`, `Révision du jour`), ligne de progression **absente** pour une consolidation, page ou plage selon la source affichée, et point d'arrêt proposé à la fin de la **page affichée**. Le geste central de l'original — achever une séance et **écrire** la progression — vit désormais dans le lecteur, là où la personne lit, et l'accueil ouvre la séance du jour. L'écran **autonome** de `feature:program` — programme, objectif, tableau de bord des révisions — reste à faire (phase C), et les **repères de marge** de l'écran immersif ne sont pas rendus (leurs règles, `MarginAnnotations` et `MarginRegion`, le sont). **Écart assumé** : les listes de choix de la feuille sont **défilables dans la feuille**, là où l'original ouvre une liste superposée — un seul geste au lieu de deux, et la même information |
 | Écran d'objectif | `src/ui/GoalScreen.tsx` | `feature:program` | — | **À faire** | phase C |
 
 ---
@@ -434,6 +435,22 @@ attentes des utilisateurs Android, et les contredire coûte plus cher que la fid
    autre découpage. Relevé en écrivant l'écran immersif, puis **livré avec la mémoire du
    lecteur**.
 
-7. **La coquille d'étude de l'écran immersif n'est pas portée.** Le bandeau de séance et les
-   repères de marge de `QuranSessionHeader.tsx` dépendent d'une séance en cours ; ils viendront
-   avec la phase C, qui apporte les séances.
+7. **La coquille d'étude est portée dans le lecteur, sauf les repères de marge.** Le **bandeau
+   de séance** de `QuranSessionHeader.tsx` et la **feuille de validation** de `StudySession.tsx`
+   sont livrés : c'est là qu'une séance s'achève et que la progression s'écrit, donc là où le
+   geste compte. Restent les **repères de marge** de l'écran immersif — leurs *règles* sont
+   portées (`MarginAnnotations`, `MarginRegion`), leur *rendu* ne l'est pas. L'écran autonome de
+   `feature:program` — programme, objectif, tableau de bord — reste à faire (phase C) ; le
+   lecteur, lui, n'attend plus la phase C pour servir une séance.
+
+8. **Une séance a trois plages, et les confondre perd les validations en silence.**
+   `request.range` est la plage **demandée** — l'adresse par laquelle on entre ; `opening` est la
+   plage **ouverte** — le reste d'une reprise interrompue ; `plannedRange` est la plage **prévue**
+   — la séance présente dans l'état, ou l'enregistrement d'une révision. La validation **refuse
+   d'écrire** quand les bornes enregistrées diffèrent de celles de la plage : une reprise
+   partielle qui écrirait ses propres bornes perdrait donc toutes les validations suivantes, et
+   le symptôme serait celui d'une progression qui ne monte plus. Les trois sont nommées dans
+   `StudySession`, et deux tests échouent si `plannedRange` se remet à confondre avec
+   `request.range`. **Corollaire mesuré** : le dernier verset validé vaut `début - 1` et non
+   `début` — annoncer `début` ferait commencer la première validation un verset trop tard, et le
+   premier verset de la plage ne serait jamais compté comme appris.

@@ -69,13 +69,32 @@ object AppRoutes {
     const val READER_VERSE = "verset"
 
     /**
+     * La séance d'apprentissage que le lecteur sert, en argument **facultatif**.
+     *
+     * Un identifiant, et non la séance entière : l'état du compte la porte déjà, et recopier ses
+     * bornes dans la route ferait deux sources de vérité pour la même chose. Elles y sont
+     * pourtant, plus bas — mais comme **repli**, pas comme référence.
+     */
+    const val READER_SESSION = "seance"
+
+    /** Le premier verset de la plage servie, en argument facultatif. Repli de la séance. */
+    const val READER_FROM = "de"
+
+    /** Le dernier verset de la plage servie, en argument facultatif. Repli de la séance. */
+    const val READER_TO = "a"
+
+    /**
      * Le motif de la route du lecteur, argument compris.
      *
      * L'argument est **facultatif** — `lecteur` seul reste une route valide — et c'est ce qui
      * permet d'ouvrir le lecteur sans savoir sur quoi : une ouverture libre n'a pas de verset,
      * et lui en inventer un ferait mémoriser une position que personne n'a lue.
      */
-    val READER_PATTERN: String = "$READER?$READER_VERSE={$READER_VERSE}"
+    val READER_PATTERN: String =
+        "$READER?$READER_VERSE={$READER_VERSE}" +
+            "&$READER_SESSION={$READER_SESSION}" +
+            "&$READER_FROM={$READER_FROM}" +
+            "&$READER_TO={$READER_TO}"
 
     /**
      * La route du lecteur, ouverte sur [verseId] ou librement.
@@ -85,8 +104,26 @@ object AppRoutes {
      * n'échouerait pas, elle ouvrirait le lecteur sans verset, et la position mémorisée serait
      * celle du repli au lieu de celle qu'on visait.
      */
-    fun readerRoute(verseId: Int? = null): String =
-        if (verseId == null) READER else "$READER?$READER_VERSE=$verseId"
+    fun readerRoute(
+        verseId: Int? = null,
+        sessionId: String? = null,
+        from: Int? = null,
+        to: Int? = null,
+    ): String {
+        val arguments = buildList {
+            if (verseId != null) add("$READER_VERSE=$verseId")
+            // Les trois arguments d'une séance voyagent **ensemble** : une séance sans ses bornes
+            // ne serait pas ouvrable, et des bornes sans séance ne seraient pas validables. Les
+            // séparer produirait une route qui s'ouvre — donc un défaut muet, puisqu'on croirait
+            // la séance servie alors qu'elle ne l'est pas.
+            if (sessionId != null && from != null && to != null) {
+                add("$READER_SESSION=$sessionId")
+                add("$READER_FROM=$from")
+                add("$READER_TO=$to")
+            }
+        }
+        return if (arguments.isEmpty()) READER else "$READER?" + arguments.joinToString("&")
+    }
 
     /**
      * La route **sans** sa partie facultative.

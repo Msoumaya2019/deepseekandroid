@@ -16,8 +16,11 @@ import com.msoumaya.deepseekandroid.core.data.AppContainer
 import com.msoumaya.deepseekandroid.core.data.LocalAppContainer
 import com.msoumaya.deepseekandroid.core.domain.Audio
 import com.msoumaya.deepseekandroid.core.domain.Bookmarks
+import com.msoumaya.deepseekandroid.core.domain.MushafSourceNavigation
 import com.msoumaya.deepseekandroid.core.domain.QuranSourceReady
 import com.msoumaya.deepseekandroid.core.domain.ReaderMemory
+import com.msoumaya.deepseekandroid.core.domain.StudyProgressCalculator
+import com.msoumaya.deepseekandroid.core.domain.StudySession
 import com.msoumaya.deepseekandroid.core.domain.ReciterPreference
 import com.msoumaya.deepseekandroid.core.domain.Review
 import com.msoumaya.deepseekandroid.core.domain.VerseActionsText
@@ -26,6 +29,7 @@ import com.msoumaya.deepseekandroid.core.model.MushafPageSource
 import com.msoumaya.deepseekandroid.feature.reader.BookmarksScreen
 import com.msoumaya.deepseekandroid.feature.reader.EmbeddedMushafPages
 import com.msoumaya.deepseekandroid.feature.reader.ReaderScreen
+import com.msoumaya.deepseekandroid.feature.reader.StudyChromeState
 import com.msoumaya.deepseekandroid.feature.sources.QuranDownloadPanel
 import com.msoumaya.deepseekandroid.feature.sources.QuranSourcePickerDialog
 import com.msoumaya.deepseekandroid.feature.sources.QuranSourceViewModel
@@ -126,12 +130,18 @@ import kotlinx.coroutines.launch
  *   fermant, donc de l'endroit où l'accueil rouvrira. Sans lui, une séance ouverte au verset 746
  *   se mémoriserait au premier verset de la page où l'on s'est arrêté — un verset que personne
  *   n'a lu.
+ * @param session la séance que le lecteur sert, ou `null` pour une lecture libre. C'est elle
+ *   qui décide si une validation est possible — sans identifiant de tâche, il n'y a pas de
+ *   progression à écrire — et sa plage sert de repli tant que l'état du compte n'est pas arrivé.
  * @param onClose ferme le lecteur. La route ne décide pas où l'on retourne : elle le demande à
  *   la coquille, qui seule connaît la pile.
  */
 @Composable
 fun ReaderRoute(
     startVerse: Int? = null,
+    // `null` est le cas **ordinaire** — ouvrir le Coran pour lire — et non un cas de bord : une
+    // lecture libre n'a ni tâche ni progression, et c'est ce que le type dit.
+    session: StudySession.Request? = null,
     onClose: () -> Unit,
     container: AppContainer = LocalAppContainer.current,
     // La fabrique reçoit **le paramètre** `container`, pas `LocalAppContainer.current` : les deux
@@ -226,10 +236,20 @@ fun ReaderRoute(
     // `null`. Le drapeau est sauvegardé : une rotation ne doit pas ramener quelqu'un à la page
     // mémorisée après qu'il en a tourné une.
     var pageTournee by rememberSaveable { mutableStateOf(false) }
-    LaunchedEffect(userState, source) {
+    LaunchedEffect(userState, source, session) {
         if (pageTournee) return@LaunchedEffect
-        val memorisee = userState?.let { ReaderMemory.openingPage(it, source) } ?: return@LaunchedEffect
-        if (memorisee != page) page = memorisee
+        // Une séance s'ouvre sur **son** premier verset, et non là où la lecture s'était
+        // arrêtée : c'est la séance qui dit où commencer, et reprendre ailleurs ferait relire
+        // un passage qui n'est pas celui du jour. Une progression partielle est préférée quand
+        // elle existe — `StudySession.opening` — et elle se passe de l'état tant qu'il n'est pas
+        // arrivé, puisque la requête porte déjà ses bornes.
+        val cible = if (session != null) {
+            val ouverte = userState?.let { StudySession.opening(it, session) } ?: session
+            runCatching { MushafSourceNavigation.versePage(source, ouverte.range.start) }.getOrNull()
+        } else {
+            userState?.let { ReaderMemory.openingPage(it, source) }
+        } ?: return@LaunchedEffect
+        if (cible != page) page = cible
     }
 
     // L'écran des signets, et le verset qu'une reprise demande de sélectionner au retour.
@@ -263,6 +283,11 @@ fun ReaderRoute(
     // l'écran — c'est écrit plus haut, et c'est voulu pour un réglage — donc `onClose()` lancé
     // avant l'écriture annulerait celle-ci en vol. Écrire d'abord coûte une écriture de quelques
     // kilo-octets avant que l'écran ne se retire : imperceptible, et déterministe.
+    // Le verset « d'ouverture » — celui qui sera retenu en fermant. Pour une séance, c'est son
+    // premier verset : c'est lui qui a été demandé, et retenir celui de la page où l'on s'est
+    // arrêté ferait rouvrir l'accueil un verset plus haut, hors de la séance.
+    val versetDeDepart = session?.range?.start ?: startVerse
+
     val quitter: () -> Unit = {
         val affichee = page
         scope.launch {
@@ -270,7 +295,7 @@ fun ReaderRoute(
             // l'écran se referme. L'inverse enfermerait la personne dans le lecteur.
             runCatching {
                 container.userState.mutate { state ->
-                    ReaderMemory.close(state, page = affichee, start = startVerse)
+                    ReaderMemory.close(state, page = affichee, start = versetDeDepart)
                 }
             }
             onClose()
@@ -284,6 +309,31 @@ fun ReaderRoute(
     // par-dessus le lecteur, qui reste monté — un retour doit alors refermer la liste, et non le
     // lecteur qu'elle recouvre.
     BackHandler(enabled = !bookmarksOpen) { quitter() }
+
+    // La source sous la forme que les règles d'étude attendent. `sourceKey` est le seul endroit
+    // qui sache replier les sources que ce client ne rend pas : la replier ici, à la main,
+    // ferait diverger deux tables — et une page d'étude fausse ne se voit pas.
+    val sourceEtude = StudyProgressCalculator.sourceKey(source)
+
+    // La séance telle que la coquille d'étude la reçoit, ou `null` tant que l'état du compte
+    // n'est pas arrivé : le bandeau a besoin de la plage **prévue** et du dernier verset validé,
+    // qui vivent tous les deux dans l'état. Un bandeau affiché avant annoncerait « 0 / 0 », donc
+    // un mensonge — et la feuille de validation calculerait un point d'arrêt sur une plage
+    // inventée.
+    val etude = remember(userState, source, session) {
+        val etat = userState
+        if (etat == null || session == null) {
+            null
+        } else {
+            StudyChromeState(
+                banner = StudySession.banner(etat, session, sourceEtude),
+                learning = session.learning,
+                range = StudySession.plannedRange(etat, session),
+                through = StudySession.through(etat, session),
+                source = sourceEtude,
+            )
+        }
+    }
 
     ReaderScreen(
         initialPage = page,
@@ -356,6 +406,36 @@ fun ReaderRoute(
         // pas — il ne connaît ni le conteneur ni le stockage — et c'est pourquoi la route le lui
         // passe. Il ne sert qu'à la source **composée** : les images du moushaf portent le leur.
         paper = userState?.reader?.paper,
+        study = etude,
+        // Valider la séance : la règle est dans `core:domain`, l'écriture ici. Comme pour la
+        // sortie, on **écrit d'abord** — la portée meurt avec l'écran, donc fermer avant
+        // annulerait l'écriture en vol, et le symptôme serait celui d'une validation qui
+        // n'existe pas. Un disque plein ne doit pas emporter l'écran : la séance est perdue,
+        // mais l'application reste utilisable.
+        onValidateStudy = { through, note ->
+            val requete = session
+            if (requete == null) {
+                quitter()
+            } else {
+                scope.launch {
+                    runCatching {
+                        container.userState.mutate { state ->
+                            StudySession.validate(
+                                state = state,
+                                request = requete,
+                                through = through,
+                                source = sourceEtude,
+                                grade = note,
+                            )
+                        }
+                    }
+                    // La sortie écrit la mémoire du lecteur, puis referme. C'est `quitter`, et
+                    // non `onClose` : le même chemin que le bouton et le retour système — sans
+                    // quoi valider une séance oublierait où l'on s'était arrêté.
+                    quitter()
+                }
+            }
+        },
         // Bascule le marqueur de difficulté de l'élève. Seule écriture du panneau des actions,
         // et la seule qui ne puisse pas vivre dans le lecteur : lui ne connaît ni le conteneur
         // ni le stockage. Comme pour le signet, un disque plein ne doit pas emporter le lecteur.

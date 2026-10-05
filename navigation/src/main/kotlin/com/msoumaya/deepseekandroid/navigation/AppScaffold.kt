@@ -18,6 +18,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.msoumaya.deepseekandroid.core.domain.StudySession
+import com.msoumaya.deepseekandroid.core.model.Range
 import com.msoumaya.deepseekandroid.core.design.theme.AppTheme
 import com.msoumaya.deepseekandroid.feature.home.HomeScreen
 import com.msoumaya.deepseekandroid.feature.profile.ProfileMode
@@ -160,6 +162,21 @@ private fun AppNavHost(
                 onOpenReader = { verseId ->
                     navController.navigate(AppRoutes.readerRoute(verseId))
                 },
+                // Une séance voyage avec son **identifiant** et ses bornes. Les trois sont
+                // posés : c'est `StudySession.plannedRange` qui redonne la priorité à la séance
+                // présente dans l'état, donc les bornes ne sont pas une seconde source de
+                // vérité — elles servent tant que l'état du compte n'est pas arrivé, sans quoi
+                // le lecteur ne saurait pas quelle page ouvrir.
+                onOpenStudy = { request ->
+                    navController.navigate(
+                        AppRoutes.readerRoute(
+                            verseId = request.range.start,
+                            sessionId = request.sessionId,
+                            from = request.range.start,
+                            to = request.range.end,
+                        ),
+                    )
+                },
             )
         }
         composable(AppDestination.QURAN.route) { QuranScreen() }
@@ -187,10 +204,33 @@ private fun AppNavHost(
                     type = NavType.IntType
                     defaultValue = 0
                 },
+                navArgument(AppRoutes.READER_SESSION) {
+                    type = NavType.StringType
+                    defaultValue = ""
+                },
+                navArgument(AppRoutes.READER_FROM) {
+                    type = NavType.IntType
+                    defaultValue = 0
+                },
+                navArgument(AppRoutes.READER_TO) {
+                    type = NavType.IntType
+                    defaultValue = 0
+                },
             ),
         ) { entry ->
+            // La séance n'est reconstruite que si ses **trois** arguments sont là. Deux sur trois
+            // donneraient une plage inventée : mieux vaut une lecture libre, qui ne promet rien,
+            // qu'une séance qui annoncerait une progression fausse.
+            val seance = entry.arguments?.getString(AppRoutes.READER_SESSION)?.takeIf { it.isNotEmpty() }
+            val debut = entry.arguments?.getInt(AppRoutes.READER_FROM)?.takeIf { it > 0 }
+            val fin = entry.arguments?.getInt(AppRoutes.READER_TO)?.takeIf { it > 0 }
             ReaderRoute(
                 startVerse = entry.arguments?.getInt(AppRoutes.READER_VERSE)?.takeIf { it > 0 },
+                session = if (seance != null && debut != null && fin != null) {
+                    StudySession.Request(range = Range(debut, fin), sessionId = seance)
+                } else {
+                    null
+                },
                 onClose = { navController.popBackStack() },
             )
         }

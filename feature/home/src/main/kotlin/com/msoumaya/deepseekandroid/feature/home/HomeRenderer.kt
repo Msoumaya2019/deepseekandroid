@@ -5,6 +5,7 @@ import com.msoumaya.deepseekandroid.core.domain.Program
 import com.msoumaya.deepseekandroid.core.domain.Quran
 import com.msoumaya.deepseekandroid.core.domain.Review
 import com.msoumaya.deepseekandroid.core.domain.StudyProgressCalculator
+import com.msoumaya.deepseekandroid.core.domain.StudySession
 import com.msoumaya.deepseekandroid.core.domain.WeeklyProgress
 import com.msoumaya.deepseekandroid.core.model.AppState
 import com.msoumaya.deepseekandroid.core.model.MushafSource
@@ -77,7 +78,14 @@ internal object HomeRenderer {
                 verseId = resumeId,
             ),
             learning = todoToday
-                ?.let { DailyTask(Quran.reference(it.range), countText(it.range), it.start) }
+                ?.let {
+                    DailyTask(
+                        passage = Quran.reference(it.range),
+                        details = countText(it.range),
+                        verseId = it.start,
+                        study = StudySession.forSession(it),
+                    )
+                }
                 ?: DailyTask.EMPTY_LEARNING,
             revision = reviewTask
                 ?.let { DailyTask(Quran.reference(it.range), REVISION_DUE, it.start) }

@@ -1,6 +1,7 @@
 package com.msoumaya.deepseekandroid.feature.home
 
 import androidx.compose.runtime.Immutable
+import com.msoumaya.deepseekandroid.core.domain.StudySession
 
 // ---------------------------------------------------------------------------
 // État affichable de l'accueil
@@ -74,6 +75,19 @@ data class DailyTask(
     val passage: String,
     val details: String,
     val verseId: Int? = null,
+    /**
+     * La séance que le lecteur doit servir, ou `null` quand il n'y en a pas.
+     *
+     * C'est **elle** qui fait d'une ouverture une séance : sans identifiant de tâche, le lecteur
+     * ne sait pas quelle progression écrire, donc il ne peut rien valider — et le bandeau qui
+     * l'annonce n'existe pas.
+     *
+     * Une **révision** n'en porte pas encore : son identité de tâche — son identifiant et sa
+     * catégorie — n'est transportée par aucune route. Elle s'ouvre donc en lecture libre, comme
+     * avant, et le champ reste `null` plutôt que d'être rempli d'une valeur que rien ne
+     * consomme. L'écran qui la portera est le tableau de bord des révisions.
+     */
+    val study: StudySession.Request? = null,
 ) {
     companion object {
         val EMPTY_LEARNING = DailyTask("Aucune séance prévue", "Programme à jour")

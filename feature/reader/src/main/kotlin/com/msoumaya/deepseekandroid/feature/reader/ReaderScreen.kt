@@ -51,6 +51,7 @@ import com.msoumaya.deepseekandroid.core.domain.ReaderLayout
 import com.msoumaya.deepseekandroid.core.domain.ReaderOptionsText
 import com.msoumaya.deepseekandroid.core.domain.ReaderTouch
 import com.msoumaya.deepseekandroid.core.domain.ReaderZoomGeometry
+import com.msoumaya.deepseekandroid.core.domain.StudySession
 import com.msoumaya.deepseekandroid.core.domain.TestPageOverlay
 import com.msoumaya.deepseekandroid.core.domain.Texts
 import com.msoumaya.deepseekandroid.core.domain.TranslationPanel
@@ -61,6 +62,7 @@ import com.msoumaya.deepseekandroid.core.model.QuranPaper
 import com.msoumaya.deepseekandroid.core.model.Range
 import com.msoumaya.deepseekandroid.core.model.ReaderZoom
 import com.msoumaya.deepseekandroid.core.model.RepeatMode
+import com.msoumaya.deepseekandroid.core.model.ReviewGrade
 import com.msoumaya.deepseekandroid.core.model.Surah
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
@@ -195,6 +197,14 @@ fun ReaderScreen(
     // change à l'écran. Sans ce paramètre, le réglage existerait dans l'état sans jamais
     // atteindre la seule source qui puisse le montrer.
     paper: QuranPaper? = null,
+    // La séance que le lecteur sert, ou `null` pour une lecture libre. Elle porte les
+    // textes du bandeau **déjà résolus** — le lecteur ne calcule rien — et de quoi
+    // composer la feuille de validation. Voir `StudyChromeState`.
+    study: StudyChromeState? = null,
+    // Valide la séance jusqu'au verset reçu, avec la note reçue. `null` quand l'appelant
+    // ne sait pas écrire : le bandeau est alors **absent**, comme les autres actions sans
+    // destination. Un bandeau qui s'annonce sans rien permettre serait un bouton mort.
+    onValidateStudy: ((Int, ReviewGrade) -> Unit)? = null,
 ) {
     val colors = AppTheme.colors
     val totalPages = remember { Quran.pages.size.takeIf { it > 0 } ?: DEFAULT_TOTAL_PAGES }
@@ -225,6 +235,11 @@ fun ReaderScreen(
     // second rouvre la première. Deux fenêtres empilées donneraient deux voiles superposés et
     // un retour arrière qui ne rendrait pas la main au bon endroit.
     var panel by rememberSaveable { mutableStateOf(ReaderPanel.NONE) }
+
+    // La feuille de validation est-elle ouverte ? **Sauvegardée** : tourner le
+    // téléphone pendant qu'on choisit son point d'arrêt ne doit ni refermer la feuille,
+    // ni perdre le choix qu'on venait d'y faire.
+    var completionOpen by rememberSaveable { mutableStateOf(false) }
 
     // Le mode de pose, et la confirmation qui le suit.
     //
@@ -442,6 +457,12 @@ fun ReaderScreen(
         }
     }
 
+    // Le bandeau de séance n'existe que si une séance est servie **et** que la validation est
+    // branchée : sans destination, son geste ne mènerait nulle part, et c'est ce que ce lecteur
+    // refuse partout ailleurs. La valeur est tenue **hors** de la colonne : la feuille, posée à
+    // la fin de cette fonction, a besoin des mêmes informations.
+    val seance = study?.takeIf { onValidateStudy != null }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -450,6 +471,13 @@ fun ReaderScreen(
             // l'espace **sûr**, jamais dessous. Le fond, lui, va jusqu'aux bords de l'écran.
             .windowInsetsPadding(WindowInsets.safeDrawing),
     ) {
+        // Le bandeau, **dans** la colonne et avant la page : il prend sa hauteur, donc la page
+        // reste entière. Le poser par-dessus masquerait le premier verset — celui qu'on vient
+        // de commencer à apprendre, donc celui qu'on relit le plus.
+        if (seance != null) {
+            StudyBanner(banner = seance.banner, onPress = { completionOpen = true })
+        }
+
         BoxWithConstraints(
             modifier = Modifier
                 .weight(1f)
@@ -892,6 +920,23 @@ fun ReaderScreen(
             // c'est de là qu'on venait.
             onClose = { panel = ReaderPanel.OPTIONS },
             totalPages = totalPages,
+        )
+    }
+
+    // La feuille de validation, par-dessus le lecteur. Elle ne s'ouvre que par le
+    // bandeau, donc elle suppose la même condition : une séance servie, et de quoi
+    // l'écrire.
+    if (completionOpen && seance != null && onValidateStudy != null) {
+        StudyCompletionSheet(
+            learning = seance.learning,
+            range = seance.range,
+            through = seance.through,
+            source = seance.source,
+            // La page affichée : c'est elle qui propose le point d'arrêt par défaut,
+            // puisque c'est ce que la personne vient de finir de lire.
+            currentPage = page,
+            onClose = { completionOpen = false },
+            onValidate = onValidateStudy,
         )
     }
 }

@@ -51,9 +51,23 @@ class ReaderRouteMemoryTest {
     @Test
     fun `la sortie ecrit la memoire de lecture`() {
         assertTrue(
-            blocDeLaSortie().contains("ReaderMemory.close(state, page = affichee, start = startVerse)"),
+            blocDeLaSortie()
+                .contains("ReaderMemory.close(state, page = affichee, start = versetDeDepart)"),
             "La sortie n'enregistre plus la position : le lecteur ne se souviendrait de rien, " +
                 "et l'accueil annoncerait éternellement la première page.",
+        )
+    }
+
+    @Test
+    fun `le verset retenu suit la seance quand il y en a une`() {
+        // Le verset « d'ouverture » n'est pas décoratif : c'est lui qui décide où l'accueil
+        // rouvrira. Pour une séance, c'est **son** premier verset — sans quoi une séance ouverte
+        // au verset 746 se mémoriserait au premier verset de la page où l'on s'est arrêté, un
+        // verset que personne n'a demandé.
+        assertTrue(
+            sourceDeLaRoute()
+                .contains("val versetDeDepart = session?.range?.start ?: startVerse"),
+            "Le verset retenu ne suit plus la séance : l'accueil rouvrirait hors de la séance.",
         )
     }
 
