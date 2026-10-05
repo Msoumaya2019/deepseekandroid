@@ -8,6 +8,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -16,6 +17,7 @@ import com.msoumaya.deepseekandroid.core.data.LocalAppContainer
 import com.msoumaya.deepseekandroid.core.domain.Audio
 import com.msoumaya.deepseekandroid.core.domain.Bookmarks
 import com.msoumaya.deepseekandroid.core.domain.QuranSourceReady
+import com.msoumaya.deepseekandroid.core.domain.ReaderMemory
 import com.msoumaya.deepseekandroid.core.domain.ReciterPreference
 import com.msoumaya.deepseekandroid.core.domain.Review
 import com.msoumaya.deepseekandroid.core.domain.VerseActionsText
@@ -96,11 +98,40 @@ import kotlinx.coroutines.launch
  * ce qui est le bon comportement pour un geste : elle ne doit pas survivre à ce qui l'a
  * déclenchée.
  *
+ * ## La mémoire du lecteur
+ *
+ * En sortant, la route **écrit** où l'on s'est arrêté : la page rejoint les pages lues, la
+ * dernière lecture est datée, et la source composée retient sa page. La règle vit dans
+ * `core:domain` — `ReaderMemory` — et la route ne fait que lui donner la page affichée, le
+ * verset d'ouverture, et le conteneur qui sait écrire.
+ *
+ * L'écriture **précède** la fermeture, et c'est délibéré. La portée de cette route meurt avec
+ * l'écran — c'est le bon comportement pour un réglage, qui ne doit pas survivre au geste qui l'a
+ * posé — donc fermer d'abord annulerait l'écriture en vol : `mutate` suspend sur une écriture de
+ * fichier, et sa continuation serait annulée avec la portée. La position ne serait jamais
+ * enregistrée, et rien ne le dirait. Le retour système passe par la même sortie, sans quoi
+ * quitter au geste écrirait moins que quitter au bouton — et la perte ne se verrait que chez qui
+ * quitte vite.
+ *
+ * ## La page d'ouverture
+ *
+ * Le lecteur ne s'ouvre plus à la première page : il s'ouvre là où l'on s'était arrêté. La
+ * valeur est **adoptée** quand l'état du compte finit d'arriver, parce qu'il vaut `null` au
+ * premier rendu — confondre un état encore inconnu avec un état vide ramènerait à la page 1 à
+ * chaque ouverture. L'adoption cesse dès que la personne tourne une page : elle a choisi, et une
+ * lecture de fichier qui aboutit ensuite ne doit pas la déplacer.
+ *
+ * @param startVerse le premier verset de ce sur quoi la lecture est ouverte, ou `null` quand
+ *   elle l'est librement. Il n'est pas décoratif : c'est lui qui décide du verset **retenu** en
+ *   fermant, donc de l'endroit où l'accueil rouvrira. Sans lui, une séance ouverte au verset 746
+ *   se mémoriserait au premier verset de la page où l'on s'est arrêté — un verset que personne
+ *   n'a lu.
  * @param onClose ferme le lecteur. La route ne décide pas où l'on retourne : elle le demande à
  *   la coquille, qui seule connaît la pile.
  */
 @Composable
 fun ReaderRoute(
+    startVerse: Int? = null,
     onClose: () -> Unit,
     container: AppContainer = LocalAppContainer.current,
     // La fabrique reçoit **le paramètre** `container`, pas `LocalAppContainer.current` : les deux
@@ -187,8 +218,19 @@ fun ReaderRoute(
     // La page est tenue ici, et non dans le lecteur : le choix de présentation en a besoin pour
     // vérifier que la page affichée existera encore dans l'autre source. Changer de
     // présentation ne doit pas ramener la personne à la page 1.
-    var page by rememberSaveable { mutableIntStateOf(1) }
+    var page by rememberSaveable { mutableIntStateOf(ReaderMemory.FIRST_PAGE) }
     var pickerOpen by rememberSaveable { mutableStateOf(false) }
+
+    // La personne a-t-elle **tourné** une page ? Tant que non, la page mémorisée est adoptée
+    // quand l'état du compte finit d'arriver — et non au premier rendu, où il vaut encore
+    // `null`. Le drapeau est sauvegardé : une rotation ne doit pas ramener quelqu'un à la page
+    // mémorisée après qu'il en a tourné une.
+    var pageTournee by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(userState, source) {
+        if (pageTournee) return@LaunchedEffect
+        val memorisee = userState?.let { ReaderMemory.openingPage(it, source) } ?: return@LaunchedEffect
+        if (memorisee != page) page = memorisee
+    }
 
     // L'écran des signets, et le verset qu'une reprise demande de sélectionner au retour.
     // Les deux sont **sauvegardés** : une rotation pendant qu'on consulte un signet ne doit
@@ -215,12 +257,48 @@ fun ReaderRoute(
         if (QuranSourceReady.isZipSource(source)) archiveMushafPages(container.archive) else EmbeddedMushafPages
     }
 
+    // Sortir du lecteur : **écrire la mémoire d'abord**, fermer ensuite.
+    //
+    // L'ordre est la seule chose qui garantisse l'écriture. La portée de cette route meurt avec
+    // l'écran — c'est écrit plus haut, et c'est voulu pour un réglage — donc `onClose()` lancé
+    // avant l'écriture annulerait celle-ci en vol. Écrire d'abord coûte une écriture de quelques
+    // kilo-octets avant que l'écran ne se retire : imperceptible, et déterministe.
+    val quitter: () -> Unit = {
+        val affichee = page
+        scope.launch {
+            // Un disque plein ne doit pas emporter la fermeture : la position est perdue, mais
+            // l'écran se referme. L'inverse enfermerait la personne dans le lecteur.
+            runCatching {
+                container.userState.mutate { state ->
+                    ReaderMemory.close(state, page = affichee, start = startVerse)
+                }
+            }
+            onClose()
+        }
+    }
+
+    // Le retour système est une sortie comme une autre : sans ce branchement, quitter au geste
+    // n'écrirait rien, et la position serait perdue précisément quand on quitte vite.
+    //
+    // Il est **désactivé** pendant que l'écran des signets est ouvert : celui-ci est posé
+    // par-dessus le lecteur, qui reste monté — un retour doit alors refermer la liste, et non le
+    // lecteur qu'elle recouvre.
+    BackHandler(enabled = !bookmarksOpen) { quitter() }
+
     ReaderScreen(
         initialPage = page,
         source = source,
         pages = pages,
-        onClose = onClose,
-        onPageChanged = { page = it },
+        onClose = quitter,
+        // Le premier rapport répète la page d'ouverture : ce n'est pas un geste, et le marquer
+        // interdirait d'adopter la page mémorisée, qui arrive après l'état du compte. Les
+        // rapports suivants viennent tous d'un geste — la clé de l'effet est la page.
+        onPageChanged = { rapportee ->
+            if (rapportee != page) {
+                page = rapportee
+                pageTournee = true
+            }
+        },
         onOpenSourcePicker = { pickerOpen = true },
         initialSettings = storedSettings,
         initialReciterId = reciterRetenu,

@@ -56,7 +56,7 @@ enum class AppDestination(
 
         /** Retrouve une destination depuis une route, ou `null` si la route n'est pas un onglet. */
         fun fromRoute(route: String?): AppDestination? =
-            entries.firstOrNull { it.route == route }
+            entries.firstOrNull { it.route == AppRoutes.baseRoute(route) }
     }
 }
 
@@ -64,6 +64,40 @@ enum class AppDestination(
 object AppRoutes {
     /** Le lecteur de moushaf occupe tout l'écran : ni onglets, ni barre basse. */
     const val READER = "lecteur"
+
+    /** Le verset sur lequel le lecteur s'ouvre, en argument **facultatif** de la route. */
+    const val READER_VERSE = "verset"
+
+    /**
+     * Le motif de la route du lecteur, argument compris.
+     *
+     * L'argument est **facultatif** — `lecteur` seul reste une route valide — et c'est ce qui
+     * permet d'ouvrir le lecteur sans savoir sur quoi : une ouverture libre n'a pas de verset,
+     * et lui en inventer un ferait mémoriser une position que personne n'a lue.
+     */
+    val READER_PATTERN: String = "$READER?$READER_VERSE={$READER_VERSE}"
+
+    /**
+     * La route du lecteur, ouverte sur [verseId] ou librement.
+     *
+     * Construite ici, et non recollée à la main chez l'appelant : une route écrite en deux
+     * endroits finit par diverger, et la divergence serait **muette** — la navigation
+     * n'échouerait pas, elle ouvrirait le lecteur sans verset, et la position mémorisée serait
+     * celle du repli au lieu de celle qu'on visait.
+     */
+    fun readerRoute(verseId: Int? = null): String =
+        if (verseId == null) READER else "$READER?$READER_VERSE=$verseId"
+
+    /**
+     * La route **sans** sa partie facultative.
+     *
+     * Une route paramétrée n'est pas la chaîne de sa base : la pile rend le motif déclaré
+     * (`lecteur?verset={verset}`), et non `lecteur`. Comparer l'un aux ensembles écrits avec
+     * l'autre laisserait le lecteur avec une barre supérieure et une barre basse — deux barres
+     * par-dessus un écran qui doit occuper tout l'espace. La comparaison passe donc toujours
+     * par ici.
+     */
+    fun baseRoute(route: String?): String? = route?.substringBefore("?")
 
     /** Le défi de quiz, ouvert depuis l'accueil ou depuis un défi d'ami. */
     const val QUIZ = "quiz"
@@ -113,6 +147,12 @@ object AppRoutes {
      */
     val edgeToEdge: Set<String> = setOf(READER)
 
+    /** Vrai si la route masque les barres de l'application. */
+    fun isFullScreen(route: String?): Boolean = baseRoute(route) in fullScreen
+
+    /** Vrai si la route va jusqu'aux bords, barres système comprises. */
+    fun isEdgeToEdge(route: String?): Boolean = baseRoute(route) in edgeToEdge
+
     /**
      * Écrans d'outil : barre supérieure **avec un retour**, et **pas** de barre basse.
      *
@@ -131,8 +171,11 @@ object AppRoutes {
     )
 
     /** Titre de l'écran d'outil, ou `null` si la route n'est pas un écran d'outil. */
-    fun utilityTitle(route: String?): String? = utility[route]
+    fun utilityTitle(route: String?): String? = utility[baseRoute(route)]
 
     /** Vrai si la route masque la barre basse. */
-    fun hidesBottomBar(route: String?): Boolean = route in fullScreen || route in utility
+    fun hidesBottomBar(route: String?): Boolean {
+        val base = baseRoute(route)
+        return base in fullScreen || base in utility
+    }
 }

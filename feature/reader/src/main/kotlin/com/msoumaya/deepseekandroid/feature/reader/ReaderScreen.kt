@@ -395,6 +395,9 @@ fun ReaderScreen(
     // verset qui n'est plus à l'écran. Une seule définition, pour que le curseur de la coquille
     // et le sélecteur de sourate ne puissent pas diverger.
     //
+    // Une **seule exception**, et elle est écrite juste après : une page demandée de l'extérieur
+    // vient avec le verset qu'on allait chercher, et effacer celui-ci détruirait la reprise.
+    //
     // Déclarée **avant** la colonne, et non dedans : le sélecteur de sourate s'affiche après
     // elle, hors de la colonne, et une déclaration faite dans la colonne n'y serait plus
     // visible.
@@ -402,6 +405,27 @@ fun ReaderScreen(
         pageState.intValue = target.coerceIn(1, totalPages)
         zoomState.value = ReaderZoom()
         verseState.value = null
+    }
+
+    // Une page demandée **de l'extérieur** : la reprise d'un signet, ou la page mémorisée
+    // adoptée quand l'état du compte finit d'arriver. Le lecteur la suit, et c'est nécessaire :
+    // `initialPage` n'est lu qu'à la **première** composition — `pageState` est un
+    // `rememberSaveable`, dont l'initialisation ne se rejoue pas. Sans cet effet, l'appelant
+    // croirait à une page que l'écran n'affiche pas, et c'est cette page-là qu'il enregistrerait
+    // en refermant le lecteur : une position que personne n'a vue.
+    //
+    // Elle **ne passe pas** par `goToPage`, et c'est la seule exception : celui-ci efface le
+    // verset désigné, or une page demandée de l'extérieur vient précisément avec le verset qu'on
+    // allait chercher. Le zoom, lui, se remet à la page entière comme partout ailleurs.
+    //
+    // La garde `!=` évite de rejouer au premier rendu, où la valeur reçue est celle qui a servi
+    // à initialiser `pageState` : sans elle, l'effet referait au premier rendu ce qui vient
+    // d'être fait, et remettrait le zoom à zéro sur une page qu'on venait d'ouvrir.
+    LaunchedEffect(initialPage) {
+        if (initialPage != pageState.intValue) {
+            pageState.intValue = initialPage.coerceIn(1, totalPages)
+            zoomState.value = ReaderZoom()
+        }
     }
 
     // La page est rapportée à l'appelant à chaque changement, et non à chaque recomposition :

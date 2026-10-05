@@ -1364,6 +1364,143 @@ CAS: list[dict] = [
         "tache": ":feature:home:testDebugUnitTest",
         "attendus": ["HomeRendererTest"],
     },
+
+    # -----------------------------------------------------------------------
+    # La memoire du lecteur
+    # -----------------------------------------------------------------------
+    {
+        # La page quittee n'entre plus dans les pages lues : le compteur de pages lues de
+        # l'accueil ne bougerait plus jamais, et rien d'autre ne le dirait.
+        "nom": "memoire : la page quittee n'entre plus dans les pages lues",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/ReaderMemory.kt",
+        "avant": "            readPages = (base.effectiveReadPages + page).distinct(),",
+        "apres": "            readPages = base.effectiveReadPages,",
+        "tache": ":core:domain:test",
+        "attendus": ["ReaderMemoryTest"],
+    },
+    {
+        # Le verset memorise est repris sans verifier qu'il tient encore sur la page : la position
+        # resterait celle d'une page qu'on a quittee, et l'accueil annoncerait un verset que
+        # personne n'a sous les yeux.
+        "nom": "memoire : le verset memorise est repris sans verifier sa page",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/ReaderMemory.kt",
+        "avant": "        val verseId = versetRetenu(source, base.lastRead?.verseId, page)\n            ?: versetRetenu(source, start, page)\n            ?: range.start",
+        "apres": "        val verseId = base.lastRead?.verseId\n            ?: versetRetenu(source, start, page)\n            ?: range.start",
+        "tache": ":core:domain:test",
+        "attendus": ["ReaderMemoryTest"],
+    },
+    {
+        # La page memorisee est ecrite pour **toutes** les sources : celle de la composition se
+        # remplirait avec la page d'un moushaf en images, et l'ouverture suivante irait a cote.
+        "nom": "memoire : la page memorisee est ecrite pour toutes les sources",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/ReaderMemory.kt",
+        "avant": "            reader = if (source == MushafSource.CORAN_TEST) {\n                (base.reader ?: ReaderPreferences()).copy(\n                    mushaf = MushafSource.CORAN_TEST,\n                    followAudio = base.reader?.followAudio != false,\n                    testPage = page,\n                )\n            } else {\n                base.reader\n            },",
+        "apres": "            reader = (base.reader ?: ReaderPreferences()).copy(\n                mushaf = MushafSource.CORAN_TEST,\n                followAudio = base.reader?.followAudio != false,\n                testPage = page,\n            ),",
+        "tache": ":core:domain:test",
+        "attendus": ["ReaderMemoryTest"],
+    },
+    {
+        # L'etat n'est plus migre avant la decision : la source composee n'est plus reconnue, la
+        # page n'est pas ecrite, et la migration qui suit la rend pourtant affichee — donc une
+        # page memorisee pour une source qui n'en a jamais recu.
+        "nom": "memoire : l'etat n'est plus migre avant la decision",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/ReaderMemory.kt",
+        "avant": "        val base = Program.migrateReaderState(state)",
+        "apres": "        val base = state",
+        "tache": ":core:domain:test",
+        "attendus": ["ReaderMemoryTest"],
+    },
+    {
+        # Une source en images relit la page brute au lieu de reprojeter le verset : elle ouvre
+        # la page d'un autre decoupage, et le verset annonce n'est pas celui qu'on voit.
+        "nom": "memoire : la source en images relit la page brute",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/ReaderMemory.kt",
+        "avant": "            ?.let { runCatching { MushafSourceNavigation.versePage(source, it.verseId) }.getOrNull() }",
+        "apres": "            ?.let { it.page }",
+        "tache": ":core:domain:test",
+        "attendus": ["ReaderMemoryTest"],
+    },
+    {
+        # La fermeture est lancee **avant** l'ecriture : la portee meurt avec l'ecran, donc
+        # l'ecriture est annulee en vol — et l'ecran se ferme normalement, ce qui rend le defaut
+        # invisible. C'est le seul cas de ce fichier qui mesure un **ordre**.
+        "nom": "memoire : la fermeture passe avant l'ecriture",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/ReaderRoute.kt",
+        "avant": "        val affichee = page\n        scope.launch {",
+        "apres": "        val affichee = page\n        onClose()\n        scope.launch {",
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["ReaderRouteMemoryTest"],
+    },
+    {
+        # Le retour systeme n'emprunte plus la sortie qui ecrit : quitter au geste n'enregistre
+        # plus rien, et la perte ne se voit que chez qui quitte vite.
+        "nom": "memoire : le retour systeme n'ecrit plus rien",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/ReaderRoute.kt",
+        "avant": "    BackHandler(enabled = !bookmarksOpen) { quitter() }",
+        "apres": "    BackHandler(enabled = !bookmarksOpen) { onClose() }",
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["ReaderRouteMemoryTest"],
+    },
+    {
+        # Le suivi de page n'est plus garde contre le premier rendu : il rejoue ce que
+        # l'initialisation vient de faire, et remet le zoom a zero sur la page qu'on ouvre.
+        "nom": "memoire : le suivi de page rejoue au premier rendu",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/ReaderScreen.kt",
+        "avant": "        if (initialPage != pageState.intValue) {",
+        "apres": "        if (initialPage > 0) {",
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": ["ReaderScreenPageRequestTest"],
+    },
+    {
+        # Le suivi de page efface le verset designe : une reprise de signet ouvrirait la bonne
+        # page sans la fiche du verset qu'on venait chercher.
+        "nom": "memoire : le suivi de page efface le verset designe",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/ReaderScreen.kt",
+        "avant": "            pageState.intValue = initialPage.coerceIn(1, totalPages)\n            zoomState.value = ReaderZoom()",
+        "apres": "            pageState.intValue = initialPage.coerceIn(1, totalPages)\n            verseState.value = null\n            zoomState.value = ReaderZoom()",
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": ["ReaderScreenPageRequestTest"],
+    },
+    {
+        # Le plein ecran n'est plus reconnu derriere un argument : deux barres s'affichent
+        # par-dessus un ecran qui gere ses propres marges.
+        "nom": "memoire : le lecteur perd son plein ecran derriere un argument",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/AppDestination.kt",
+        "avant": "    fun isFullScreen(route: String?): Boolean = baseRoute(route) in fullScreen",
+        "apres": "    fun isFullScreen(route: String?): Boolean = route in fullScreen",
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["AppRoutesReaderTest"],
+    },
+    {
+        # La route du lecteur perd son argument : le verset demande n'atteint plus la route, et
+        # la position memorisee se decale d'un cran a chaque ouverture.
+        "nom": "memoire : la route du lecteur perd son argument",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/AppDestination.kt",
+        "avant": "        if (verseId == null) READER else \"$READER?$READER_VERSE=$verseId\"",
+        "apres": "        if (verseId == null) READER else READER",
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["AppRoutesReaderTest"],
+    },
+    {
+        # L'accueil n'ouvre plus le lecteur : le lecteur n'a plus aucune porte, et l'application
+        # n'a plus de Coran — sans qu'aucun autre controle ne le dise.
+        "nom": "memoire : l'accueil n'ouvre plus le lecteur",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/AppScaffold.kt",
+        "avant": "                onOpenReader = { verseId ->\n                    navController.navigate(AppRoutes.readerRoute(verseId))\n                },",
+        "apres": "                onOpenReader = {},",
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["AppScaffoldReaderEntryTest"],
+    },
+    {
+        # La route du lecteur n'est plus servie par son motif : l'argument du verset n'atteint
+        # jamais la route, et le lecteur s'ouvre toujours sans verset.
+        "nom": "memoire : la route du lecteur n'est plus servie par son motif",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/AppScaffold.kt",
+        "avant": "            route = AppRoutes.READER_PATTERN,",
+        "apres": "            route = AppRoutes.READER,",
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["AppScaffoldReaderEntryTest"],
+    },
 ]
 
 

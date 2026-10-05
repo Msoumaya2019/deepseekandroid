@@ -12,10 +12,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.msoumaya.deepseekandroid.core.design.theme.AppTheme
 import com.msoumaya.deepseekandroid.feature.home.HomeScreen
 import com.msoumaya.deepseekandroid.feature.profile.ProfileMode
@@ -87,14 +89,14 @@ fun AppScaffold(
                 // sans cette exception, il resterait une bande morte au-dessus de la page, et
                 // la page ne serait plus centrée dans l'écran réel.
                 .then(
-                    if (route in AppRoutes.edgeToEdge) {
+                    if (AppRoutes.isEdgeToEdge(route)) {
                         Modifier
                     } else {
                         Modifier.windowInsetsPadding(WindowInsets.statusBars)
                     },
                 ),
         ) {
-            if (route !in AppRoutes.fullScreen) {
+            if (!AppRoutes.isFullScreen(route)) {
                 AppTopBar(
                     title = utilityTitle ?: DEFAULT_TITLE,
                     firstName = firstName,
@@ -148,7 +150,18 @@ private fun AppNavHost(
         startDestination = AppDestination.start.route,
         modifier = modifier,
     ) {
-        composable(AppDestination.HOME.route) { HomeScreen() }
+        // L'accueil ouvre le lecteur : c'est le seul point d'entrée aujourd'hui, l'écran
+        // « Coran » n'étant pas encore construit. Le verset de la carte « Continuer » est
+        // **passé** plutôt que relu par la route : lui seul sait ce qui a été demandé, et c'est
+        // ce verset-là qui sera retenu en refermant — le relire ailleurs ferait mémoriser le
+        // premier verset de la page, et l'on reviendrait un verset plus haut à chaque fois.
+        composable(AppDestination.HOME.route) {
+            HomeScreen(
+                onOpenReader = { verseId ->
+                    navController.navigate(AppRoutes.readerRoute(verseId))
+                },
+            )
+        }
         composable(AppDestination.QURAN.route) { QuranScreen() }
         composable(AppDestination.PROGRAM.route) { ProgramScreen() }
         composable(AppDestination.PROGRESS.route) { ProgressScreen() }
@@ -162,7 +175,25 @@ private fun AppNavHost(
         // l'installation n'est pas en place remplace la page par le panneau de téléchargement,
         // et le choix de présentation se fait par-dessus. Le lecteur, lui, ne sait ni ce qu'est
         // un paquet ni où il est stocké.
-        composable(AppRoutes.READER) { ReaderRoute(onClose = { navController.popBackStack() }) }
+        //
+        // Le motif porte l'argument, et non la route nue : sans lui, la navigation ne pourrait
+        // pas distinguer « ouvrir le lecteur sur le verset 746 » de « ouvrir le lecteur ».
+        // `defaultValue = 0` sert de sentinelle — aucun verset du Coran ne porte ce numéro, et
+        // la route nue reste donc valide et sans verset.
+        composable(
+            route = AppRoutes.READER_PATTERN,
+            arguments = listOf(
+                navArgument(AppRoutes.READER_VERSE) {
+                    type = NavType.IntType
+                    defaultValue = 0
+                },
+            ),
+        ) { entry ->
+            ReaderRoute(
+                startVerse = entry.arguments?.getInt(AppRoutes.READER_VERSE)?.takeIf { it > 0 },
+                onClose = { navController.popBackStack() },
+            )
+        }
         composable(AppRoutes.QUIZ) { QuizScreen() }
 
         composable(AppRoutes.PROFILE) { ProfileScreen(mode = ProfileMode.PROFILE) }

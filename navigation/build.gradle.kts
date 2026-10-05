@@ -45,6 +45,12 @@ dependencies {
     implementation(project(":feature:quiz"))
     implementation(project(":feature:profile"))
 
+    // `BackHandler` : la sortie du lecteur doit écrire la mémoire de lecture, et le retour
+    // système est une sortie comme une autre. Sans lui, quitter au geste n'enregistrerait rien
+    // et la position serait perdue exactement quand on quitte vite — le défaut le plus difficile
+    // à voir, puisqu'il ne se produit que si l'on ne fait pas ce qu'on fait en essayant.
+    implementation(libs.androidx.activity.compose)
+
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     // `collectAsStateWithLifecycle` : la route du lecteur observe la source et l'installation,
