@@ -713,6 +713,117 @@ CAS: list[dict] = [
         "tache": ":core:domain:test",
         "attendus": ["BookmarksPanelTest"],
     },
+    {
+        # Le libelle du bouton suit `isDifficult` — qui compte **deux** origines — au lieu du
+        # seul marqueur de l'eleve. Sur un verset que le professeur a marque, le bouton annonce
+        # alors un retrait la ou l'appui **ajoute** un marqueur. Le libelle ment, et rien ne le
+        # dit : le panneau s'affiche, les actions fonctionnent.
+        "nom": "verse-actions : le libelle suit le marqueur du professeur",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/VerseActionsText.kt",
+        "avant": "            .filter { it.value.user != null }",
+        "apres": "            .filter { it.value.user != null || it.value.admin != null }",
+        "tache": ":core:domain:test",
+        "attendus": ["VerseActionsTextTest"],
+    },
+    {
+        # La derniere entree ne bascule plus : elle propose toujours de marquer, meme sur un
+        # verset deja marque par l'eleve. L'appui retire alors le marqueur sous un mot qui
+        # annonce l'inverse — le geste est juste, le mot est faux.
+        "nom": "verse-actions : la derniere entree ne bascule plus",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/VerseActionsText.kt",
+        "avant": "            add(Row(Action.MARK, if (markedByUser) UNMARK_DIFFICULT else MARK_DIFFICULT))",
+        "apres": "            add(Row(Action.MARK, MARK_DIFFICULT))",
+        "tache": ":core:domain:test",
+        "attendus": ["VerseActionsTextTest"],
+    },
+    {
+        # `isUseful` repond toujours oui : le panneau s'ouvre meme quand aucune action n'est
+        # branchee, et se reduit a son titre et a sa poignee. Une impasse qui a l'air d'un ecran.
+        "nom": "verse-actions : le panneau s'ouvre meme sans aucune action",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/VerseActionsText.kt",
+        "avant": "    fun isUseful(available: Set<Action>): Boolean = available.isNotEmpty()",
+        "apres": "    fun isUseful(available: Set<Action>): Boolean = true",
+        "tache": ":core:domain:test",
+        "attendus": ["VerseActionsTextTest"],
+    },
+    {
+        # Le lecteur ouvre le panneau sans verifier qu'il a une action : l'appui long sur un
+        # verset ouvre une feuille vide, et la fiche a disparu avec. Le geste ne fait plus rien
+        # d'utile, et rien ne le signale.
+        "nom": "verse-actions : le lecteur ouvre le panneau sans verifier qu'il est utile",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/ReaderScreen.kt",
+        "avant": "panel = if (touched != null && VerseActionsText.isUseful(verseActions)) {",
+        "apres": "panel = if (touched != null) {",
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": ["VerseActionsWiringTest"],
+    },
+    {
+        # Le lecteur ne transmet plus le marqueur de l'eleve : il retombe sur son defaut vide, et
+        # **tous** les versets proposent de les marquer — y compris ceux qui le sont deja. La
+        # bascule fonctionne toujours, donc le geste ne revele rien.
+        "nom": "verse-actions : le lecteur ne transmet plus le marqueur de l'eleve",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/ReaderScreen.kt",
+        "avant": "                    markedByUser = verseId in userMarkedIds,",
+        "apres": "                    markedByUser = false,",
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": ["VerseActionsWiringTest"],
+    },
+    {
+        # Le marquage referme le panneau : le libelle ne bascule plus sous les yeux, et la
+        # personne doit rouvrir le geste pour verifier ce qui vient d'etre ecrit. C'est un
+        # ecart de comportement que rien d'autre ne mesure.
+        "nom": "verse-actions : le marquage referme le panneau",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/ReaderScreen.kt",
+        "avant": "                    onMark = onMarkDifficulty?.let { mark -> { mark(verseId) } },",
+        "apres": "                    onMark = onMarkDifficulty?.let { mark -> { mark(verseId); panel = ReaderPanel.NONE } },",
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": ["VerseActionsWiringTest"],
+    },
+    {
+        # La fiche du verset est de nouveau dessinee sous le panneau : elle annonce « Toucher la
+        # page pour fermer », alors que le voile du panneau capterait ce toucher. Un texte faux,
+        # a l'endroit exact ou la personne regarde.
+        "nom": "verse-actions : la fiche n'est plus masquee sous le panneau",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/ReaderScreen.kt",
+        "avant": "selectedVerse?.takeIf { panel != ReaderPanel.VERSE }?.let { verseId ->",
+        "apres": "selectedVerse?.let { verseId ->",
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": ["VerseActionsWiringTest"],
+    },
+    {
+        # « Selectionner un passage » revient avec une destination vide : l'entree s'affiche,
+        # et l'appui ne fait rien. Le geste de designation d'une plage n'est pas porte — c'est
+        # exactement ce que la regle du domaine interdit d'afficher.
+        "nom": "verse-actions : selectionner un passage revient sans destination",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/ReaderScreen.kt",
+        "avant": "                    markedByUser = verseId in userMarkedIds,",
+        "apres": "                    markedByUser = verseId in userMarkedIds,\n                    onSelectRange = {},",
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": ["VerseActionsWiringTest"],
+    },
+    {
+        # La route confond les deux ensembles : elle fournit les versets difficiles, professeur
+        # compris, la ou le libelle attend ceux de l'eleve. Meme faute que la premiere, mais a
+        # l'autre bout du branchement — et une seule des deux suffirait a faire mentir le bouton.
+        "nom": "verse-actions : la route confond les deux ensembles de marqueurs",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/ReaderRoute.kt",
+        "avant": "        userState?.let { VerseActionsText.userMarkedIds(it) } ?: emptySet()",
+        "apres": "        userState?.let { Review.difficultIds(it) } ?: emptySet()",
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["ReaderRouteVerseActionsTest"],
+    },
+    {
+        # La route n'ecrit plus rien : l'entree reste affichee, le panneau se comporte comme
+        # avant, et le marqueur n'est jamais enregistre. Rien ne le dit avant le redemarrage —
+        # et encore, le verset paraissait simplement ne pas avoir ete marque.
+        "nom": "verse-actions : la route n'ecrit plus le marqueur",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/ReaderRoute.kt",
+        "avant": "                    container.userState.mutate { state -> Review.toggleDifficulty(state, verseId) }",
+        "apres": "                    container.userState.mutate { state -> state }",
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["ReaderRouteVerseActionsTest"],
+    },
+
 ]
 
 

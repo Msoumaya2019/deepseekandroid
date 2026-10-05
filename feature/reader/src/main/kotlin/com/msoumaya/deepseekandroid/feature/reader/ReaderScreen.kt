@@ -52,8 +52,10 @@ import com.msoumaya.deepseekandroid.core.domain.ReaderOptionsText
 import com.msoumaya.deepseekandroid.core.domain.ReaderTouch
 import com.msoumaya.deepseekandroid.core.domain.ReaderZoomGeometry
 import com.msoumaya.deepseekandroid.core.domain.TranslationPanel
+import com.msoumaya.deepseekandroid.core.domain.VerseActionsText
 import com.msoumaya.deepseekandroid.core.model.MushafPageSource
 import com.msoumaya.deepseekandroid.core.model.MushafSource
+import com.msoumaya.deepseekandroid.core.model.Range
 import com.msoumaya.deepseekandroid.core.model.ReaderZoom
 import com.msoumaya.deepseekandroid.core.model.RepeatMode
 import com.msoumaya.deepseekandroid.core.model.Surah
@@ -145,6 +147,12 @@ private const val DEFAULT_TOTAL_PAGES = 604
  *   sait pas le faire : ni le bouton de la coquille, ni l'entrée « Placer un marque-page » du
  *   panneau n'existent alors.
  * @param onOpenBookmarks ouvre la liste des signets. `null` tant qu'elle n'est pas écrite.
+ * @param userMarkedIds les versets portant le marqueur de difficulté de **l'élève** : ils
+ *   décident du mot de la dernière entrée du panneau des actions. Distinct de `difficultIds`,
+ *   qui compte aussi le professeur — voir `VerseActionsText`.
+ * @param onMarkDifficulty bascule le marqueur de difficulté de l'élève sur un verset. `null`
+ *   quand l'appelant ne sait pas l'écrire : l'entrée de marquage est alors retirée du
+ *   panneau au lieu de mener nulle part.
  */
 @Composable
 fun ReaderScreen(
@@ -167,6 +175,11 @@ fun ReaderScreen(
     onOpenBookmarks: (() -> Unit)? = null,
     bookmarkIds: Set<Int> = emptySet(),
     difficultIds: Set<Int> = emptySet(),
+    userMarkedIds: Set<Int> = emptySet(),
+    // Bascule le marqueur de difficulté de l'élève. Seule écriture du panneau des actions, et
+    // donc la seule de ses entrées qui ne puisse pas vivre ici : le lecteur ne connaît ni le
+    // conteneur ni le stockage. `null` retire l'entrée au lieu de la laisser mener nulle part.
+    onMarkDifficulty: ((Int) -> Unit)? = null,
 ) {
     val colors = AppTheme.colors
     val totalPages = remember { Quran.pages.size.takeIf { it > 0 } ?: DEFAULT_TOTAL_PAGES }
@@ -292,6 +305,21 @@ fun ReaderScreen(
         { panel = ReaderPanel.BOOKMARKS }
     } else {
         null
+    }
+
+    // Les actions du panneau du verset réellement branchées. Même règle que les deux autres
+    // panneaux : une action sans destination est **retirée**, et le panneau ne s'ouvre que s'il
+    // en reste au moins une. « Sélectionner un passage » n'y figure pas : le geste de
+    // désignation d'une plage n'est pas porté, et son entrée disparaît plutôt que de mener
+    // nulle part.
+    //
+    // « Écouter » et « Répéter » sont toujours là : le lecteur possède le contrôleur audio, et
+    // la plage d'un verset est un fait connu — pas une conversion qui pourrait échouer, comme
+    // celle d'une page. Seul le marquage dépend de l'appelant.
+    val verseActions: Set<VerseActionsText.Action> = buildSet {
+        add(VerseActionsText.Action.LISTEN)
+        add(VerseActionsText.Action.REPEAT)
+        if (onMarkDifficulty != null) add(VerseActionsText.Action.MARK)
     }
 
     // La notice au-dessus de la page : l'instruction du mode de pose, ou la confirmation d'un
@@ -460,7 +488,7 @@ fun ReaderScreen(
                                 // avec le mode de pose, qui fait exactement le même calcul — et
                                 // deux copies auraient fini par désigner deux versets différents.
                                 val shown = currentPage.value
-                                verseState.value = ReaderTouch.verseAt(
+                                val touched = ReaderTouch.verseAt(
                                     x = position.x.toDouble(),
                                     y = position.y.toDouble(),
                                     zoom = zoomState.value,
@@ -472,6 +500,18 @@ fun ReaderScreen(
                                     sourceWidth = shown.sourceWidth,
                                     sourceHeight = shown.sourceHeight,
                                 )
+                                verseState.value = touched
+                                // Le panneau s'ouvre **dans le même geste**, comme dans le
+                                // client d'origine, où l'appui long fait `setSelectedVerse(id)`
+                                // puis `setSessionPanel('verse')` : l'appui désigne un verset, et
+                                // l'écran doit aussitôt dire ce qu'on peut en faire. Un verset
+                                // introuvable n'ouvre rien — un panneau décrivant « Verset 0 »
+                                // serait pire que pas de panneau.
+                                panel = if (touched != null && VerseActionsText.isUseful(verseActions)) {
+                                    ReaderPanel.VERSE
+                                } else {
+                                    ReaderPanel.NONE
+                                }
                             },
                             onSwipe = { dx, dy ->
                                 // Le seuil, le rapport et la borne viennent du domaine.
@@ -531,7 +571,11 @@ fun ReaderScreen(
             )
         }
 
-        selectedVerse?.let { verseId ->
+        // La fiche du verset cède la place au panneau des actions : le panneau porte déjà le
+        // numéro du verset, et deux affichages superposés donneraient un texte faux — la fiche
+        // annonce qu'un appui sur la page la referme, alors que le voile du panneau capterait ce
+        // toucher. Elle réapparaît à la fermeture, avec sa traduction.
+        selectedVerse?.takeIf { panel != ReaderPanel.VERSE }?.let { verseId ->
             VerseCard(verseId = verseId)
         }
 
@@ -639,6 +683,61 @@ fun ReaderScreen(
             onClose = { panel = ReaderPanel.NONE },
         )
 
+        ReaderPanel.VERSE -> selectedVerse?.let { verseId ->
+            // Le numéro **dans sa sourate**, tel que la fiche l'affiche : c'est le même calcul,
+            // et le panneau doit dire la même chose que la fiche. Une référence non résoluble ne
+            // dessine rien — le panneau ne s'ouvre alors pas du tout, ce que le geste a déjà
+            // décidé.
+            val ayah = runCatching { Quran.verseAt(verseId) }.getOrNull()?.ayah
+            if (ayah != null) {
+                VerseActionsSheet(
+                    ayah = ayah,
+                    // Le marqueur de l'**élève**, et non `difficultIds` : c'est ce que le libellé
+                    // annonce, et ce que la bascule écrit.
+                    markedByUser = verseId in userMarkedIds,
+                    onClose = { panel = ReaderPanel.NONE },
+                    // Écouter et répéter **referment** le panneau et effacent la fiche : c'est ce
+                    // que fait le client d'origine, où les deux passent par `audioAction`, qui
+                    // termine par `setSelectedVerse(null)`. Sans cela, la fiche du verset
+                    // réapparaîtrait sous le lecteur audio.
+                    onListen = {
+                        // Le client d'origine force ici `count:1, mode:'passage', autoStop:true`
+                        // sur une plage d'**un seul** verset, puis démarre. Ces trois réglages
+                        // sont écrits, et pas seulement appliqués à la séance : c'est ce que fait
+                        // `setCountChoice(1)`, dont l'effet d'enregistrement suit.
+                        val single = settings.copy(
+                            countChoice = AudioCount.ONE,
+                            mode = RepeatMode.PASSAGE,
+                            autoStop = true,
+                        )
+                        regleParLaPersonne = true
+                        settings = single
+                        audio.start(Range(verseId, verseId), single)
+                        onAudioSettingsChanged(single, reciterId)
+                        verseState.value = null
+                        panel = ReaderPanel.NONE
+                    },
+                    onRepeat = {
+                        // Le client d'origine ne lance **rien** ici : il met le mode de répétition
+                        // sur « passage » et ouvre les réglages d'écoute, où l'on choisit le nombre
+                        // d'écoutes. C'est « Écouter » qui lance.
+                        val passage = settings.copy(mode = RepeatMode.PASSAGE)
+                        regleParLaPersonne = true
+                        settings = passage
+                        audio.updateSettings(passage)
+                        onAudioSettingsChanged(passage, reciterId)
+                        verseState.value = null
+                        panel = ReaderPanel.AUDIO
+                    },
+                    // Le marquage ne referme **pas** le panneau, et n'efface pas la fiche : c'est
+                    // ce que fait le client d'origine, et c'est ce qui permet au libellé de
+                    // basculer sous les yeux — l'état observé par la route republie
+                    // `userMarkedIds`, et l'entrée se met à annoncer le retrait.
+                    onMark = onMarkDifficulty?.let { mark -> { mark(verseId) } },
+                )
+            }
+        }
+
         ReaderPanel.SURAH -> SurahPickerScreen(
             // Un référentiel non chargé ne fait pas tomber l'écran : la première sourate est
             // surlignée et la liste est vide, ce que le sélecteur sait déjà montrer.
@@ -742,8 +841,15 @@ private const val DEFAULT_SURAH_NAME = "Le Coran"
  * passage le verset sélectionné : `setSessionPanel(null); setSelectedVerse(null)`. Ici, la fiche
  * du verset vit de son côté, et fermer un panneau la laisse à l'écran. Rien n'est perdu ni
  * menti — la fiche dit elle-même qu'un appui sur la page la referme — et la personne retrouve le
- * verset qu'elle venait de toucher. La rattacher à la fermeture des quatre panneaux ferait
+ * verset qu'elle venait de toucher. La rattacher à la fermeture des panneaux ferait
  * disparaître une information qu'aucun d'eux n'a remplacée.
+ *
+ * ## Le panneau des actions est le seul ouvert *avec* la fiche
+ *
+ * L'appui long pose le verset sélectionné **et** ouvre [VERSE], comme le client d'origine.
+ * Mais la fiche n'est alors pas dessinée : le panneau porte déjà le numéro du verset, et le
+ * voile capterait le toucher que la fiche annonce. Elle réapparaît à la fermeture — le
+ * panneau ne fait donc que la recouvrir, il ne la remplace pas.
  */
 private enum class ReaderPanel {
     /** Aucun : le lecteur est nu. */
@@ -763,6 +869,9 @@ private enum class ReaderPanel {
 
     /** Les marques-pages : en poser un, ou ouvrir la liste. */
     BOOKMARKS,
+
+    /** Les actions du verset touché : écouter, répéter, marquer. */
+    VERSE,
 }
 
 /**

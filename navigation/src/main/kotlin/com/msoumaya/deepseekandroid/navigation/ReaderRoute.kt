@@ -15,6 +15,7 @@ import com.msoumaya.deepseekandroid.core.data.LocalAppContainer
 import com.msoumaya.deepseekandroid.core.domain.Bookmarks
 import com.msoumaya.deepseekandroid.core.domain.QuranSourceReady
 import com.msoumaya.deepseekandroid.core.domain.Review
+import com.msoumaya.deepseekandroid.core.domain.VerseActionsText
 import com.msoumaya.deepseekandroid.core.model.MushafPageSource
 import com.msoumaya.deepseekandroid.feature.reader.EmbeddedMushafPages
 import com.msoumaya.deepseekandroid.feature.reader.ReaderScreen
@@ -61,6 +62,13 @@ import kotlinx.coroutines.launch
  * L'état est observé et non lu une fois : poser un signet depuis un autre écran doit se voir
  * sans rouvrir le lecteur.
  *
+ * ## Le marquage, et la distinction qui le gouverne
+ *
+ * Le panneau des actions d'un verset propose de le marquer difficile, ou de le retirer. Le
+ * mot du bouton suit le marqueur de l'**élève** seul, tandis que la teinte de la page suit les
+ * deux origines : ce sont deux questions différentes, et `VerseActionsText` les sépare. La
+ * route fournit les deux ensembles, et n'en confond aucun.
+ *
  * ## Les réglages d'écoute
  *
  * Ils sont relus du disque par le conteneur au démarrage, et cette route les **observe** : la
@@ -106,6 +114,13 @@ fun ReaderRoute(
     }
     val difficultIds = remember(userState) {
         userState?.let { Review.difficultIds(it) } ?: emptySet()
+    }
+    // Le sous-ensemble marqué par l'**élève**. Il est distinct de `difficultIds`, qui compte
+    // aussi le professeur : le premier dit « ce verset est difficile » et colore la page, le
+    // second dit « l'élève l'a marqué » et décide du mot du bouton. Les confondre ferait mentir
+    // le libellé — voir `VerseActionsText`.
+    val userMarkedIds = remember(userState) {
+        userState?.let { VerseActionsText.userMarkedIds(it) } ?: emptySet()
     }
 
     // La page est tenue ici, et non dans le lecteur : le choix de présentation en a besoin pour
@@ -171,6 +186,17 @@ fun ReaderRoute(
         },
         bookmarkIds = bookmarkIds,
         difficultIds = difficultIds,
+        userMarkedIds = userMarkedIds,
+        // Bascule le marqueur de difficulté de l'élève. Seule écriture du panneau des actions,
+        // et la seule qui ne puisse pas vivre dans le lecteur : lui ne connaît ni le conteneur
+        // ni le stockage. Comme pour le signet, un disque plein ne doit pas emporter le lecteur.
+        onMarkDifficulty = { verseId ->
+            scope.launch {
+                runCatching {
+                    container.userState.mutate { state -> Review.toggleDifficulty(state, verseId) }
+                }
+            }
+        },
     )
 
     if (pickerOpen) {
