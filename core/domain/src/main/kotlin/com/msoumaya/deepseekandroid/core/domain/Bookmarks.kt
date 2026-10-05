@@ -80,6 +80,17 @@ object Bookmarks {
             .filter { it.deletedAt == null }
             .sortedByDescending { it.lastUsedAt ?: it.updatedAt }
 
+    /**
+     * Versets portant un signet, pour le surlignage de la page.
+     *
+     * Passe par [visibleBookmarks] et non par la carte brute : un signet supprimé garde son
+     * marqueur `deletedAt` pour la synchronisation, et ne doit donc pas colorer la page.
+     * Lire la carte directement ferait revivre un signet supprimé sur l'écran où il ne
+     * devrait plus apparaître — l'inverse exact de ce que la suppression logique protège.
+     */
+    fun bookmarkedIds(state: AppState): Set<Int> =
+        visibleBookmarks(state).map { it.verseId }.toSet()
+
     /** Fusion par date de modification, marqueurs de suppression inclus. */
     fun mergeBookmarks(
         a: Map<String, VerseBookmark>?,

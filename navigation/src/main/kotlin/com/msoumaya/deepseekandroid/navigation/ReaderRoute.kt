@@ -12,7 +12,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.msoumaya.deepseekandroid.core.data.AppContainer
 import com.msoumaya.deepseekandroid.core.data.LocalAppContainer
+import com.msoumaya.deepseekandroid.core.domain.Bookmarks
 import com.msoumaya.deepseekandroid.core.domain.QuranSourceReady
+import com.msoumaya.deepseekandroid.core.domain.Review
 import com.msoumaya.deepseekandroid.core.model.MushafPageSource
 import com.msoumaya.deepseekandroid.feature.reader.EmbeddedMushafPages
 import com.msoumaya.deepseekandroid.feature.reader.ReaderScreen
@@ -49,6 +51,16 @@ import kotlinx.coroutines.launch
  * « réinstaller » qui n'existe dans aucun des deux clients. `QuranSourceReady` sait le dire —
  * la vérification existe et est éprouvée — mais aucun écran ne le lui demande encore.
  *
+ * ## Les marques de la page
+ *
+ * La route **observe** l'état du compte et en tire deux ensembles : les versets en signet,
+ * et les versets marqués difficiles. Les calculer ici plutôt que dans le lecteur tient à ce
+ * que le lecteur ne connaît ni le conteneur ni le stockage — c'est ce qui lui permet d'être
+ * éprouvé sans eux. Les deux règles de calcul, elles, vivent dans `core:domain`.
+ *
+ * L'état est observé et non lu une fois : poser un signet depuis un autre écran doit se voir
+ * sans rouvrir le lecteur.
+ *
  * ## Les réglages d'écoute
  *
  * Ils sont relus du disque par le conteneur au démarrage, et cette route les **observe** : la
@@ -84,6 +96,17 @@ fun ReaderRoute(
     val storedSettings by container.audioSettings.settings.collectAsStateWithLifecycle()
     val storedReciterId by container.audioSettings.reciterId.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
+
+    // L'état du compte, observé. Il vaut `null` tant que la lecture n'a rien publié : un
+    // état encore inconnu ne doit pas se confondre avec un état vide, mais les deux
+    // dessinent la même page — aucun marqueur.
+    val userState by container.userState.state.collectAsStateWithLifecycle(initialValue = null)
+    val bookmarkIds = remember(userState) {
+        userState?.let { Bookmarks.bookmarkedIds(it) } ?: emptySet()
+    }
+    val difficultIds = remember(userState) {
+        userState?.let { Review.difficultIds(it) } ?: emptySet()
+    }
 
     // La page est tenue ici, et non dans le lecteur : le choix de présentation en a besoin pour
     // vérifier que la page affichée existera encore dans l'autre source. Changer de
@@ -128,6 +151,8 @@ fun ReaderRoute(
                 runCatching { container.audioSettings.save(settings, reciterId) }
             }
         },
+        bookmarkIds = bookmarkIds,
+        difficultIds = difficultIds,
     )
 
     if (pickerOpen) {

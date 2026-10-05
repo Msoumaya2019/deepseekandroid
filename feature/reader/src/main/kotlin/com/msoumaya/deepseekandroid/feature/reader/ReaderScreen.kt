@@ -87,6 +87,12 @@ private const val DEFAULT_TOTAL_PAGES = 604
  *   `TranslationPanelSheet` donne, verset par verset, la référence et le sens du passage
  *   affiché. Quels versets exactement — la séance, ou la page — est une règle de
  *   `core:domain`, éprouvée là où elle vit.
+ * - **Les versets marqués se voient sur la page.** Un verset en signet est teinté en vert
+ *   et reçoit son signet en marge ; un verset marqué difficile est teinté en rouge. Les
+ *   deux ensembles sont **reçus** et non calculés ici : ce qui compte comme marqué — une
+ *   suppression logique, un marqueur posé par le professeur — est une règle de
+ *   `core:domain`, éprouvée là où elle vit. L'ordre des couleurs est décrit dans
+ *   `MushafPageView`.
  * - **Les réglages d'écoute s'appliquent à la séance en cours.** Changer de récitateur, de
  *   nombre d'écoutes, de mode ou de silence vaut pour la séance ouverte, sans avoir à la
  *   relancer : c'est le comportement du client d'origine, où les réglages sont relus à chaque
@@ -100,9 +106,11 @@ private const val DEFAULT_TOTAL_PAGES = 604
  *
  * ## Ce qui viendra, et où
  *
- * La coquille d'étude et le mode signet appartiennent à la phase C. Chacune de ces lignes
- * s'ajoutera en passant sa destination à `ReaderOptionsSheet` : tant qu'elle vaut `null`, la
- * ligne ne s'affiche pas, et rien ne ment à l'écran.
+ * Ce qui **reste** : la coquille d'étude — l'en-tête de séance et ses repères de marge,
+ * qui supposent une séance ouverte — et le **mode** signet, c'est-à-dire poser un signet en
+ * touchant un verset. Afficher les marques est fait ; les poser ne l'est pas. Chacune de
+ * ces lignes s'ajoutera en passant sa destination à `ReaderOptionsSheet` : tant qu'elle vaut
+ * `null`, la ligne ne s'affiche pas, et rien ne ment à l'écran.
  *
  * @param initialPage page ouverte au lancement. Bornée au moushaf.
  * @param source la source coranique affichée. Elle décide du **découpage** des pages : deux
@@ -122,6 +130,10 @@ private const val DEFAULT_TOTAL_PAGES = 604
  * @param initialReciterId le récitateur enregistré, ou `null` s'il n'a jamais été choisi.
  * @param onAudioSettingsChanged rapporte chaque changement, avec le récitateur courant, pour
  *   qu'il soit écrit. Les deux partent ensemble : c'est un seul document.
+ * @param bookmarkIds les versets portant un signet : ils sont teintés et reçoivent leur
+ *   signet en marge. Vide par défaut — un appelant qui ne connaît pas les signets n'en
+ *   dessine aucun.
+ * @param difficultIds les versets marqués difficiles, quelle qu'en soit l'origine.
  */
 @Composable
 fun ReaderScreen(
@@ -135,6 +147,8 @@ fun ReaderScreen(
     initialSettings: AudioSession = AudioSession(),
     initialReciterId: String? = null,
     onAudioSettingsChanged: (AudioSession, String) -> Unit = { _, _ -> },
+    bookmarkIds: Set<Int> = emptySet(),
+    difficultIds: Set<Int> = emptySet(),
 ) {
     val colors = AppTheme.colors
     val totalPages = remember { Quran.pages.size.takeIf { it > 0 } ?: DEFAULT_TOTAL_PAGES }
@@ -394,8 +408,8 @@ fun ReaderScreen(
                     pageWidth = pageWidth,
                     pageHeight = pageHeight,
                     selectedVerse = selectedVerse,
-                    bookmarkIds = emptySet(),
-                    difficultIds = emptySet(),
+                    bookmarkIds = bookmarkIds,
+                    difficultIds = difficultIds,
                 )
             }
         }

@@ -7,6 +7,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -24,8 +27,11 @@ import com.msoumaya.deepseekandroid.core.design.theme.AppTheme
 import com.msoumaya.deepseekandroid.core.domain.Quran
 import com.msoumaya.deepseekandroid.core.domain.QuranArchive
 import com.msoumaya.deepseekandroid.core.domain.ReaderLayout
+import com.msoumaya.deepseekandroid.core.domain.ReaderTint
+import com.msoumaya.deepseekandroid.core.domain.TintKind
 import com.msoumaya.deepseekandroid.core.model.MushafPage
 import com.msoumaya.deepseekandroid.core.model.ReaderZoom
+import com.msoumaya.deepseekandroid.core.model.VerseBoundsRow
 import kotlin.math.roundToInt
 
 /**
@@ -133,6 +139,19 @@ internal fun MushafPageView(
                         .background(tint),
                 )
             }
+
+            for (row in page.rows) {
+                val verseId = Quran.verseId(row.surah, row.ayah) ?: continue
+                if (verseId !in bookmarkIds) continue
+                BookmarkGlyph(
+                    row = row,
+                    page = page,
+                    frame = frame,
+                    innerHeight = innerHeight,
+                    pageWidth = pageWidth,
+                    color = colors.green,
+                )
+            }
         }
     }
 }
@@ -201,11 +220,15 @@ internal val LINE_ASPECT: Float =
     QuranArchive.IMAGE_HEIGHT.toFloat() / QuranArchive.IMAGE_WIDTH.toFloat()
 
 /**
- * Couleur d'un surlignage, et son ordre de priorité.
+ * La couleur d'un surlignage, à partir de la marque qui l'emporte.
  *
- * Le verset **en cours d'écoute** passe avant tout : c'est l'information la plus fugace, donc
- * celle qui doit rester lisible. Vient ensuite le verset **difficile**, puis le signet, puis
- * la sélection. Les valeurs sont celles du client d'origine, opacités comprises.
+ * **Quelle** marque l'emporte n'est pas décidé ici : c'est `ReaderTint`, dans `core:domain`,
+ * où la règle est éprouvée. Une priorité écrite sous forme de `when` sur des couleurs serait
+ * inatteignable — cette fonction est privée, et vit dans un composable. Ne restent donc ici
+ * que les valeurs : la teinte de chaque cas, et son opacité.
+ *
+ * Le repli `gold` à 0,11 de l'original n'est pas repris : sa boucle ne retient déjà que les
+ * versets sélectionnés, difficiles ou signets, donc ce repli n'est jamais atteint.
  *
  * Les couleurs sont reçues en paramètre : `AppTheme.colors` ne se lit que depuis une
  * composition, et cette fonction doit rester appelable dans une boucle sans être `@Composable`.
@@ -216,9 +239,54 @@ private fun tintFor(
     bookmarkIds: Set<Int>,
     difficultIds: Set<Int>,
     colors: AppColors,
-): Color? = when {
-    verseId == selectedVerse -> colors.selected.copy(alpha = 0.42f)
-    verseId in difficultIds -> Color(0xFFE85B5B).copy(alpha = 0.18f)
-    verseId in bookmarkIds -> colors.green2.copy(alpha = 0.18f)
-    else -> null
+): Color? = when (ReaderTint.kindOf(verseId, selectedVerse, bookmarkIds, difficultIds)) {
+    TintKind.DIFFICULT -> Color(0xFFE85B5B).copy(alpha = 0.18f)
+    TintKind.BOOKMARK -> colors.green2.copy(alpha = 0.18f)
+    TintKind.PLAYING -> colors.selected.copy(alpha = 0.42f)
+    null -> null
+}
+
+/**
+ * Taille du signet en marge, telle que le client d'origine le dessine.
+ */
+private const val BOOKMARK_SIZE: Float = 14f
+
+/**
+ * Le signet d'un verset, en marge droite de la page.
+ *
+ * Il est dessiné **après** les surlignages, et dans sa propre boucle : la couleur d'un verset
+ * et la présence de son signet sont deux informations distinctes, et les lier ferait
+ * disparaître le signet le jour où la règle de couleur change.
+ *
+ * La position est celle du client d'origine : bord droit de la page intérieure, à la hauteur
+ * du **haut** du rectangle du verset — le signet marque le début du passage, pas son centre.
+ *
+ * La description annonce le numéro du verset **dans sa sourate**, comme l'original
+ * (`Marque-page verset ${verseAt(id).ayah}`) et non le numéro global : sur une page, l'en-tête
+ * de sourate donne le contexte manquant.
+ *
+ * Le dessin est `Icons.Filled.Bookmark`, le signet plein de Material, là où l'original écrit un
+ * chemin simplifié (`M6 3h12v18l-6-4-6 4z`) : même figure, coins arrondis. Ce fichier suit la
+ * convention d'icônes du portage, qui n'a jamais recopié le jeu d'icônes de la source.
+ */
+@Composable
+private fun BookmarkGlyph(
+    row: VerseBoundsRow,
+    page: MushafPage,
+    frame: Float,
+    innerHeight: Float,
+    pageWidth: Float,
+    color: Color,
+) {
+    Icon(
+        imageVector = Icons.Filled.Bookmark,
+        contentDescription = "Marque-page verset ${row.ayah}",
+        tint = color,
+        modifier = Modifier
+            .offset(
+                x = (pageWidth - frame / 2f - BOOKMARK_SIZE).dp,
+                y = (frame / 2f + row.top / page.sourceHeight.toFloat() * innerHeight).dp,
+            )
+            .size(BOOKMARK_SIZE.dp),
+    )
 }

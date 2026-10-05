@@ -425,6 +425,75 @@ CAS: list[dict] = [
         "tache": ":feature:reader:testDebugUnitTest",
         "attendus": ["ReaderPanelWiringTest"],
     },
+    {
+        # Le marqueur pose par le professeur ne compte plus comme une difficulte : le verset
+        # qu'il a justement designe disparait de l'ecran, et de la liste des reprises. Rien
+        # d'autre ne le dit — le domaine reste vert pour tout le reste.
+        "nom": "marques : le marqueur du professeur ne compte plus",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Review.kt",
+        "avant": "        marker?.user != null || marker?.admin != null",
+        "apres": "        marker?.user != null",
+        "tache": ":core:domain:test",
+        "attendus": ["ReaderMarksTest"],
+    },
+    {
+        # Le plan de reprise cesse de lire la regle nommee : il fabrique un ensemble vide. Les
+        # versets difficiles ne sont plus jamais reproposes, et l'ensemble public, lui, reste
+        # juste — c'est exactement l'ecart que le test doit voir.
+        "nom": "marques : le plan de reprise ne lit plus la regle nommee",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Review.kt",
+        "avant": "        val difficult = difficultIds(state)",
+        "apres": "        val difficult = emptySet<Int>()",
+        "tache": ":core:domain:test",
+        "attendus": ["ReaderMarksTest"],
+    },
+    {
+        # Le signet est lu dans la carte brute : la suppression logique est oubliee, et un
+        # signet supprime revient colorer la page. Le marqueur `deletedAt` subsiste pourtant
+        # dans l'etat, ce qui rend la faute invisible a tout autre controle.
+        "nom": "marques : un signet supprime colore de nouveau la page",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Bookmarks.kt",
+        "avant": "        visibleBookmarks(state).map { it.verseId }.toSet()",
+        "apres": "        (state.bookmarks ?: emptyMap()).values.map { it.verseId }.toSet()",
+        "tache": ":core:domain:test",
+        "attendus": ["ReaderMarksTest"],
+    },
+    {
+        # L'ordre des priorites est inverse : un verset a la fois signet et en cours d'ecoute
+        # change de couleur. C'est l'ecart entre les deux rendus de la source d'origine, et
+        # aucun autre test ne le verrait — la page s'affiche, simplement pas de la meme teinte.
+        "nom": "teintes : la lecture passe avant les deux marques",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/ReaderTint.kt",
+        "avant": "        verseId in difficultIds -> TintKind.DIFFICULT\n"
+                 "        verseId in bookmarkIds -> TintKind.BOOKMARK\n"
+                 "        verseId == playingVerse -> TintKind.PLAYING",
+        "apres": "        verseId == playingVerse -> TintKind.PLAYING\n"
+                 "        verseId in difficultIds -> TintKind.DIFFICULT\n"
+                 "        verseId in bookmarkIds -> TintKind.BOOKMARK",
+        "tache": ":core:domain:test",
+        "attendus": ["ReaderTintTest"],
+    },
+    {
+        # La page ne recoit plus les signets : elle compile, et perd silencieusement ses
+        # marques. Le parametre garde sa valeur par defaut, l'ensemble vide.
+        "nom": "lecteur : la page ne recoit plus les signets",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/ReaderScreen.kt",
+        "avant": "                    bookmarkIds = bookmarkIds,",
+        "apres": "                    bookmarkIds = emptySet(),",
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": ["ReaderScreenMarksTest"],
+    },
+    {
+        # L'etat du compte n'est plus observe : les deux ensembles se calculent une fois pour
+        # toutes, sur rien. Poser un signet ailleurs ne se verrait plus sans rouvrir le
+        # lecteur, et la page ne porterait plus aucune marque.
+        "nom": "route : l'etat du compte n'est plus observe",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/ReaderRoute.kt",
+        "avant": "    val userState by container.userState.state.collectAsStateWithLifecycle(initialValue = null)",
+        "apres": "    val userState: com.msoumaya.deepseekandroid.core.model.AppState? = null",
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["ReaderRouteMarksTest"],
+    },
 ]
 
 

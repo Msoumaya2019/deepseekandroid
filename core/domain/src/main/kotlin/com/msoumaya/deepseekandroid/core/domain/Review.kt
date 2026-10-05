@@ -248,7 +248,7 @@ object Review {
             next = current.copy(user = DifficultyStamp(at))
             due[id.toString()] = at
         }
-        if (next.user != null || next.admin != null) markers[id.toString()] = next else markers.remove(id.toString())
+        if (isDifficult(next)) markers[id.toString()] = next else markers.remove(id.toString())
         return Program.touch(
             state.copy(
                 difficultyMarkers = markers,
@@ -258,6 +258,46 @@ object Review {
             ),
         )
     }
+
+    // -----------------------------------------------------------------------
+    // Marques
+    // -----------------------------------------------------------------------
+
+    /**
+     * Un verset porte-t-il un marqueur de difficulté ?
+     *
+     * La règle est **une seule**, et volontairement à deux origines : le marqueur posé par
+     * l'élève (`user`) et celui posé par le professeur (`admin`). Un verset marqué par le
+     * professeur compte donc comme difficile même si l'élève ne l'a jamais signalé — c'est
+     * tout l'intérêt du canal enseignant.
+     *
+     * Elle est nommée ici parce qu'elle était recopiée **quatre fois** dans ce fichier, dans
+     * quatre contextes différents : la priorité du jour, les reprises, la notation et la
+     * bascule. Quatre copies d'une même règle finissent par diverger, et il suffisait d'en
+     * corriger une pour qu'un verset marqué par le professeur disparaisse d'un écran sans
+     * disparaître d'un autre.
+     */
+    fun isDifficult(marker: DifficultyMarker?): Boolean =
+        marker?.user != null || marker?.admin != null
+
+    /**
+     * Les versets marqués difficiles, toutes origines confondues.
+     *
+     * Aucun filtre n'est appliqué : ni sur le corpus appris, ni sur les bornes du Coran. Le
+     * client d'origine lit les clés de la carte telles quelles, et une marque posée hors du
+     * corpus n'en est pas moins conservée — elle est simplement sans effet à l'affichage,
+     * puisqu'aucun verset ne peut lui correspondre. La filtrer ici ferait disparaître une
+     * donnée synchronisée, ce qui n'est pas à cette fonction de décider.
+     *
+     * Une clé non numérique est écartée par `toIntOrNull`, comme dans `Program.memorizedIds` :
+     * un `NaN` ne peut pas s'écrire dans un `Set<Int>`, et il serait de toute façon inerte
+     * dans un test d'appartenance.
+     */
+    fun difficultIds(state: AppState): Set<Int> =
+        state.effectiveDifficultyMarkers.entries
+            .filter { isDifficult(it.value) }
+            .mapNotNull { it.key.toIntOrNull() }
+            .toSet()
 
     // -----------------------------------------------------------------------
     // Consolidation
@@ -555,12 +595,10 @@ object Review {
             }
         }
 
-        val markers = state.effectiveDifficultyMarkers
+        val difficult = difficultIds(state)
         val priorityDue = state.effectiveReviewPriorityDue
         val priorityIds = all.filter { id ->
-            val marker = markers[id.toString()]
-            (marker?.user != null || marker?.admin != null) &&
-                (priorityDue[id.toString()] ?: at) <= at && id !in today
+            id in difficult && (priorityDue[id.toString()] ?: at) <= at && id !in today
         }
 
         val done = cycle?.completed?.toSet() ?: emptySet()
@@ -598,13 +636,7 @@ object Review {
             }
         }
 
-        val rework = grouped(
-            all.filter { id ->
-                val m = markers[id.toString()]
-                m?.user != null || m?.admin != null
-            },
-            ReviewCategory.PRIORITY,
-        )
+        val rework = grouped(all.filter { it in difficult }, ReviewCategory.PRIORITY)
 
         return ReviewPlan(
             recent = recent, habitual = habitual, priority = priority, session = session, rework = rework,
@@ -675,8 +707,7 @@ object Review {
                 }
                 due[id.toString()] = Dates.addDays(at, if (grade == ReviewGrade.REWORK) 1 else 2)
             } else {
-                val marker = markers[id.toString()]
-                if (marker?.user != null || marker?.admin != null) {
+                if (isDifficult(markers[id.toString()])) {
                     due[id.toString()] = Dates.addDays(at, reviewCycleDays(state))
                 } else {
                     due.remove(id.toString())
