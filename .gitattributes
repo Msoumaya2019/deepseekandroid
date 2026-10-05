@@ -25,6 +25,14 @@
 *.sh text eol=lf
 gradlew text eol=lf
 
+# Les outils en JavaScript sont des scripts, eux aussi : `tools/*.mjs` porte un
+# `#!/usr/bin/env node`, et une fin de ligne CRLF rend le shebang invalide sur Linux comme sur
+# macOS — le même défaut que `gradlew`, sur deux fichiers que la liste ci-dessus ne couvrait pas.
+# Mesuré avant d'écrire : les deux `.mjs` du dépôt étaient en `text=auto`, donc annoncés CRLF à
+# chaque `add`, alors que leur copie de travail était en LF.
+*.mjs text eol=lf
+*.js text eol=lf
+
 # Les fichiers de configuration aussi. Un YAML en CRLF n'est pas faux, mais un dépôt qui
 # mélange les deux rend chaque différence illisible et chaque revue pénible.
 *.yml text eol=lf

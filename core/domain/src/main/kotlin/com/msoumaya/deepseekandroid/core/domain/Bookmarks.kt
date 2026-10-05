@@ -138,12 +138,14 @@ object Bookmarks {
      *    verset s'étale sur deux pages la rendrait nécessaire ; `BookmarksScreenRulesTest`
      *    mesure l'hypothèse pour qu'on la revoie si les données changent.
      *
-     * Le choix de [MushafSource.persistedKey] plutôt que du repli
-     * `StudyProgressCalculator.sourceKey` est de la même nature : aujourd'hui les deux rendent
-     * le même résultat pour toute source atteignable — la seule source repliée qui utilise le
-     * découpage 1441 est `CORAN_1441`, dont la clé n'est justement pas repliée. L'écart
-     * apparaîtra le jour où `coranTest` aura son propre découpage, ce que l'écran immersif
-     * apportera. On écrit donc la clé **réellement écrite**, pas une clé qui se trouve coïncider.
+     * La clé de lecture est écrite **telle qu'elle est écrite**, et non par le repli
+     * `StudyProgressCalculator.sourceKey`. Ce repli ne sert plus qu'aux sources que ce client ne
+     * rend pas et aux trois sources héritées : il repliait aussi `coranTest` sur
+     * `"traditional"` tant que cette source n'avait pas de découpage à elle. L'écart annoncé ici
+     * **est arrivé** avec l'écran immersif — la source est le défaut de l'application, et
+     * **56 des 6 236 versets** changent de page entre les deux découpages — et il a été refermé
+     * là où il fallait : dans `sourceKey`, dans `studyPage` et chez l'appelant qui annonçait la
+     * page. On écrit donc la clé **réellement écrite**, pas une clé qui se trouve coïncider.
      *
      * @param id un identifiant **dans le corpus**. Hors corpus, `Quran.pageOf` lève : c'est
      *   [rows] qui écarte ces signets, et elle est la porte d'entrée de l'écran.

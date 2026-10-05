@@ -51,10 +51,13 @@ import com.msoumaya.deepseekandroid.core.domain.ReaderLayout
 import com.msoumaya.deepseekandroid.core.domain.ReaderOptionsText
 import com.msoumaya.deepseekandroid.core.domain.ReaderTouch
 import com.msoumaya.deepseekandroid.core.domain.ReaderZoomGeometry
+import com.msoumaya.deepseekandroid.core.domain.TestPageOverlay
+import com.msoumaya.deepseekandroid.core.domain.Texts
 import com.msoumaya.deepseekandroid.core.domain.TranslationPanel
 import com.msoumaya.deepseekandroid.core.domain.VerseActionsText
 import com.msoumaya.deepseekandroid.core.model.MushafPageSource
 import com.msoumaya.deepseekandroid.core.model.MushafSource
+import com.msoumaya.deepseekandroid.core.model.QuranPaper
 import com.msoumaya.deepseekandroid.core.model.Range
 import com.msoumaya.deepseekandroid.core.model.ReaderZoom
 import com.msoumaya.deepseekandroid.core.model.RepeatMode
@@ -186,9 +189,28 @@ fun ReaderScreen(
     // donc la seule de ses entrées qui ne puisse pas vivre ici : le lecteur ne connaît ni le
     // conteneur ni le stockage. `null` retire l'entrée au lieu de la laisser mener nulle part.
     onMarkDifficulty: ((Int) -> Unit)? = null,
+    // Le fond de page choisi. Il ne sert qu'à la source **composée**, qui peint son propre fond ;
+    // les images du moushaf portent le leur. `null` veut dire « jamais choisi » et applique le
+    // premier du catalogue — la même valeur que celle que le document porte déjà, donc rien ne
+    // change à l'écran. Sans ce paramètre, le réglage existerait dans l'état sans jamais
+    // atteindre la seule source qui puisse le montrer.
+    paper: QuranPaper? = null,
 ) {
     val colors = AppTheme.colors
     val totalPages = remember { Quran.pages.size.takeIf { it > 0 } ?: DEFAULT_TOTAL_PAGES }
+
+    // La source **composée** a son propre écran : elle ne peint pas d'image, elle compose une
+    // page avec une police par page et mesure ses mots dans la WebView qui l'affiche. Les
+    // gestes, le balayage et la surimpression y vivent donc dans le document, et non ici — voir
+    // `TestPageView`. C'est la seule source dans ce cas, et la règle le dit plutôt que de le
+    // laisser deviner par une comparaison recopiée.
+    val immersive = MushafSourceNavigation.isImmersive(source)
+
+    // Le fond de la composition. Il est écrit **une** fois en `#rrggbb` — c'est la forme que le
+    // document valide — puis relu pour la vue, de façon que les deux ne puissent pas diverger :
+    // un fond différent de celui de la page ferait clignoter l'écran au chargement.
+    val paperHex = Texts.quranPaperColor(paper)
+    val paperColor = TestPageColors.parse(paperHex)
 
     // Des **objets d'état**, et non des valeurs : le gestionnaire de gestes est installé une
     // seule fois et relit ces états à chaque événement. Capturer les valeurs le figerait sur
@@ -350,6 +372,24 @@ fun ReaderScreen(
     // mode est armé et si la confirmation est encore d'actualité.
     val notice: String? = BookmarksText.notice(placing = bookmarkMode, saved = savedNotice)
 
+    // Ce que la source composée reçoit pour colorer sa page. Le **mode de pose** y figure, et il
+    // y décide de deux choses à la fois : ce que le document colore, et ce qu'un appui désigne.
+    // Les séparer les ferait diverger — la page colorerait autre chose que ce qu'un appui
+    // enregistrerait — et c'est pourquoi `TestPageSession.route` lit le même `selecting`.
+    val testMarkers = TestPageOverlay.Markers(
+        selected = selectedVerse,
+        // Le verset en cours d'écoute, s'il y en a une. La séance peut être en pause : la marque
+        // reste, comme dans l'original, qui ne l'efface qu'à l'arrêt de la séance.
+        playing = audioState.takeIf { it.isOpen }?.position?.verseId,
+        bookmarks = bookmarkIds,
+        difficult = difficultIds,
+        selecting = bookmarkMode,
+        background = paperHex,
+        primary = TestPageColors.hex(colors.green),
+        selection = TestPageColors.hex(colors.selected),
+        gold = TestPageColors.hex(colors.gold),
+    )
+
     // Changer de page remet le zoom à la page entière et ferme la fiche du verset : garder
     // l'agrandissement d'une autre page n'aurait aucun sens, et une fiche ouverte décrirait un
     // verset qui n'est plus à l'écran. Une seule définition, pour que le curseur de la coquille
@@ -391,6 +431,45 @@ fun ReaderScreen(
                 .weight(1f)
                 .fillMaxWidth(),
         ) {
+            // La source composée sort **ici**, avant tout ce qui suit : le reste de ce bloc
+            // décrit une page peinte par une image — son référentiel, sa géométrie, son
+            // préchargement, ses gestes. Le traverser ne serait pas seulement inutile : le
+            // préchargement irait chercher trois pages du moushaf de Médine pour une source qui
+            // n'en affiche aucune.
+            if (immersive) {
+                TestPageView(
+                    page = page,
+                    markers = testMarkers,
+                    background = paperColor,
+                    onPage = goToPage,
+                    // Le mode de pose se désarme et la confirmation s'affiche **ici**, comme sur
+                    // la page peinte : c'est le même geste, et il doit se terminer de la même
+                    // façon. Le laisser au document ferait un geste qui enregistre sans le dire.
+                    onSaveBookmark = onSaveBookmark?.let { save ->
+                        { verseId ->
+                            save(verseId)
+                            bookmarkMode = false
+                            savedNotice = true
+                        }
+                    },
+                    // L'appui long désigne un verset, comme sur la page peinte : la fiche et le
+                    // panneau suivent la même règle, et un panneau sans entrée ne s'ouvre pas.
+                    onLongPressVerse = { verseId ->
+                        verseState.value = verseId
+                        panel = if (VerseActionsText.isUseful(verseActions)) {
+                            ReaderPanel.VERSE
+                        } else {
+                            ReaderPanel.NONE
+                        }
+                    },
+                    // L'appui long hors de tout verset est le geste d'ouverture des options du
+                    // client d'origine. Il est ici parce que la composition n'a pas de coquille
+                    // au-dessus d'elle : c'est le seul chemin vers les réglages depuis la page.
+                    onBlankLongPress = { panel = ReaderPanel.OPTIONS },
+                )
+                return@BoxWithConstraints
+            }
+
             val availableWidth = constraints.maxWidth.toFloat()
             val availableHeight = constraints.maxHeight.toFloat()
 

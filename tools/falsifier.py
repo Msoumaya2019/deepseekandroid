@@ -1082,6 +1082,288 @@ CAS: list[dict] = [
         "attendus": ["ReaderRouteReciterTest"],
     },
 
+    {
+        # La plage d'une page perd son maximum : la page 1 n'annonce plus qu'un verset, et six
+        # versets d'Al-Fatiha sortent de la navigation sans que rien ne le dise.
+        "nom": "decoupage : la plage d'une page perd son maximum",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/TestPageIndex.kt",
+        "avant": "                    Range(minOf(existing.start, entry.id), maxOf(existing.end, entry.id))",
+        "apres": "                    Range(minOf(existing.start, entry.id), minOf(existing.start, entry.id))",
+        "tache": ":core:domain:test",
+        "attendus": ["TestPageIndexTest"],
+    },
+    {
+        # Une page inconnue rend une plage vide au lieu de refuser : le lecteur lirait alors le
+        # verset 0, et le defaut ne se verrait qu'a l'ecoute.
+        "nom": "decoupage : une page inconnue rend une plage vide",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/TestPageIndex.kt",
+        "avant": "    fun pageRange(page: Int): Range = ranges[page] ?: throw IllegalArgumentException(\"Page invalide : $page\")",
+        "apres": "    fun pageRange(page: Int): Range = ranges[page] ?: Range(0, 0)",
+        "tache": ":core:domain:test",
+        "attendus": ["TestPageIndexTest"],
+    },
+    {
+        # La page courante n'est plus conservee : un verset a cheval ferait sauter la lecture en
+        # arriere, au milieu du verset.
+        "nom": "decoupage : la page courante n'est plus conservee",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/TestPageIndex.kt",
+        "avant": "        return if (current != null && pages.contains(current)) current else pages.first()",
+        "apres": "        return pages.first()",
+        "tache": ":core:domain:test",
+        "attendus": ["TestPageIndexTest"],
+    },
+    {
+        # Un type de ligne inconnu passe pour une basmala : une ligne d'ornement s'afficherait
+        # comme une basmala, un defaut visible mais qui accuse la mauvaise chose.
+        "nom": "page : un type de ligne inconnu passe pour une basmala",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/TestPageLoader.kt",
+        "avant": "        else -> error(\"Type de ligne inconnu : $name\")",
+        "apres": "        else -> TestLineType.BASMALLAH",
+        "tache": ":core:domain:test",
+        "attendus": ["TestPageLoaderTest"],
+    },
+    {
+        # La taille fractionnaire est tronquee dans le document : 602 pages sur 604 changent de
+        # corps de texte, et la composition ne tombe plus sur la page imprimee.
+        "nom": "document : une taille fractionnaire est tronquee",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/TestPageHtml.kt",
+        "avant": "            page.fontSize.toString()",
+        "apres": "            page.fontSize.toInt().toString()",
+        "tache": ":core:domain:test",
+        "attendus": ["TestPageHtmlTest"],
+    },
+    {
+        # La basmala perd sa graphie propre : celle d'Al-Baqara s'affiche comme les autres.
+        "nom": "document : la basmala perd sa graphie propre",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/TestPageHtml.kt",
+        "avant": "        2 -> BASMALA_BAQARA",
+        "apres": "        2 -> BASMALA_DEFAULT",
+        "tache": ":core:domain:test",
+        "attendus": ["TestPageHtmlTest"],
+    },
+    {
+        # Le balisage n'est plus echappe : un caractere de texte arabe peut fermer une balise.
+        "nom": "document : le balisage n'est plus echappe",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/TestPageHtml.kt",
+        "avant": "                '<' -> append(\"&lt;\")",
+        "apres": "                '<' -> append(\"<\")",
+        "tache": ":core:domain:test",
+        "attendus": ["TestPageHtmlTest"],
+    },
+    {
+        # Le numero de page perd ses chiffres arabes : la page imprimee en porte, la page
+        # recomposee n'en porterait plus.
+        "nom": "document : le numero de page perd ses chiffres arabes",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/TestPageHtml.kt",
+        "avant": "        value.toString().map { ('\\u0660' + (it - '0')) }.joinToString(\"\")",
+        "apres": "        value.toString()",
+        "tache": ":core:domain:test",
+        "attendus": ["TestPageHtmlTest"],
+    },
+    {
+        # Un echec d'une voisine est traite comme un echec de la page lue : l'ecran annoncerait
+        # « la page n'a pas pu etre chargee » a propos d'une page qui s'affiche tres bien.
+        "nom": "session : un echec de voisine accuse la page lue",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/TestPageSession.kt",
+        "avant": "            if (target != current) Decision.Ignored else Decision.Failed",
+        "apres": "            if (target != displayed) Decision.Ignored else Decision.Failed",
+        "tache": ":core:domain:test",
+        "attendus": ["TestPageSessionTest"],
+    },
+    {
+        # Une page qui annonce une autre page que la sienne est crue : une surface recyclee
+        # ferait afficher la page qu'elle portait avant.
+        "nom": "session : une page annoncant une autre est crue",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/TestPageSession.kt",
+        "avant": "            if (message.page != target) Decision.Ignored",
+        "apres": "            if (false) Decision.Ignored",
+        "tache": ":core:domain:test",
+        "attendus": ["TestPageSessionTest"],
+    },
+    {
+        # Un appui sur une voisine agit : le doigt designerait un verset qu'on ne voit pas.
+        "nom": "session : un appui sur une voisine agit",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/TestPageSession.kt",
+        "avant": "            target != displayed -> Decision.Ignored",
+        "apres": "            false -> Decision.Ignored",
+        "tache": ":core:domain:test",
+        "attendus": ["TestPageSessionTest"],
+    },
+    {
+        # Les voisines ne sont plus preparees : chaque balayage repasserait par l'ecran de
+        # chargement, sur le geste meme que la preparation existe pour rendre instantane.
+        "nom": "session : les voisines ne sont plus preparees",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/TestPageSession.kt",
+        "avant": "        if (measured) TestPageIndex.adjacentPages(page) else listOf(page)",
+        "apres": "        if (measured) listOf(page) else listOf(page)",
+        "tache": ":core:domain:test",
+        "attendus": ["TestPageSessionTest"],
+    },
+    {
+        # Un balayage sans distance est devine : la page tournerait au hasard.
+        "nom": "session : un balayage sans distance est devine",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/TestPageSession.kt",
+        "avant": "                if (dx != null && dy != null) Message.Swipe(dx, dy) else null",
+        "apres": "                Message.Swipe(dx ?: 0.0, dy ?: 0.0)",
+        "tache": ":core:domain:test",
+        "attendus": ["TestPageSessionTest"],
+    },
+    {
+        # La cle du verset devient son identifiant global : le document ne reconnait plus aucun
+        # de ses mots, et la surimpression reste vide sans que rien ne le dise.
+        "nom": "surimpression : la cle devient l'identifiant global",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/TestPageOverlay.kt",
+        "avant": "        return \"${verse.surah}:${verse.ayah}\"",
+        "apres": "        return id.toString()",
+        "tache": ":core:domain:test",
+        "attendus": ["TestPageOverlayTest"],
+    },
+    {
+        # Un marqueur hors du corpus fait lever au lieu d'etre omis : l'ecran immersif tombe
+        # entier pour un marqueur orphelin ecrit par une autre version.
+        "nom": "surimpression : un marqueur hors corpus fait tomber l'ecran",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/TestPageOverlay.kt",
+        "avant": "        val verse = Quran.verses.getOrNull(id - 1) ?: return null",
+        "apres": "        val verse = Quran.verseAt(id)",
+        "tache": ":core:domain:test",
+        "attendus": ["TestPageOverlayTest"],
+    },
+    {
+        # Une liste de marques absente au lieu d'etre vide : le document appelle `.includes`
+        # dessus sans la verifier, donc son script leve et la page ne se mesure jamais.
+        "nom": "surimpression : une liste de marques peut manquer",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/TestPageOverlay.kt",
+        "avant": "            \"bookmarks\" to keys(markers.bookmarks, keyOf),",
+        "apres": "            \"bookmarks\" to (if (markers.bookmarks.isEmpty()) JsonNull else keys(markers.bookmarks, keyOf)),",
+        "tache": ":core:domain:test",
+        "attendus": ["TestPageOverlayTest"],
+    },
+    {
+        # La plus recente est evincee au lieu de la plus ancienne : le cache perd exactement la
+        # page qu'on vient de charger, et relit tout a chaque aller-retour.
+        "nom": "cache : la plus recente est evincee",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/BoundedCache.kt",
+        "avant": "            entries.remove(entries.keys.first())",
+        "apres": "            entries.remove(entries.keys.last())",
+        "tache": ":core:domain:test",
+        "attendus": ["BoundedCacheTest"],
+    },
+    {
+        # Une lecture ne remonte plus l'entree : revenir sur ses pas relit les trois polices de
+        # la page qu'on vient de quitter, a chaque fois.
+        "nom": "cache : une lecture ne protege plus de l'eviction",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/BoundedCache.kt",
+        "avant": "        val hit = entries.remove(key) ?: return null",
+        "apres": "        val hit = entries[key] ?: return null",
+        "tache": ":core:domain:test",
+        "attendus": ["BoundedCacheTest"],
+    },
+    {
+        # La source composee se lit avec le decoupage de Medine : les 56 versets qui changent de
+        # page entre les deux tables ouvrent a cote, et le defaut ne se voit qu'a l'ecoute.
+        "nom": "navigation : la source composee se lit avec le decoupage de Medine",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/MushafSourceNavigation.kt",
+        "avant": "        source == MushafSource.CORAN_TEST -> TestPageIndex.pageRange(page)",
+        "apres": "        source == MushafSource.CORAN_TEST -> Quran.pageRange(page)",
+        "tache": ":core:domain:test",
+        "attendus": ["MushafSourceNavigationTest"],
+    },
+    {
+        # La lecture simplifiee prend l'ecran compose : elle n'a ni index de pages de composition
+        # ni police par page, donc son ecran n'aurait rien a afficher.
+        "nom": "navigation : la lecture simplifiee prend l'ecran compose",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/MushafSourceNavigation.kt",
+        "avant": "    fun isImmersive(source: MushafSource): Boolean = source == MushafSource.CORAN_TEST",
+        "apres": "    fun isImmersive(source: MushafSource): Boolean = source != MushafSource.CORAN_1441",
+        "tache": ":core:domain:test",
+        "attendus": ["MushafSourceNavigationTest"],
+    },
+    {
+        # Le numero de page est complete sur trois chiffres, comme les images du moushaf : aucun
+        # fichier de police ne porte ce nom, et chaque page s'afficherait en carres vides.
+        "nom": "polices : le numero de page est complete sur trois chiffres",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/TestPageFonts.kt",
+        "avant": "    fun pageFile(page: Int): String = \"$page.woff2\"",
+        "apres": "    fun pageFile(page: Int): String = page.toString().padStart(3, '0') + \".woff2\"",
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": ["TestPageFontsTest"],
+    },
+    {
+        # L'alpha n'est plus ecarte : la couleur fait huit chiffres, le document ne la
+        # reconnait pas, et il retombe sur son propre fond sans rien dire.
+        "nom": "couleur : l'alpha n'est plus ecarte",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/TestPageColors.kt",
+        "avant": "    fun hex(color: Color): String = \"#%06X\".format(color.toArgb() and 0xFFFFFF)",
+        "apres": "    fun hex(color: Color): String = \"#%08X\".format(color.toArgb())",
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": ["TestPageColorsTest"],
+    },
+    {
+        # Une forme approchante est acceptee : `#FFF` passerait, et la page perdrait sa teinte
+        # sans que rien ne le signale.
+        "nom": "couleur : une forme approchante est acceptee",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/TestPageColors.kt",
+        "avant": "        require(FORM.matches(hex)) { \"Couleur illisible : $hex\" }",
+        "apres": "        require(hex.startsWith(\"#\")) { \"Couleur illisible : $hex\" }",
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": ["TestPageColorsTest"],
+    },
+    {
+        # La source composee se lit avec le decoupage de Medine : la page annoncee pour un
+        # verset qui n'y est pas, et le defaut ne se voit qu'a l'ecran.
+        "nom": "decoupage : la source composee se lit avec le decoupage de Medine",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/StudyProgressCalculator.kt",
+        "avant": "        source == TEST_SOURCE -> TestPageIndex.versePage(id)",
+        "apres": "        source == TEST_SOURCE -> Quran.pageOf(id)",
+        "tache": ":core:domain:test",
+        "attendus": ["StudyProgressCalculatorTest"],
+    },
+    {
+        # La plage d'une page revient au moushaf : la borne haute perd le verset que la
+        # composition ajoute, et une seance s'arrete un verset trop tot.
+        "nom": "decoupage : la plage d'une page revient au moushaf",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/StudyProgressCalculator.kt",
+        "avant": "        source == TEST_SOURCE -> TestPageIndex.pageRange(page)",
+        "apres": "        source == TEST_SOURCE -> Quran.pageRange(page)",
+        "tache": ":core:domain:test",
+        "attendus": ["StudyProgressCalculatorTest"],
+    },
+    {
+        # La derniere page d'un verset revient au moushaf : un verset a cheval ferait borner la
+        # seance sur la page d'un autre decoupage.
+        "nom": "decoupage : la derniere page d'un verset revient au moushaf",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/StudyProgressCalculator.kt",
+        "avant": "        source == TEST_SOURCE -> TestPageIndex.pagesOf(id).lastOrNull() ?: TestPageIndex.versePage(id)",
+        "apres": "        source == TEST_SOURCE -> Quran.pageOf(id)",
+        "tache": ":core:domain:test",
+        "attendus": ["StudyProgressCalculatorTest"],
+    },
+    {
+        # La cle d'etude replie de nouveau la source composee sur le moushaf : c'est
+        # l'hypothese qui avait expire, remise en place.
+        "nom": "decoupage : la cle d'etude replie de nouveau la source composee",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/StudyProgressCalculator.kt",
+        "avant": "        MushafSource.CORAN_TEST -> MushafSource.CORAN_TEST.persistedKey",
+        "apres": "        MushafSource.CORAN_TEST -> \"traditional\"",
+        "tache": ":core:domain:test",
+        "attendus": ["StudyProgressCalculatorTest", "BookmarksScreenRulesTest"],
+    },
+    {
+        # La source annoncee est nommee par l'enumeration au lieu de sa cle persistee : le mot
+        # `CORAN_TEST` ne correspond a aucune branche, et la page retombe sur celle de Medine —
+        # pour la source qui est justement le defaut de l'application.
+        #
+        # Le cas visait d'abord « repasser par le repli `sourceKey` ». Mesure : cette mutation ne
+        # fait **rien tomber**, parce que le repli ne replie plus `coranTest` depuis que la source
+        # a recu son decoupage. Une mutation equivalente ne falsifie rien, et c'est le falsificateur
+        # qui l'a dit — pas une supposition.
+        "nom": "decoupage : la source de l'accueil est nommee par l'enumeration",
+        "fichier": "feature/home/src/main/kotlin/com/msoumaya/deepseekandroid/feature/home/HomeRenderer.kt",
+        "avant": "        val source = (state.reader?.mushaf ?: MushafSource.CORAN_TEST).persistedKey",
+        "apres": "        val source = (state.reader?.mushaf ?: MushafSource.CORAN_TEST).name",
+        "tache": ":feature:home:testDebugUnitTest",
+        "attendus": ["HomeRendererTest"],
+    },
 ]
 
 

@@ -58,9 +58,11 @@ internal object HomeRenderer {
             ?: 1
         val verse = Quran.verseAt(resumeId)
         val surah = Quran.surahs[verse.surah - 1]
-        val source = StudyProgressCalculator.sourceKey(
-            state.reader?.mushaf ?: MushafSource.CORAN_TEST,
-        )
+        // La source **brute**, comme le client d'origine (`studyPage(id, state.reader?.mushaf
+        // ?? 'coranTest')`). Replier la source ferait calculer la page annoncée avec le découpage
+        // de Médine pour une source qui a le sien — et `coranTest` est le **défaut** de
+        // l'application, donc le cas courant et non un cas de bord.
+        val source = (state.reader?.mushaf ?: MushafSource.CORAN_TEST).persistedKey
         val page = state.lastRead?.page ?: StudyProgressCalculator.studyPage(resumeId, source)
 
         return HomeUiState(

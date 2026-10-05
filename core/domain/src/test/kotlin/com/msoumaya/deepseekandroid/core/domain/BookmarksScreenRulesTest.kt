@@ -174,15 +174,27 @@ class BookmarksScreenRulesTest {
     }
 
     @Test
-    fun `la cle d'une page de signet n'est pas la cle repliee des pages d'etude`() {
+    fun `la cle repliee n'est pas celle qui sert au signet`() {
         assertEquals(
             ZipQuranSource.ID,
             MushafSource.CORAN_1441.persistedKey,
             "l'identifiant du paquet et la clé persistée doivent être le même mot",
         )
-        assertNotEquals(
-            StudyProgressCalculator.sourceKey(MushafSource.CORAN_TEST),
+        // Le repli des pages d'étude et la clé persistée ont cessé de coïncider pour `coranTest`
+        // le jour où cette source a reçu son découpage — et c'est ce jour-là que lire la mauvaise
+        // clé a commencé à se voir : les deux mots mènent à deux pages différentes pour 56
+        // versets. La coïncidence est donc désormais **voulue**, et non un hasard à préserver.
+        assertEquals(
             MushafSource.CORAN_TEST.persistedKey,
+            StudyProgressCalculator.sourceKey(MushafSource.CORAN_TEST),
+            "la clé d'étude de la source composée est sa clé persistée",
+        )
+        // Là où le repli subsiste — une source que ce client ne rend pas —, les deux mots
+        // diffèrent bel et bien, et une page de signet relue avec le mot du repli ouvrirait sur
+        // le découpage de Médine.
+        assertNotEquals(
+            StudyProgressCalculator.sourceKey(MushafSource.TAJWEED_PAGES),
+            MushafSource.TAJWEED_PAGES.persistedKey,
             "le repli et la clé persistée sont deux règles différentes",
         )
     }

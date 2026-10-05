@@ -274,6 +274,10 @@ fun ReaderRoute(
             bookmarksOpen = true
         },
         initialVerse = pendingVerse,
+        // Le fond de page choisi, tel qu'il est dans l'état du compte. Le lecteur ne le connaît
+        // pas — il ne connaît ni le conteneur ni le stockage — et c'est pourquoi la route le lui
+        // passe. Il ne sert qu'à la source **composée** : les images du moushaf portent le leur.
+        paper = userState?.reader?.paper,
         // Bascule le marqueur de difficulté de l'élève. Seule écriture du panneau des actions,
         // et la seule qui ne puisse pas vivre dans le lecteur : lui ne connaît ni le conteneur
         // ni le stockage. Comme pour le signet, un disque plein ne doit pas emporter le lecteur.

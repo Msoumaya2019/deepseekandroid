@@ -28,18 +28,49 @@ object StudyProgressCalculator {
 
     fun studyKey(mode: StudyMode, id: String): String = "${mode.name.lowercase()}:$id"
 
-    /** Page d'un verset pour la source courante. */
+    /**
+     * La source dont le découpage **n'est pas** celui du moushaf de Médine.
+     *
+     * Lue sur le `@SerialName` de la source au lieu d'être recopiée : `coranTest` est un mot
+     * écrit dans l'état synchronisé par le client React Native, et une seconde copie du littéral
+     * finirait par diverger de la première sans que rien ne le signale.
+     */
+    private val TEST_SOURCE: String = MushafSource.CORAN_TEST.persistedKey
+
+    /**
+     * Page d'un verset pour la source courante.
+     *
+     * L'ordre des cas est celui de `studyProgress.ts` : `coranTest` est regardée **avant** la
+     * question du paquet, parce qu'elle n'en est pas un et n'a pas de table de lignes.
+     *
+     * Jusqu'à l'écran immersif, cette source se lisait avec le découpage de Médine — et c'était
+     * **juste**, faute d'autre table. Elle a la sienne désormais, et **56 des 6 236 versets** y
+     * changent de page : garder l'ancien repli annoncerait, pour ces versets, une page où ils ne
+     * sont pas. Mesuré : le verset 5:77 est en page **121** à Médine et en page **120** dans la
+     * composition.
+     */
     fun studyPage(id: Int, source: String): Int = when {
+        source == TEST_SOURCE -> TestPageIndex.versePage(id)
         source == "coran_1441" -> ZipQuranSource.versePage(id)
         else -> Quran.pageOf(id)
     }
 
+    /** La plage de versets d'une page, dans le découpage de la source. */
     fun studyPageRange(page: Int, source: String): Range = when {
+        source == TEST_SOURCE -> TestPageIndex.pageRange(page)
         source == "coran_1441" -> ZipQuranSource.pageRange(page)
         else -> Quran.pageRange(page)
     }
 
+    /**
+     * La dernière page d'un verset, dans le découpage de la source.
+     *
+     * « Dernière » n'est pas « seule » : un verset peut vivre sur plusieurs pages. Le repli sur
+     * [TestPageIndex.versePage] couvre le verset qu'aucune page ne porte — et il **lève** alors,
+     * au lieu de rendre un numéro de page inventé.
+     */
     fun studyLastPage(id: Int, source: String): Int = when {
+        source == TEST_SOURCE -> TestPageIndex.pagesOf(id).lastOrNull() ?: TestPageIndex.versePage(id)
         source == "coran_1441" -> ZipQuranSource.versePages(id).lastOrNull() ?: ZipQuranSource.versePage(id)
         else -> Quran.pageOf(id)
     }
@@ -230,12 +261,35 @@ object StudyProgressCalculator {
         category = record.category ?: ReviewCategory.HABITUAL,
     )
 
-    /** Source de lecture effective, utilisée pour résoudre les pages. */
+    /**
+     * Source de lecture effective, utilisée pour résoudre les pages d'**étude**.
+     *
+     * ## Ce que cette fonction est, et ce qu'elle n'est pas
+     *
+     * Elle n'a **pas** de contrepartie dans `studyProgress.ts` : c'est un ajout du portage. Le
+     * client d'origine passe partout l'identifiant **brut** de la source
+     * (`studyPage(id, state.reader?.mushaf ?? 'coranTest')`), et n'a donc jamais eu besoin de
+     * replier quoi que ce soit.
+     *
+     * Elle replie sur `"traditional"` les sources que ce client **ne rend pas** — le moushaf
+     * Tajwid QPC, dont les images ne sont pas importées — et les trois sources **héritées**, qui
+     * ne sont plus jamais écrites et seulement relues d'un état ancien.
+     *
+     * ## L'hypothèse qui a expiré
+     *
+     * Jusqu'à l'écran immersif, `coranTest` était repliée elle aussi sur `"traditional"`, et
+     * c'était **juste** : elle n'avait pas de table à elle et se lisait donc avec celle de
+     * Médine. Le commentaire d'alors le disait — « le moushaf Tajwid QPC n'est pas encore rendu
+     * par ce client ». Il l'est désormais, et son découpage diffère sur **36 pages** : garder le
+     * repli ferait annoncer la page de Médine pour un verset qui n'y est pas. Sa clé est donc sa
+     * clé persistée, comme celle du paquet.
+     *
+     * À ne pas confondre avec [MushafSource.persistedKey], dont elle ne diffère plus que par les
+     * sources que ce client ne rend pas et par les trois sources héritées.
+     */
     fun sourceKey(mushaf: MushafSource): String = when (mushaf) {
         MushafSource.CORAN_1441 -> "coran_1441"
-        // Le moushaf Tajwid QPC n'est pas encore rendu par ce client ; la division
-        // canonique en 604 pages sert de repli et la préférence est conservée telle quelle.
-        MushafSource.CORAN_TEST -> "traditional"
+        MushafSource.CORAN_TEST -> MushafSource.CORAN_TEST.persistedKey
         MushafSource.TAJWEED_PAGES -> "traditional"
         MushafSource.MEDINA -> "traditional"
         MushafSource.SIMPLIFIED -> "tajweed"

@@ -281,11 +281,12 @@ enum class MushafSource {
      * simplement à la mauvaise page — sans exception, sans message. `MushafSourceKeyTest` fige
      * les huit valeurs pour qu'un renommage, lui, se voie.
      *
-     * À ne pas confondre avec `StudyProgressCalculator.sourceKey`, qui **replie** trois sources
-     * sur `"traditional"` : ce repli sert aux pages d'étude, où une source que ce client ne
-     * rend pas encore est remplacée par le découpage canonique en 604 pages. Une page de signet,
-     * elle, est enregistrée sous la source **réellement affichée** — replier ferait relire une
-     * page d'un autre découpage.
+     * À ne pas confondre avec `StudyProgressCalculator.sourceKey`, qui **replie** sur
+     * `"traditional"` les sources que ce client **ne rend pas** — le moushaf Tajwid QPC — et les
+     * trois sources **héritées** : ce repli sert aux pages d'étude, où une source sans table à
+     * elle est remplacée par le découpage canonique en 604 pages. Une page de signet, elle, est
+     * enregistrée sous la source **réellement affichée** — replier ferait relire une page d'un
+     * autre découpage.
      */
     val persistedKey: String
         get() = MushafSource.serializer().descriptor.getElementName(ordinal)

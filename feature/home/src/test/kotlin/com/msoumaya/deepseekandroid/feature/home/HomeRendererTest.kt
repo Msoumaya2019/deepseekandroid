@@ -5,6 +5,7 @@ import com.msoumaya.deepseekandroid.core.domain.Program
 import com.msoumaya.deepseekandroid.core.domain.Quran
 import com.msoumaya.deepseekandroid.core.domain.QuranDataLoader
 import com.msoumaya.deepseekandroid.core.model.LastRead
+import com.msoumaya.deepseekandroid.core.model.MushafSource
 import com.msoumaya.deepseekandroid.core.model.Pace
 import com.msoumaya.deepseekandroid.core.model.PersonalProfile
 import com.msoumaya.deepseekandroid.core.model.Range
@@ -74,6 +75,30 @@ class HomeRendererTest {
         assertEquals(attendu, ui.resume?.verseId)
         assertEquals(Quran.surahAt(attendu).name, ui.resume?.surahName)
         assertEquals(Quran.pageOf(attendu), ui.resume?.page)
+    }
+
+    @Test
+    fun `la page annoncee suit le decoupage de la source affichee`() {
+        // Le point de reprise est ici un verset dont la page **diffère** entre les deux
+        // découpages : le verset 746 (5:77), page 121 dans le moushaf de Médine et page 120 dans
+        // la composition. Le contrôle porte donc sur les deux sources, et non sur une seule —
+        // une règle qui annoncerait toujours la page de Médine tomberait sur la première
+        // assertion, et une règle qui n'annoncerait que la composition sur la seconde. Le test
+        // voisin, lui, prend le début de l'objectif par défaut, dont la page est la même des deux
+        // côtés : il passait avant comme après, et ne prouvait rien sur cette règle.
+        val base = Program.defaultState().let {
+            it.copy(goal = it.goal.copy(ranges = listOf(Range(746, 760))))
+        }
+
+        assertEquals(746, HomeRenderer.render(base, today).resume?.verseId)
+        assertEquals(120, HomeRenderer.render(base, today).resume?.page)
+        assertEquals(
+            121,
+            HomeRenderer.render(
+                base.copy(reader = base.reader?.copy(mushaf = MushafSource.MEDINA)),
+                today,
+            ).resume?.page,
+        )
     }
 
     @Test
