@@ -1,6 +1,7 @@
 package com.msoumaya.deepseekandroid.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -12,10 +13,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.msoumaya.deepseekandroid.core.data.AppContainer
 import com.msoumaya.deepseekandroid.core.data.LocalAppContainer
+import com.msoumaya.deepseekandroid.core.domain.Audio
 import com.msoumaya.deepseekandroid.core.domain.Bookmarks
 import com.msoumaya.deepseekandroid.core.domain.QuranSourceReady
+import com.msoumaya.deepseekandroid.core.domain.ReciterPreference
 import com.msoumaya.deepseekandroid.core.domain.Review
 import com.msoumaya.deepseekandroid.core.domain.VerseActionsText
+import com.msoumaya.deepseekandroid.core.model.AudioPreferences
 import com.msoumaya.deepseekandroid.core.model.MushafPageSource
 import com.msoumaya.deepseekandroid.feature.reader.BookmarksScreen
 import com.msoumaya.deepseekandroid.feature.reader.EmbeddedMushafPages
@@ -115,6 +119,7 @@ fun ReaderRoute(
     // réglé à la main — le comportement ne dépend donc pas d'une course.
     val storedSettings by container.audioSettings.settings.collectAsStateWithLifecycle()
     val storedReciterId by container.audioSettings.reciterId.collectAsStateWithLifecycle()
+    val storedReciterOwnerId by container.audioSettings.reciterOwnerId.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
 
     // L'état du compte, observé. Il vaut `null` tant que la lecture n'a rien publié : un
@@ -140,6 +145,43 @@ fun ReaderRoute(
     // signet hors corpus au lieu de faire tomber l'écran.
     val bookmarkRows = remember(userState, source) {
         userState?.let { Bookmarks.rows(it, source) } ?: emptyList()
+    }
+
+    // Le récitateur, et laquelle de ses deux mémoires retenir. La règle vit dans `core:domain` :
+    // ici, on ne fait que lui donner les quatre valeurs qu'elle demande. Elle décide laquelle
+    // gagne — la valeur du compte fait écran, même quand son identifiant est inconnu —, à qui la
+    // valeur appartient, et s'il faut la remonter au compte.
+    val reciterResolution = remember(storedReciterId, storedReciterOwnerId, userState) {
+        ReciterPreference.resolve(
+            synced = userState?.audioPreferences?.reciterId,
+            stored = storedReciterId,
+            owner = storedReciterOwnerId,
+            userId = userState?.userId,
+        )
+    }
+
+    // Ce que le lecteur reçoit. Le défaut est **nommé** ici plutôt que laissé à `null` : c'est la
+    // valeur avec laquelle le lecteur démarre, et c'est elle qui permet de reconnaître, plus bas,
+    // qu'un récitateur a été **choisi**. La feuille appelle la même lambda pour un simple
+    // changement de vitesse, et confondre les deux ferait écrire un choix que personne n'a fait.
+    val reciterRetenu = reciterResolution.reciterId ?: Audio.defaultReciter.id
+
+    // Ce que l'appareil apprend, et ce que le compte apprend — chacun au plus une fois. Les deux
+    // écritures sont protégées : un disque plein ou un réseau coupé ne doivent pas emporter le
+    // lecteur, qui affiche déjà le bon récitateur.
+    LaunchedEffect(reciterResolution, userState) {
+        val retenu = reciterResolution.reciterId
+        val proprietaire = reciterResolution.ownerId
+        if (retenu != null && proprietaire != null) {
+            runCatching { container.audioSettings.remember(retenu, proprietaire) }
+        }
+        if (reciterResolution.pushToState && retenu != null && userState != null) {
+            runCatching {
+                container.userState.mutate { state ->
+                    state.copy(audioPreferences = AudioPreferences(retenu))
+                }
+            }
+        }
     }
 
     // La page est tenue ici, et non dans le lecteur : le choix de présentation en a besoin pour
@@ -181,14 +223,27 @@ fun ReaderRoute(
         onPageChanged = { page = it },
         onOpenSourcePicker = { pickerOpen = true },
         initialSettings = storedSettings,
-        initialReciterId = storedReciterId,
+        initialReciterId = reciterRetenu,
         onAudioSettingsChanged = { settings, reciterId ->
+            // À qui appartient le choix : le compte, ou « l'invité » hors connexion. C'est le
+            // `userId ?? 'guest'` de la clé d'origine, et il décide de ce que l'appareil retient.
+            val proprietaire = userState?.userId ?: ReciterPreference.GUEST
             scope.launch {
                 // Un disque plein ne doit pas emporter le lecteur : le réglage est **déjà**
                 // appliqué à la séance, et c'est ce que la personne voit. Seul son
                 // enregistrement échoue, et le lecteur n'a rien à en faire — l'annoncer
                 // supposerait un endroit où le dire, qui n'existe pas encore.
-                runCatching { container.audioSettings.save(settings, reciterId) }
+                runCatching { container.audioSettings.save(settings, reciterId, proprietaire) }
+                // Le compte ne reçoit qu'un **changement** de récitateur. La feuille appelle
+                // cette lambda aussi pour la vitesse ou l'écart : réécrire l'état à chaque fois
+                // ferait pousser une synchronisation pour un réglage qui tient à l'appareil.
+                if (reciterId != reciterRetenu) {
+                    runCatching {
+                        container.userState.mutate { state ->
+                            state.copy(audioPreferences = AudioPreferences(reciterId))
+                        }
+                    }
+                }
             }
         },
         // Poser un signet : la règle est dans `core:domain`, l'écriture ici. La page

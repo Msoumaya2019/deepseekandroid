@@ -149,18 +149,32 @@ data class StoredAudioPreferences(
  * deux fichiers écrits au même moment finiraient par diverger sur l'appareil de quelqu'un qui
  * change souvent de récitateur.
  *
- * Ce que ce document **n'est pas** : un état par compte. Le client d'origine range ces deux clés
- * hors de toute notion d'utilisateur, et c'est le bon choix — la façon d'écouter tient à
- * l'appareil et aux oreilles de celui qui le tient, pas au compte ouvert.
+ * ## Le récitateur est par utilisateur, les répétitions non — et c'est délibéré
+ *
+ * Les deux clés du client d'origine n'ont pas la même portée. `audio-repeat-preferences` est
+ * **globale** : la façon d'écouter tient à l'appareil et aux oreilles de celui qui le tient, pas
+ * au compte ouvert. `audio-reciter-hafs`, elle, est suffixée par `userId ?? 'guest'` —
+ * `AsyncStorage` ne connaissant pas la notion de compte, la portée est écrite dans la **clé**.
+ *
+ * Le portage garde la même décision dans ce document unique, avec [reciterOwnerId] plutôt qu'un
+ * second fichier : un nom de fichier devrait porter un identifiant qui n'est pas encore connu au
+ * démarrage de l'application. Sans ce propriétaire, deux comptes sur le même appareil
+ * partageraient la même mémoire — et comme la valeur de l'appareil est reportée au compte, le
+ * choix du premier serait **écrit** dans le compte du second.
  *
  * Le récitateur est **facultatif**, et `null` veut dire « jamais choisi » et non « le premier de
  * la liste ». La distinction compte : un identifiant enregistré puis retiré des récitateurs
  * disponibles doit retomber sur le défaut, et non faire échouer l'ouverture du lecteur.
+ *
+ * Un document écrit avant cette règle ne porte pas de propriétaire : sa valeur est alors
+ * **adoptable par le premier compte** — c'est exactement le cas de l'ancienne clé globale du
+ * client d'origine, et `ReciterPreference` traite les deux de la même façon.
  */
 @Serializable
 data class StoredAudioSettings(
     val repeat: StoredAudioPreferences = StoredAudioPreferences(),
     val reciterId: String? = null,
+    val reciterOwnerId: String? = null,
 )
 
 /**

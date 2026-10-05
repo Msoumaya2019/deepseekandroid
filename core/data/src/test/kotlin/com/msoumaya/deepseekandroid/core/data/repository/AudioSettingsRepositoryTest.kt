@@ -16,6 +16,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /**
  * Éprouve le dépôt des réglages d'écoute : ce qu'il publie, et ce qu'il écrit.
@@ -32,7 +33,11 @@ import kotlin.test.assertNull
  *     retombe seul sur sa valeur par défaut ; le récitateur, la vitesse et le mode survivent.
  *     Et un document entièrement illisible est **mis de côté**, jamais écrasé ;
  *  3. **ce qui est publié est ce qui est sur le disque.** L'écriture précède la publication :
- *     une écriture qui échoue ne laisse pas un état qui annonce « enregistré ».
+ *     une écriture qui échoue ne laisse pas un état qui annonce « enregistré » ;
+ *  4. **le récitateur retenu porte son propriétaire.** Un document qui nommerait un
+ *     propriétaire sans écrire sa valeur laisserait l'appareil porter le choix d'un autre
+ *     compte sous le nom du compte courant — et la fuite ne se verrait qu'au lancement
+ *     suivant.
  */
 class AudioSettingsRepositoryTest {
 
@@ -177,7 +182,7 @@ class AudioSettingsRepositoryTest {
             speed = 0.75f,
             autoStop = false,
         )
-        repository().save(session, "husary")
+        repository().save(session, "husary", "compte-a")
 
         // Un second depot, sur le meme fichier, ne partage rien avec le premier — ni cache, ni
         // verrou. Ce qu'il lit vient du disque, et de lui seul.
@@ -186,6 +191,7 @@ class AudioSettingsRepositoryTest {
 
         assertEquals(session, relu.settings.value)
         assertEquals("husary", relu.reciterId.value)
+        assertEquals("compte-a", relu.reciterOwnerId.value)
     }
 
     @Test
@@ -193,6 +199,7 @@ class AudioSettingsRepositoryTest {
         repository().save(
             AudioSession(countChoice = AudioCount.CUSTOM, customCount = "12", gapSeconds = 5),
             "husary",
+            "compte-a",
         )
 
         // Les repetitions et le recitateur tiennent dans **un** document, alors que le client
@@ -213,11 +220,110 @@ class AudioSettingsRepositoryTest {
         assertEquals(AudioSession(), repository.settings.value)
 
         val voulu = AudioSession(countChoice = AudioCount.ONE)
-        assertFailsWith<Exception> { repository.save(voulu, "husary") }
+        assertFailsWith<Exception> { repository.save(voulu, "husary", "compte-a") }
 
         // L'echec remonte, et rien n'est publie : un etat qui annoncerait « enregistre » sans
         // l'etre ferait mentir la feuille des le prochain rendu.
         assertEquals(AudioSession(), repository.settings.value)
         assertNull(repository.reciterId.value)
+        assertNull(repository.reciterOwnerId.value)
+    }
+
+    // ------------------------------------------------- récitateur et propriétaire
+
+    @Test
+    fun `le proprietaire du recitateur se relit depuis le disque`() = runTest {
+        repository().save(AudioSession(), "husary", "compte-a")
+
+        val relu = repository()
+        relu.prime()
+
+        assertEquals("husary", relu.reciterId.value)
+        assertEquals("compte-a", relu.reciterOwnerId.value)
+    }
+
+    @Test
+    fun `un document sans proprietaire se lit comme tel`() = runTest {
+        // L'état d'un document écrit avant que la portée par utilisateur existe — et celui de
+        // l'ancienne clé globale du client d'origine. La lecture ne doit pas l'inventer : c'est
+        // cet `null` qui rend la valeur adoptable, et l'inventer la figerait sur personne.
+        file.writeText("""{"repeat":{},"reciterId":"husary"}""")
+
+        val relu = repository()
+        relu.prime()
+
+        assertEquals("husary", relu.reciterId.value)
+        assertNull(relu.reciterOwnerId.value)
+    }
+
+    @Test
+    fun `retenir un recitateur n'efface pas les repetitions`() = runTest {
+        // L'écriture d'une décision ne touche que ce qu'elle décide. Les répétitions tiennent à
+        // l'appareil : une adoption de récitateur ne doit pas les remettre à zéro.
+        val session = AudioSession(countChoice = AudioCount.CUSTOM, customCount = "12", gapSeconds = 5)
+        repository().save(session, null, null)
+
+        val depositaire = repository()
+        depositaire.prime()
+        depositaire.remember("husary", "compte-a")
+
+        val relu = repository()
+        relu.prime()
+        assertEquals(session, relu.settings.value, "Les répétitions ont survécu.")
+        assertEquals("husary", relu.reciterId.value)
+        assertEquals("compte-a", relu.reciterOwnerId.value)
+    }
+
+    @Test
+    fun `retenir deux fois la meme valeur ne retouche pas le disque`() = runTest {
+        // La route peut rappeler cette écriture avec la **même** décision : l'effet est clé sur
+        // l'état du compte, qui peut changer d'identité sans changer de valeur. L'économie se
+        // mesure par le **disque**, et non par les octets : une réécriture à l'identique rend le
+        // même document, donc comparer les octets ne prouverait rien.
+        val depositaire = repository()
+        depositaire.prime()
+        depositaire.remember("husary", "compte-a")
+        assertTrue(file.exists(), "Le document doit avoir été écrit une première fois.")
+        file.delete()
+
+        depositaire.remember("husary", "compte-a")
+
+        assertFalse(file.exists(), "Rien n'a changé : le disque ne doit pas être retouché.")
+    }
+
+    @Test
+    fun `retenir un recitateur donne un proprietaire a un document qui n'en avait pas`() = runTest {
+        // Le chemin de l'adoption : le document porte un récitateur **sans** propriétaire —
+        // écrit avant cette règle, ou repris de l'ancienne clé globale du client d'origine.
+        // L'écriture d'une décision doit alors le nommer.
+        file.writeText("""{"repeat":{},"reciterId":"husary"}""")
+
+        val depositaire = repository()
+        depositaire.prime()
+        assertNull(depositaire.reciterOwnerId.value, "La lecture ne doit rien inventer.")
+
+        depositaire.remember("husary", "compte-a")
+
+        val relu = repository()
+        relu.prime()
+        assertEquals("husary", relu.reciterId.value)
+        assertEquals("compte-a", relu.reciterOwnerId.value)
+    }
+
+    @Test
+    fun `retenir un proprietaire different reecrit le document`() = runTest {
+        // Le pendant du cas précédent, et il est nécessaire : sans lui, un `remember` qui ne
+        // ferait jamais rien passerait l'économie d'écriture, et l'adoption ne serait jamais
+        // enregistrée.
+        val depositaire = repository()
+        depositaire.prime()
+        depositaire.remember("husary", "compte-a")
+
+        depositaire.remember("husary", "compte-b")
+
+        assertEquals("compte-b", depositaire.reciterOwnerId.value)
+        val relu = repository()
+        relu.prime()
+        assertEquals("compte-b", relu.reciterOwnerId.value)
     }
 }

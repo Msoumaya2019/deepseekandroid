@@ -368,7 +368,7 @@ CAS: list[dict] = [
         # de recitateur ne survit plus au redemarrage.
         "nom": "reglages : l'ecriture n'emporte plus le recitateur",
         "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/AudioSettingsRepository.kt",
-        "avant": "it.copy(repeat = session.stored(), reciterId = reciterId)",
+        "avant": "it.copy(repeat = session.stored(), reciterId = reciterId, reciterOwnerId = ownerId)",
         "apres": "it.copy(repeat = session.stored())",
         "tache": ":core:data:testDebugUnitTest",
         "attendus": ["AudioSettingsRepositoryTest"],
@@ -378,8 +378,8 @@ CAS: list[dict] = [
         # « enregistre » pour un document qui n'existe pas.
         "nom": "reglages : un echec d'ecriture est avale et l'etat publie quand meme",
         "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/AudioSettingsRepository.kt",
-        "avant": "        store.update { it.copy(repeat = session.stored(), reciterId = reciterId) }",
-        "apres": "        runCatching { store.update { it.copy(repeat = session.stored(), reciterId = reciterId) } }",
+        "avant": "        store.update { it.copy(repeat = session.stored(), reciterId = reciterId, reciterOwnerId = ownerId) }",
+        "apres": "        runCatching { store.update { it.copy(repeat = session.stored(), reciterId = reciterId, reciterOwnerId = ownerId) } }",
         "tache": ":core:data:testDebugUnitTest",
         "attendus": ["AudioSettingsRepositoryTest"],
     },
@@ -957,6 +957,129 @@ CAS: list[dict] = [
         "apres": "\n            verseState.value = initialVerse",
         "tache": ":feature:reader:testDebugUnitTest",
         "attendus": ["ReaderScreenResumeTest"],
+    },
+
+    {
+        # Un identifiant inconnu du compte ne fait plus ecran : la route retombe sur la memoire
+        # de l'appareil, et applique donc un autre choix au moment precis ou le compte dit
+        # autre chose.
+        "nom": "recitateur : un identifiant inconnu du compte ne fait plus ecran",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/ReciterPreference.kt",
+        "avant": "            return if (known(synced)) Resolution(synced, who, pushToState = false)",
+        "apres": "            return if (true) Resolution(synced, who, pushToState = false)",
+        "tache": ":core:domain:test",
+        "attendus": ["ReciterPreferenceTest"],
+    },
+    {
+        # La valeur d'un autre compte est adoptee : sur un appareil partage, le choix du premier
+        # compte est applique au second — et comme il est ensuite reporte, il est **ecrit** dans
+        # son compte. La fuite n'est pas seulement affichee, elle est persistee.
+        "nom": "recitateur : la valeur d'un autre compte est adoptee",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/ReciterPreference.kt",
+        "avant": "        val storedIsMine = stored != null && known(stored) && (owner == null || owner == who)",
+        "apres": "        val storedIsMine = stored != null && known(stored)",
+        "tache": ":core:domain:test",
+        "attendus": ["ReciterPreferenceTest"],
+    },
+    {
+        # La valeur de l'appareil n'est plus reportee au compte : un choix fait hors ligne reste
+        # invisible depuis les autres appareils, et rien ne le dit.
+        "nom": "recitateur : la valeur de l'appareil n'est plus reportee au compte",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/ReciterPreference.kt",
+        "avant": "            return Resolution(stored, who, pushToState = true)",
+        "apres": "            return Resolution(stored, who, pushToState = false)",
+        "tache": ":core:domain:test",
+        "attendus": ["ReciterPreferenceTest"],
+    },
+    {
+        # Le proprietaire du compte est oublie : l'appareil ne sait plus a qui appartient la
+        # valeur retenue, et le prochain compte l'adoptera.
+        "nom": "recitateur : le proprietaire du compte est oublie",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/ReciterPreference.kt",
+        "avant": "            return if (known(synced)) Resolution(synced, who, pushToState = false)",
+        "apres": "            return if (known(synced)) Resolution(synced, null, pushToState = false)",
+        "tache": ":core:domain:test",
+        "attendus": ["ReciterPreferenceTest"],
+    },
+    {
+        # L'invite devient un compte comme un autre : un choix fait sans compte est repris par
+        # le premier compte connecte, alors qu'il n'appartient a personne.
+        "nom": "recitateur : l'invite devient un compte comme un autre",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/ReciterPreference.kt",
+        "avant": "        val who = userId ?: GUEST",
+        "apres": '        val who = userId ?: "quelqu-un"',
+        "tache": ":core:domain:test",
+        "attendus": ["ReciterPreferenceTest"],
+    },
+    {
+        # Retenir n'ecrit plus le proprietaire : le document porte un recitateur sans nom, et le
+        # compte suivant l'adopte. C'est la fuite, ecrite sur le disque.
+        "nom": "recitateur : retenir n'ecrit plus le proprietaire",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/AudioSettingsRepository.kt",
+        "avant": "        store.update { it.copy(reciterId = reciterId, reciterOwnerId = ownerId) }\n        _reciterId.value = reciterId\n        _reciterOwnerId.value = ownerId\n    }",
+        "apres": "        store.update { it.copy(reciterId = reciterId) }\n        _reciterId.value = reciterId\n    }",
+        "tache": ":core:data:testDebugUnitTest",
+        "attendus": ["AudioSettingsRepositoryTest"],
+    },
+    {
+        # Retenir efface les repetitions : l'ecriture d'une decision touche a ce qu'elle ne
+        # decide pas. Les repetitions tiennent a l'appareil, et les voila remises a zero.
+        "nom": "recitateur : retenir efface les repetitions",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/AudioSettingsRepository.kt",
+        "avant": "        store.update { it.copy(reciterId = reciterId, reciterOwnerId = ownerId) }",
+        "apres": "        store.update { it.copy(repeat = com.msoumaya.deepseekandroid.core.domain.StoredAudioPreferences(), reciterId = reciterId, reciterOwnerId = ownerId) }",
+        "tache": ":core:data:testDebugUnitTest",
+        "attendus": ["AudioSettingsRepositoryTest"],
+    },
+    {
+        # L'economie d'ecriture est retiree : le document est reecrit pour rien a chaque
+        # composition ou la decision est recalculee. Rien ne casse — le disque s'use.
+        "nom": "recitateur : le disque est retouche pour rien",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/AudioSettingsRepository.kt",
+        "avant": "        if (_reciterId.value == reciterId && _reciterOwnerId.value == ownerId) return\n",
+        "apres": "",
+        "tache": ":core:data:testDebugUnitTest",
+        "attendus": ["AudioSettingsRepositoryTest"],
+    },
+    {
+        # La route n'apprend plus rien a l'appareil : la valeur retenue n'est pas ecrite, et le
+        # document garde l'ancienne — ou rien.
+        "nom": "recitateur : la route n'apprend plus rien a l'appareil",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/ReaderRoute.kt",
+        "avant": "            runCatching { container.audioSettings.remember(retenu, proprietaire) }\n",
+        "apres": "",
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["ReaderRouteReciterTest"],
+    },
+    {
+        # La route ne reporte plus la valeur au compte : un choix fait hors ligne ne remonte
+        # jamais, et le compte reste muet.
+        "nom": "recitateur : la route ne reporte plus la valeur au compte",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/ReaderRoute.kt",
+        "avant": "        if (reciterResolution.pushToState && retenu != null && userState != null) {",
+        "apres": "        if (!reciterResolution.pushToState && retenu != null && userState != null) {",
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["ReaderRouteReciterTest"],
+    },
+    {
+        # Un changement de vitesse est pris pour un choix : la feuille appelle la meme lambda
+        # pour tous les reglages, et le defaut jamais choisi devient un choix, ecrit au compte.
+        "nom": "recitateur : un changement de vitesse ecrit un choix",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/ReaderRoute.kt",
+        "avant": "                if (reciterId != reciterRetenu) {",
+        "apres": "                if (true) {",
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["ReaderRouteReciterTest"],
+    },
+    {
+        # Le recitateur local perd son proprietaire : deux comptes sur le meme appareil
+        # partagent la meme memoire, et le report ecrit le choix du premier dans le second.
+        "nom": "recitateur : le recitateur local perd son proprietaire",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/ReaderRoute.kt",
+        "avant": "                runCatching { container.audioSettings.save(settings, reciterId, proprietaire) }",
+        "apres": "                runCatching { container.audioSettings.save(settings, reciterId, null) }",
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["ReaderRouteReciterTest"],
     },
 
 ]
