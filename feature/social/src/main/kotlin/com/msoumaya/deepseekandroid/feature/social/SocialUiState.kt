@@ -56,6 +56,17 @@ data class SocialUiState(
      */
     val suspension: String? = null,
 
+    /**
+     * Vrai si une conversation est ouverte : l'écran l'affiche alors **à la place** de la liste.
+     *
+     * **Ce n'est pas un état d'interface, c'est un fait du dépôt.** C'est `room != null`, la même
+     * vérité que `ConversationUiState.open`, et il n'y en a qu'une : l'écran n'a donc pas à se
+     * souvenir de ce qu'il a ouvert, il regarde ce qui est ouvert. Deux sources — un booléen ici
+     * et une pièce là-bas — finiraient par diverger, et l'écran montrerait une conversation fermée
+     * ou l'inverse.
+     */
+    val conversationOpen: Boolean = false,
+
     // --- Saisies, tenues par le ViewModel ---
 
     /** Texte du champ de recherche. Il **entre** dans le calcul, donc il est publié. */

@@ -39,9 +39,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -62,18 +65,19 @@ import com.msoumaya.deepseekandroid.core.domain.SocialText
 // ---------------------------------------------------------------------------
 // Écran « Amis »
 // ---------------------------------------------------------------------------
-// Portage de la liste d'amis de `FriendsScreen` (`src/SocialScreens.tsx:144-167`).
+// Portage de la liste d'amis de `FriendsScreen` (`src/SocialScreens.tsx:144-167`), et de sa
+// conversation (`:168-208`) — les deux vivent dans le même composant d'origine, et c'est cet
+// écran qui bascule de l'une à l'autre.
 //
 // **L'écran ne calcule rien.** Le filtrage, le tri, la coupe à cinq entrées et la mise en forme
 // des sous-titres sont déjà faits quand l'état arrive : ils vivent dans `SocialRenderer`, où ils
 // s'éprouvent sans appareil. Ici il n'y a que la disposition — quel bloc va où, à quelle taille,
 // et quelle icône lui correspond.
 //
-// **Ce que l'écran ne fait pas encore, et pourquoi il le tait.** Le client d'origine portait
-// trois portes vers la conversation : la ligne d'un ami entière, son bouton « Message », et le
-// bouton « Ouvrir » d'un cercle. La conversation arrive avec son propre écran. Un bouton qui
-// n'ouvre rien est pire qu'un bouton absent : les trois sont donc **omis**, et non désactivés —
-// un bouton grisé laisserait croire à une panne passagère.
+// **Les trois portes vers la conversation sont ouvertes.** Le client d'origine en portait trois :
+// la ligne d'un ami entière, son bouton « Message », et le bouton « Ouvrir » d'un cercle. Elles
+// avaient été **omises** tant que la conversation n'existait pas — un bouton qui n'ouvre rien est
+// pire qu'un bouton absent —, et elles sont rétablies ici, chacune avec le geste de l'original.
 //
 // **Trois écarts assumés**, tous les trois parce que le contraire ferait dire à l'écran quelque
 // chose de faux :
@@ -83,9 +87,10 @@ import com.msoumaya.deepseekandroid.core.domain.SocialText
 //     quelque chose ;
 //  2. le pied « Contacter l'admin » s'affichait **même sans compte**, où le geste échouait
 //     nécessairement. Il n'apparaît qu'avec un compte ;
-//  3. le nombre de messages non lus était posé **dans** le bouton « Message ». Ce bouton
-//     n'existant plus, le compte est remonté en pastille sur le médaillon : même information,
-//     même place dans la ligne.
+//  3. le nombre de messages non lus était posé **dans** le bouton « Message ». Le bouton est
+//     revenu, mais le compte reste sur le médaillon : c'est là que l'œil va en parcourant une
+//     liste, et le mettre aussi dans le bouton ferait trois choses à lire — une icône, un mot, un
+//     chiffre — dans un espace qui n'en tient pas trois.
 //
 // **Un quatrième écart, d'image celui-là.** Le médaillon d'un ami est toujours son initiale. Le
 // client d'origine affichait l'avatar distant quand il y en avait un — ce qui suppose de signer
@@ -94,8 +99,14 @@ import com.msoumaya.deepseekandroid.core.domain.SocialText
 // d'image, et le repli n'est donc pas une invention.
 // ---------------------------------------------------------------------------
 
-/** Retrait horizontal du contenu, sous la bande d'en-tête. Valeur du programme et du Coran. */
-private val SCREEN_PADDING = 18.dp
+/**
+ * Retrait horizontal du contenu, sous la bande d'en-tête.
+ *
+ * Valeur du programme, du Coran, **et de la conversation** — c'est pourquoi elle est `internal`
+ * et non `private` : les deux écrans qui la portent vivent dans deux fichiers, et deux copies de
+ * la même marge finiraient par ne plus se ressembler sans que rien ne le dise.
+ */
+internal val SCREEN_PADDING = 18.dp
 
 /** Côté du médaillon d'un ami (`size={52}` à la source). */
 private val AVATAR_SIZE = 52.dp
@@ -145,6 +156,16 @@ fun SocialScreen(
     // cours, donc l'ouverture immédiate après la construction ne coûte pas une seconde lecture.
     LaunchedEffect(Unit) { viewModel.onVisible() }
 
+    // **Une pièce ouverte remplace la liste, elle ne s'y ajoute pas.** C'est la structure de
+    // l'original, où `selected` décide du corps du même écran : l'en-tête, le défilement et le
+    // compositeur d'une conversation n'ont rien à voir avec ceux de la liste, et les faire
+    // cohabiter dans une même colonne défilante mettrait le champ d'écriture à la suite des
+    // invitations.
+    if (state.conversationOpen) {
+        ConversationSection(modifier = modifier)
+        return
+    }
+
     SocialContent(
         state = state,
         modifier = modifier,
@@ -163,6 +184,7 @@ fun SocialScreen(
         onUnblock = viewModel::onUnblock,
         onCodeCopied = viewModel::onCodeCopied,
         onAdminContact = viewModel::onOpenAdminContact,
+        onOpenConversation = viewModel::onOpenConversation,
     )
 }
 
@@ -191,6 +213,15 @@ internal fun SocialContent(
     onUnblock: (String) -> Unit = {},
     onCodeCopied: () -> Unit = {},
     onAdminContact: () -> Unit = {},
+    /**
+     * Ouvre la conversation d'un ami ou d'un cercle : l'identifiant de la pièce, et son genre.
+     *
+     * **Deux paramètres, et non un objet.** C'est `ChatRoom` qui distingue un lien d'un groupe par
+     * ses deux champs, et il appartient au module de données : l'écran ne peut pas le nommer sans
+     * faire dépendre sa signature d'un type de transport. Un identifiant et un booléen suffisent,
+     * et `SocialViewModel` traduit.
+     */
+    onOpenConversation: (String, Boolean) -> Unit = { _, _ -> },
 ) {
     val context = LocalContext.current
 
@@ -246,6 +277,7 @@ internal fun SocialContent(
                     onUnblock = onUnblock,
                     onCodeCopied = onCodeCopied,
                     onAdminContact = onAdminContact,
+                    onOpenConversation = onOpenConversation,
                     onManage = { row -> managed = row },
                     context = context,
                 )
@@ -329,6 +361,7 @@ private fun SocialBody(
     onUnblock: (String) -> Unit,
     onCodeCopied: () -> Unit,
     onAdminContact: () -> Unit,
+    onOpenConversation: (String, Boolean) -> Unit,
     onManage: (FriendRow) -> Unit,
     context: Context,
 ) {
@@ -373,6 +406,7 @@ private fun SocialBody(
     FriendsSection(
         state = state,
         onToggleAll = onToggleAll,
+        onOpen = onOpenConversation,
         onManage = onManage,
     )
 
@@ -409,6 +443,7 @@ private fun SocialBody(
             state = state,
             onGroupNameChange = onGroupNameChange,
             onCreateGroup = onCreateGroup,
+            onOpen = onOpenConversation,
         )
     }
 
@@ -423,6 +458,7 @@ private fun SocialBody(
 private fun FriendsSection(
     state: SocialUiState,
     onToggleAll: () -> Unit,
+    onOpen: (String, Boolean) -> Unit,
     onManage: (FriendRow) -> Unit,
 ) {
     val colors = AppTheme.colors
@@ -467,7 +503,7 @@ private fun FriendsSection(
         }
 
         state.friends.forEach { row ->
-            FriendCard(row = row, onManage = onManage)
+            FriendCard(row = row, onOpen = onOpen, onManage = onManage)
         }
 
         // Le repli porte sur le nombre d'amis **acceptés**, et non sur la liste visible : une
@@ -485,7 +521,11 @@ private fun FriendsSection(
 }
 
 @Composable
-private fun FriendCard(row: FriendRow, onManage: (FriendRow) -> Unit) {
+private fun FriendCard(
+    row: FriendRow,
+    onOpen: (String, Boolean) -> Unit,
+    onManage: (FriendRow) -> Unit,
+) {
     val colors = AppTheme.colors
 
     AppCard(
@@ -500,7 +540,17 @@ private fun FriendCard(row: FriendRow, onManage: (FriendRow) -> Unit) {
         ) {
             FriendMedallion(name = row.name, online = row.online, unread = row.unread)
 
-            Column(modifier = Modifier.weight(1f)) {
+            // **Toute la colonne ouvre la conversation**, comme dans l'original : c'est la cible
+            // la plus large de la ligne, et la seule qui ne soit pas un geste de gestion. Elle ne
+            // porte aucun mot qui annonce ce qu'elle fait — d'où le libellé d'accessibilité, que
+            // l'original porte aussi.
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .defaultMinSize(minHeight = 44.dp)
+                    .clickable(role = Role.Button) { onOpen(row.id, false) }
+                    .semantics { contentDescription = SocialText.openConversationWith(row.name) },
+            ) {
                 // `Heading size={21}` dans la source : police de titre, couleur principale.
                 AppHeading(text = row.name, size = 21.sp)
 
@@ -524,8 +574,11 @@ private fun FriendCard(row: FriendRow, onManage: (FriendRow) -> Unit) {
                 )
             }
 
-            // Le seul geste de la ligne. Le client d'origine y joignait un bouton « Message » qui
-            // ouvrait la conversation ; la conversation n'existe pas encore ici.
+            // Le bouton « Message », qui ouvre la **même** pièce que la colonne. C'est le doublon
+            // de l'original, et il est gardé : le geste se voit mieux sur un bouton que sur une
+            // ligne, et tout le monde ne devine pas qu'une ligne se touche.
+            MessageButton(name = row.name, onClick = { onOpen(row.id, false) })
+
             AppIconButton(
                 icon = Icons.Outlined.MoreVert,
                 label = SocialText.optionsFor(row.name),
@@ -536,19 +589,33 @@ private fun FriendCard(row: FriendRow, onManage: (FriendRow) -> Unit) {
 }
 
 /**
- * Médaillon d'un ami : son initiale, sa présence, et le nombre de messages non lus.
+ * Médaillon d'un ami : son initiale, et — quand on les demande — sa présence et ses non-lus.
  *
+ * @param size côté du médaillon. La liste pose 52 px ; l'en-tête d'une conversation, 44 — ce n'est
+ *   pas une ligne de liste, et un médaillon de la taille d'une ligne y écraserait le titre.
+ * @param online présence, ou `null` quand aucune pastille n'a de sens. C'est le cas dans l'en-tête
+ *   d'une conversation : l'état y est écrit en toutes lettres juste en dessous, et un point de
+ *   couleur le dirait deux fois.
  * @param unread nombre de messages non lus. Zéro n'affiche aucune pastille — une pastille « 0 »
  *   annoncerait quelque chose à lire là où il n'y a rien.
+ *
+ * `internal` parce que l'en-tête d'une conversation s'en sert aussi : c'est le **même** médaillon
+ * dans les deux écrans de l'original, et en écrire un second ferait diverger deux initiales que
+ * rien ne distingue à la lecture.
  */
 @Composable
-private fun FriendMedallion(name: String, online: Boolean, unread: Int) {
+internal fun FriendMedallion(
+    name: String,
+    size: Dp = AVATAR_SIZE,
+    online: Boolean? = null,
+    unread: Int = 0,
+) {
     val colors = AppTheme.colors
 
-    Box(modifier = Modifier.size(AVATAR_SIZE)) {
+    Box(modifier = Modifier.size(size)) {
         Box(
             modifier = Modifier
-                .size(AVATAR_SIZE)
+                .size(size)
                 .clip(CircleShape)
                 .background(colors.soft)
                 .border(1.dp, colors.softBorder, CircleShape),
@@ -567,14 +634,19 @@ private fun FriendMedallion(name: String, online: Boolean, unread: Int) {
         // ligne : c'est le ternaire de l'original, où la carte de présence rend `undefined` et
         // où le repli est `colors.muted`. Distinguer les deux demanderait un troisième état, que
         // l'original n'a pas — et un point d'une troisième couleur dirait autre chose que lui.
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .size(PRESENCE_DOT)
-                .clip(CircleShape)
-                .background(if (online) ONLINE_DOT else colors.muted)
-                .border(PRESENCE_RING, colors.paper, CircleShape),
-        )
+        //
+        // Son **absence** est un troisième cas, et c'est une demande de l'appelant : `online` vaut
+        // `null` là où une pastille n'annoncerait rien. L'en-tête d'une conversation est ce cas.
+        if (online != null) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .size(PRESENCE_DOT)
+                    .clip(CircleShape)
+                    .background(if (online) ONLINE_DOT else colors.muted)
+                    .border(PRESENCE_RING, colors.paper, CircleShape),
+            )
+        }
 
         if (unread > 0) {
             Box(
@@ -802,6 +874,7 @@ private fun CirclesSection(
     state: SocialUiState,
     onGroupNameChange: (String) -> Unit,
     onCreateGroup: () -> Unit,
+    onOpen: (String, Boolean) -> Unit,
 ) {
     SectionHeading(text = SocialText.CIRCLES)
 
@@ -841,6 +914,16 @@ private fun CirclesSection(
                     modifier = Modifier.padding(top = 4.dp),
                 )
             }
+
+            // **Le troisième chemin vers la conversation**, avec la ligne d'un ami et son bouton
+            // « Message ». Un cercle n'a ni ligne ni médaillon : sans ce bouton il n'aurait
+            // aucune porte, et son contenu serait inatteignable.
+            AppButton(
+                text = SocialText.OPEN,
+                small = true,
+                modifier = Modifier.fillMaxWidth(),
+                onClick = { onOpen(circle.id, true) },
+            )
         }
     }
 }
@@ -959,9 +1042,13 @@ private fun ManageDialog(
  * `AppSectionTitle` ne convient pas : la source pose ici 18 px et une graisse 700, là où
  * l'intertitre de section en fait 21 et SemiBold. La marge est portée par le composant, comme
  * dans l'original, pour que deux intertitres consécutifs ne se collent pas.
+ *
+ * `internal` parce que la conversation s'en sert aussi : c'est le **même** intertitre dans les
+ * deux écrans de l'original, et en écrire un second ferait diverger deux titres que rien ne
+ * distingue à la lecture.
  */
 @Composable
-private fun SectionHeading(text: String, modifier: Modifier = Modifier) {
+internal fun SectionHeading(text: String, modifier: Modifier = Modifier) {
     AppLabel(
         text = text,
         selectable = false,

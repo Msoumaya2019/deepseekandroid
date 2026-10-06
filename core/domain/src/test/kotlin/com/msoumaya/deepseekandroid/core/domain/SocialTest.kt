@@ -4,6 +4,7 @@ import com.msoumaya.deepseekandroid.core.model.ChatMessage
 import com.msoumaya.deepseekandroid.core.model.ChatMessageKind
 import com.msoumaya.deepseekandroid.core.model.ConversationSummary
 import com.msoumaya.deepseekandroid.core.model.FriendBrief
+import com.msoumaya.deepseekandroid.core.model.FriendGroup
 import com.msoumaya.deepseekandroid.core.model.FriendLink
 import com.msoumaya.deepseekandroid.core.model.FriendLinkStatus
 import com.msoumaya.deepseekandroid.core.model.GroupMember
@@ -240,6 +241,40 @@ class SocialTest {
         assertEquals(2, Social.acceptedMemberCount(membres))
     }
 
+    private fun cercle(id: String, contact: String? = null) = FriendGroup(
+        id = id,
+        name = "Cercle $id",
+        ownerId = moi,
+        createdAt = "2026-01-01T00:00:00Z",
+        contactUserId = contact,
+    )
+
+    /**
+     * Le cercle de l'administration se reconnaît à son **marqueur** (`contactUserId`), et non à
+     * son nom : c'est le serveur qui le pose, et un nom se change. Le cas construit deux cercles
+     * dont l'un seulement est marqué, pour que la règle ne puisse pas se tromper de critère.
+     */
+    @Test
+    fun `le cercle de l'administration se reconnait a son marqueur, pas a son nom`() {
+        val cercles = listOf(cercle("ordinaire"), cercle("administration", contact = "admin-1"))
+        assertFalse(Social.isAdminContact(cercles, "ordinaire"))
+        assertTrue(Social.isAdminContact(cercles, "administration"))
+    }
+
+    /**
+     * **Le sens du repli est mesuré.** Un cercle absent de la liste — relecture partielle, cercle
+     * supprimé — rend `false`. Accorder par défaut ouvrirait le partage de progression à un cercle
+     * ordinaire ; refuser par défaut ne fait que cacher un bloc. Les deux fautes ne coûtent pas
+     * la même chose, et c'est cette asymétrie qui fixe la décision.
+     */
+    @Test
+    fun `un cercle inconnu n'est jamais celui de l'administration`() {
+        val cercles = listOf(cercle("administration", contact = "admin-1"))
+        assertFalse(Social.isAdminContact(cercles, "disparu"))
+        assertFalse(Social.isAdminContact(cercles, null))
+        assertFalse(Social.isAdminContact(emptyList(), "administration"))
+    }
+
     // ------------------------------------------------------------------ auteurs
 
     @Test
@@ -461,6 +496,231 @@ class SocialTest {
         assertEquals(
             listOf(SocialText.FILTER_ALL, SocialText.FILTER_ONLINE, SocialText.FILTER_REQUESTS),
             Social.Filter.entries.map { it.label },
+        )
+    }
+
+    // ------------------------------------------------------------------ conversation
+
+    @Test
+    fun `la page de messages est la meme pour la requete et pour la decision`() {
+        // Le nombre sert deux fois : la requete le demande au serveur, et la regle « reste-t-il
+        // des messages plus anciens ? » le relit pour savoir si la page est **pleine**. Une
+        // divergence entre les deux ne casserait rien : elle ferait dire « il n'y a rien avant »,
+        // ce qui est faux et muet. Ce test fige la valeur ; un controle de forme, dans
+        // `core:data`, verifie que la requete la lit bien **ici** au lieu de la recopier.
+        assertEquals(50, Social.MESSAGE_PAGE)
+    }
+
+    @Test
+    fun `une page pleine ouvre l'historique, une page incomplete ne l'ouvre pas`() {
+        assertEquals(
+            Social.History(hasOlder = true),
+            Social.afterLatestPage(Social.History(), Social.MESSAGE_PAGE),
+        )
+        assertEquals(
+            Social.History(hasOlder = false),
+            Social.afterLatestPage(Social.History(), Social.MESSAGE_PAGE - 1),
+            "une page incomplete est la premiere de la conversation",
+        )
+    }
+
+    @Test
+    fun `une page recente courte ne referme pas l'historique`() {
+        // C'est la seule asymetrie entre les deux transitions, et elle compte : la page recente
+        // redevient pleine des qu'un message arrive. Si elle pouvait refermer la porte, le bouton
+        // « Charger les messages precedents » clignoterait a chaque rafraichissement.
+        val ouvert = Social.History(hasOlder = true)
+        assertEquals(ouvert, Social.afterLatestPage(ouvert, 1))
+        assertEquals(ouvert, Social.afterLatestPage(ouvert, 0))
+    }
+
+    @Test
+    fun `une page ancienne incomplete referme l'historique pour toujours`() {
+        val ferme = Social.afterOlderPage(Social.History(hasOlder = true), Social.MESSAGE_PAGE - 1)
+        assertFalse(ferme.hasOlder, "on a atteint le debut de la conversation")
+        assertTrue(ferme.exhausted)
+
+        // Et une page recente pleine ne le rouvre **pas** : c'est ce que `exhausted` protege.
+        assertEquals(
+            ferme,
+            Social.afterLatestPage(ferme, Social.MESSAGE_PAGE),
+            "un debut connu ne se rouvre pas",
+        )
+    }
+
+    @Test
+    fun `une page ancienne pleine laisse l'historique ouvert`() {
+        val ouvert = Social.afterOlderPage(Social.History(hasOlder = false), Social.MESSAGE_PAGE)
+        assertTrue(ouvert.hasOlder)
+        assertFalse(ouvert.exhausted)
+    }
+
+    @Test
+    fun `la fusion remplace par identifiant au lieu d'empiler`() {
+        val ancien = message("a", "lui")
+        val corrige = ancien.copy(deletedAt = "2026-03-10T11:00:00Z")
+
+        val fusion = Social.mergeMessages(listOf(ancien), listOf(corrige))
+
+        assertEquals(1, fusion.size, "le meme identifiant ne s'empile pas")
+        assertEquals("2026-03-10T11:00:00Z", fusion.single().deletedAt, "la page recue remplace")
+    }
+
+    @Test
+    fun `la fusion trie par instant croissant, donc une page ancienne passe devant`() {
+        val recent = message("r", "lui", cree = "2026-03-10T10:00:00Z")
+        val vieux = message("v", "moi", cree = "2026-03-09T10:00:00Z")
+
+        // La page ancienne est lue **apres** la recente : sans tri, le debut de la conversation
+        // se peindrait a la fin.
+        val fusion = Social.mergeMessages(listOf(recent), listOf(vieux))
+
+        assertEquals(listOf("v", "r"), fusion.map { it.id })
+    }
+
+    @Test
+    fun `une page vide laisse la liste intacte`() {
+        val liste = listOf(message("a", "lui"), message("b", "moi"))
+        // L'identite est verifiee, pas seulement l'egalite : c'est le retour anticipe qui la
+        // donne, et il evite de reconstruire et de retrier une liste inchangee a chaque relecture.
+        assertTrue(
+            Social.mergeMessages(liste, emptyList()) === liste,
+            "une page vide ne doit rien reconstruire",
+        )
+    }
+
+    @Test
+    fun `le message le plus recent est le dernier`() {
+        assertNull(Social.newestId(emptyList()), "une conversation vide n'a pas de dernier")
+        assertEquals("b", Social.newestId(listOf(message("a", "lui"), message("b", "moi"))))
+    }
+
+    @Test
+    fun `la ligne d'etat suit l'ordre activite, cercle, presence`() {
+        assertEquals(
+            SocialText.TYPING,
+            Social.statusLine(otherTyping = true, adminContact = true, isOnline = true),
+            "l'activite passe avant tout le reste : c'est ce qui se passe maintenant",
+        )
+        assertEquals(
+            SocialText.ADMIN_CONTACT_LABEL,
+            Social.statusLine(adminContact = true, isOnline = true),
+        )
+        assertEquals(SocialText.ONLINE, Social.statusLine(isOnline = true))
+        assertEquals(SocialText.OFFLINE, Social.statusLine(isOnline = false))
+    }
+
+    @Test
+    fun `un apercu absent se lit hors ligne, comme dans l'original`() {
+        // C'est une imprecision **portee telle quelle** : `overview` nul veut dire « on ne sait
+        // pas » — l'ami ne partage pas sa presence, ou la lecture a echoue —, et l'original en
+        // ecrit « Hors ligne ». La corriger ici ferait diverger les deux clients sur la meme
+        // donnee, donc elle est figee.
+        assertEquals(SocialText.OFFLINE, Social.statusLine(isOnline = null))
+    }
+
+    // ------------------------------------------------------------------ droits sur un cercle
+
+    @Test
+    fun `le proprietaire seul nomme les moderateurs`() {
+        val proprietaire = listOf(membre("moi", GroupRole.OWNER), membre("lui"))
+        val moderateur = listOf(membre("moi", GroupRole.MODERATOR), membre("lui"))
+
+        assertTrue(Social.canToggleModerator(membre("lui"), proprietaire, "moi"))
+        assertFalse(Social.canToggleModerator(membre("lui"), moderateur, "moi"), "un moderateur ne nomme pas")
+    }
+
+    @Test
+    fun `le proprietaire ne peut pas se demettre lui-meme`() {
+        val moi = membre("moi", GroupRole.OWNER)
+        // Sans ce refus, le proprietaire pourrait laisser le cercle sans personne pour le gerer.
+        assertFalse(Social.canToggleModerator(moi, listOf(moi), "moi"))
+    }
+
+    @Test
+    fun `une invitation en attente ne se nomme pas moderatrice`() {
+        val enAttente = membre("lui", accepte = null)
+        assertFalse(Social.canToggleModerator(enAttente, listOf(membre("moi", GroupRole.OWNER), enAttente), "moi"))
+    }
+
+    @Test
+    fun `un moderateur ne peut pas retirer le proprietaire`() {
+        val proprietaire = membre("lui", GroupRole.OWNER)
+        val membres = listOf(membre("moi", GroupRole.MODERATOR), proprietaire)
+
+        assertFalse(
+            Social.canRemoveGroupMember(proprietaire, membres, "moi"),
+            "un moderateur qui exclut le proprietaire pourrait s'emparer du cercle",
+        )
+        assertTrue(Social.canRemoveGroupMember(membre("tiers"), membres, "moi"))
+        assertFalse(
+            Social.canRemoveGroupMember(membre("tiers"), membres, "tiers"),
+            "on quitte un cercle, on ne s'en exclut pas",
+        )
+    }
+
+    @Test
+    fun `inviter un ami demande d'etre gestionnaire`() {
+        assertTrue(Social.canInviteToGroup(listOf(membre("moi", GroupRole.OWNER)), "moi"))
+        assertTrue(Social.canInviteToGroup(listOf(membre("moi", GroupRole.MODERATOR)), "moi"))
+        assertFalse(Social.canInviteToGroup(listOf(membre("moi")), "moi"))
+    }
+
+    @Test
+    fun `supprimer le cercle est reserve au proprietaire`() {
+        assertTrue(Social.canDeleteGroup(listOf(membre("moi", GroupRole.OWNER)), "moi"))
+        assertFalse(Social.canDeleteGroup(listOf(membre("moi", GroupRole.MODERATOR)), "moi"))
+    }
+
+    @Test
+    fun `mon invitation en attente se distingue de mon adhesion`() {
+        assertTrue(Social.isPendingForMe(membre("moi", accepte = null), "moi"))
+        assertFalse(Social.isPendingForMe(membre("moi"), "moi"))
+        assertFalse(
+            Social.isPendingForMe(membre("lui", accepte = null), "moi"),
+            "l'invitation d'un autre ne m'invite pas, moi",
+        )
+    }
+
+    // ------------------------------------------------------------------ composer et partage
+
+    @Test
+    fun `un message fait d'espaces ne part pas`() {
+        assertFalse(
+            Social.canSendMessage("   ", busy = false, suspended = false),
+            "une ligne d'espaces ecrirait un message vide chez l'autre",
+        )
+        assertTrue(Social.canSendMessage("salam", busy = false, suspended = false))
+        assertFalse(Social.canSendMessage("salam", busy = true, suspended = false))
+        assertFalse(Social.canSendMessage("salam", busy = false, suspended = true))
+    }
+
+    @Test
+    fun `le partage d'etape est reserve au tete-a-tete`() {
+        assertTrue(Social.canShareProgress(isLink = true, adminContact = false))
+        assertFalse(Social.canShareProgress(isLink = false, adminContact = false), "pas dans un cercle")
+        assertFalse(
+            Social.canShareProgress(isLink = true, adminContact = true),
+            "on ne partage pas sa progression avec la moderation",
+        )
+    }
+
+    @Test
+    fun `le bloc profil et entraide est cache dans le cercle de l'administration`() {
+        assertTrue(Social.showsFriendTools(adminContact = false))
+        assertFalse(Social.showsFriendTools(adminContact = true))
+    }
+
+    @Test
+    fun `une proposition ne s'accepte ni deux fois ni la sienne`() {
+        assertTrue(Social.canAcceptProposal(null, proposedBy = "lui", me = "moi"))
+        assertFalse(
+            Social.canAcceptProposal("2026-01-01T00:00:00Z", proposedBy = "lui", me = "moi"),
+            "deja acceptee",
+        )
+        assertFalse(
+            Social.canAcceptProposal(null, proposedBy = "moi", me = "moi"),
+            "accepter sa propre proposition ecraserait l'attente de l'autre",
         )
     }
 }

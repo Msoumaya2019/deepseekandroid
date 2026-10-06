@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.msoumaya.deepseekandroid.core.data.AppContainer
+import com.msoumaya.deepseekandroid.core.data.remote.ChatRoom
 import com.msoumaya.deepseekandroid.core.data.repository.SocialRepository
 import com.msoumaya.deepseekandroid.core.domain.Dates
 import com.msoumaya.deepseekandroid.core.domain.Social
@@ -29,10 +30,11 @@ import kotlinx.coroutines.launch
 // décision — la saisie à l'écran, et la liste calculée ailleurs —, et un changement de filtre
 // publierait un état où la puce et la liste ne seraient pas d'accord.
 //
-// **Ce qui n'est pas encore là.** La conversation — ouvrir un ami ou un cercle, lire et écrire
-// des messages, signaler, partager une étape, fixer un objectif commun, proposer un
-// rendez-vous — arrive avec l'écran de conversation. La liste ne montre donc pas de porte vers
-// elle : un bouton qui n'ouvre rien est pire qu'un bouton absent.
+// **Ce que ce fichier fait de la conversation.** Il l'**ouvre**, et rien de plus : le geste part
+// d'une ligne d'ami ou d'un cercle, et il se traduit par `repository.openRoom`. Tout le reste —
+// lire, écrire, signaler, partager une étape, fixer un objectif commun, proposer un rendez-vous —
+// appartient à `ConversationViewModel`, qui lit le **même** dépôt. Il n'y a donc qu'une réponse à
+// « quelle pièce est ouverte », et deux écrans qui la lisent.
 // ---------------------------------------------------------------------------
 
 /**
@@ -167,22 +169,42 @@ class SocialViewModel(
     }
 
     /**
-     * Ouvre le cercle « contact administrateur ».
+     * Ouvre le cercle « contact administrateur », **et la conversation avec lui**.
      *
-     * **Écart assumé.** Le client d'origine ouvrait ensuite la conversation avec l'administration.
-     * La conversation n'existe pas encore ici : le geste crée donc le cercle et **déplie** le bloc
-     * où il apparaît, pour qu'il ait un effet visible. Sans cela, il écrirait en base sans que
-     * rien ne le montre — et une écriture invisible est pire qu'un bouton absent.
+     * Le geste crée le cercle côté serveur s'il n'existe pas — `openAdminContact` rend son
+     * identifiant —, puis ouvre la pièce. C'est ce que fait l'original, dont le bouton du pied
+     * ouvre la conversation avec l'administration.
      *
-     * Le dépliage n'a lieu que si le serveur a répondu : un échec laisse l'écran tel quel, avec
-     * le message d'erreur que le dépôt vient de publier.
+     * **L'écart précédent n'a plus lieu d'être.** Tant que la conversation n'existait pas, ce
+     * geste dépliait le bloc « Cercles privés » pour que l'écriture en base ait un effet visible.
+     * Il a maintenant son effet propre : la pièce s'ouvre.
+     *
+     * Un échec ne fait rien de plus : le dépôt vient de publier le message d'erreur, et l'écran
+     * reste sur la liste.
      */
     fun onOpenAdminContact() {
         viewModelScope.launch {
-            if (repository.openAdminContact() != null) {
-                inputs.value = inputs.value.copy(optionsOpen = true)
-            }
+            val groupId = repository.openAdminContact() ?: return@launch
+            repository.openRoom(ChatRoom(groupId = groupId))
         }
+    }
+
+    /**
+     * Ouvre la conversation d'un ami, ou d'un cercle.
+     *
+     * **Le geste ne fait qu'ouvrir.** La lecture des messages appartient à
+     * `ConversationViewModel`, qui l'apprend en regardant le dépôt : il n'y a donc qu'un seul état
+     * disant quelle pièce est ouverte, et deux écrans qui le lisent.
+     *
+     * @param roomId identifiant du **lien** pour un ami, du **cercle** pour un groupe — c'est
+     *   exactement ce que `ChatRoom` distingue par ses deux champs, et se tromper de champ
+     *   ouvrirait une pièce qui n'existe pas.
+     * @param isGroup vrai pour un cercle.
+     */
+    fun onOpenConversation(roomId: String, isGroup: Boolean) {
+        repository.openRoom(
+            if (isGroup) ChatRoom(groupId = roomId) else ChatRoom(linkId = roomId),
+        )
     }
 
     companion object {

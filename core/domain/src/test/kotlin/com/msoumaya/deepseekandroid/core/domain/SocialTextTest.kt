@@ -1,5 +1,6 @@
 package com.msoumaya.deepseekandroid.core.domain
 
+import com.msoumaya.deepseekandroid.core.model.GroupRole
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
@@ -134,5 +135,118 @@ class SocialTextTest {
         assertEquals(null, SocialText.dayStamp("pas une date"))
         assertEquals(null, SocialText.dayStamp(""))
         assertEquals(null, SocialText.dayStamp("2026-13-45T99:99:99Z"))
+    }
+
+    // ------------------------------------------------------------------ conversation
+
+    @Test
+    fun `l'heure d'un message suit la locale fixee`() {
+        // Meme regle que `dayStamp` : l'attendu est **recalcule par le JDK** avec le meme motif et
+        // la meme locale, jamais ecrit en dur — une machine reglee sur un autre fuseau ferait
+        // echouer un attendu fige, sans qu'on sache si c'est le code ou le fuseau qui a bouge.
+        val iso = "2026-03-10T17:00:00Z"
+        val attendu = java.time.format.DateTimeFormatter
+            .ofPattern("HH:mm", java.util.Locale.FRANCE)
+            .format(java.time.Instant.parse(iso).atZone(java.time.ZoneId.systemDefault()))
+
+        assertEquals(attendu, SocialText.clock(iso))
+        assertTrue(attendu.matches(Regex("""\d{2}:\d{2}""")), "heure et minute sur deux chiffres : $attendu")
+    }
+
+    @Test
+    fun `une heure illisible est absente, pas une heure d'erreur`() {
+        assertEquals(null, SocialText.clock("pas une heure"))
+        assertEquals(null, SocialText.clock(""))
+        assertEquals(null, SocialText.clock("2026-13-45T99:99:99Z"))
+    }
+
+    @Test
+    fun `l'instant d'un rendez-vous porte les secondes, comme toLocaleString`() {
+        // L'original appelle `toLocaleString('fr-FR')` **sans options** : le format par defaut
+        // porte les secondes. Les retrancher ferait diverger les deux clients sur la meme date.
+        val iso = "2026-03-10T17:00:00Z"
+        val attendu = java.time.format.DateTimeFormatter
+            .ofPattern("dd/MM/yyyy HH:mm:ss", java.util.Locale.FRANCE)
+            .format(java.time.Instant.parse(iso).atZone(java.time.ZoneId.systemDefault()))
+
+        assertEquals(attendu, SocialText.appointmentStamp(iso))
+        assertTrue(attendu.endsWith(":00"), "les secondes sont ecrites : $attendu")
+        assertEquals(null, SocialText.appointmentStamp(""))
+    }
+
+    @Test
+    fun `le partage d'etape arrondit le ratio, il ne le tronque pas`() {
+        assertEquals(
+            "Mon objectif Juz’ ‘Amma est atteint à 50 %. Cette semaine, j’ai appris 12 versets.",
+            SocialText.sharedProgress("Juz’ ‘Amma", 0.5, 12),
+        )
+        // 0.125 * 100 vaut 12.5 **exactement** en binaire : l'original arrondit au superieur
+        // (`Math.round`), et tronquer donnerait 12.
+        assertTrue(SocialText.sharedProgress("X", 0.125, 0).contains("13 %"))
+        assertTrue(SocialText.sharedProgress("X", 0.994, 0).contains("99 %"), "99,4 s'arrondit a 99")
+        assertTrue(SocialText.sharedProgress("X", 0.0, 0).contains("0 %"))
+        assertTrue(SocialText.sharedProgress("X", 1.0, 0).contains("100 %"))
+    }
+
+    @Test
+    fun `le pourcentage du partage se met en forme comme celui de l'ecran Progres`() {
+        // Le « % » vient de `ProgressText.percent` : deux ecrans qui annoncent le meme objectif ne
+        // doivent pas l'ecrire de deux facons.
+        assertTrue(SocialText.sharedProgress("X", 0.42, 1).contains(ProgressText.percent(42)))
+    }
+
+    @Test
+    fun `le role d'un membre est traduit, pas recopie de la base`() {
+        // **Ecart assume** : l'original affiche `{m.role}`, donc « owner », « moderator »,
+        // « member » — le vocabulaire du serveur dans une interface francaise. La note de
+        // `SocialText.role` declare l'ecart ; ce test le fige.
+        assertEquals("Propriétaire", SocialText.role(GroupRole.OWNER))
+        assertEquals("Modérateur", SocialText.role(GroupRole.MODERATOR))
+        assertEquals("Membre", SocialText.role(GroupRole.MEMBER))
+        assertNotEquals("owner", SocialText.role(GroupRole.OWNER))
+    }
+
+    @Test
+    fun `la ligne de membre mentionne l'invitation en attente`() {
+        assertEquals("Amina · Modérateur", SocialText.memberLine("Amina", "Modérateur", pending = false))
+        assertEquals(
+            "Amina · Modérateur · invitation en attente",
+            SocialText.memberLine("Amina", "Modérateur", pending = true),
+        )
+    }
+
+    @Test
+    fun `le compte des membres porte le plafond du cercle`() {
+        assertEquals("Membres (3/5)", SocialText.membersCount(3))
+        assertEquals(Social.MAX_GROUP_MEMBERS, 5)
+    }
+
+    @Test
+    fun `la duree d'un enregistrement joint suit le meme format que l'accuse`() {
+        assertEquals("Durée : 1:05", SocialText.durationLabel(65_000))
+        assertEquals("Durée : 0:00", SocialText.durationLabel(0))
+        assertEquals("Durée : 2:00", SocialText.durationLabel(120_000))
+        // La meme duree que celle de l'accuse d'un message vocal, mot pour mot.
+        assertTrue(SocialText.durationLabel(65_000).endsWith(SocialText.duration(1, 5)))
+    }
+
+    @Test
+    fun `la semaine d'un objectif partage est ecrite telle que le serveur la stocke`() {
+        assertEquals("Semaine du 2026-03-09 · 5 séances", SocialText.weekGoal("2026-03-09", 5))
+    }
+
+    @Test
+    fun `l'acceptation d'un objectif et d'un rendez-vous se dit en deux etats distincts`() {
+        assertNotEquals(SocialText.GOAL_ACCEPTED, SocialText.GOAL_PENDING)
+        assertNotEquals(SocialText.APPOINTMENT_CONFIRMED, SocialText.APPOINTMENT_PENDING)
+    }
+
+    @Test
+    fun `le libelle de l'etat dans l'en-tete couvre les quatre cas`() {
+        assertEquals("Écrit un message…", SocialText.TYPING)
+        assertEquals("En ligne", SocialText.ONLINE)
+        assertEquals("Hors ligne", SocialText.OFFLINE)
+        assertEquals("Contact administrateur", SocialText.ADMIN_CONTACT_LABEL)
+        assertNotEquals(SocialText.TYPING, SocialText.ONLINE)
     }
 }

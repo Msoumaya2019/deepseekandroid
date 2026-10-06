@@ -7,7 +7,7 @@ Un test vert ne prouve rien tant qu'on ne l'a pas vu rougir **pour la bonne rais
 falsification consiste a casser volontairement la regle, a lancer le test, et a verifier que
 les tests qui tombent sont exactement ceux qui devaient tomber.
 
-Trois pieges rendent la falsification manuelle peu fiable, et le script les traite :
+Quatre pieges rendent la falsification manuelle peu fiable, et le script les traite :
 
   1. **la source reste mutee.** Si le script est interrompu — un test qui bloque, une erreur —
      la mutation survit dans l'arbre de travail, et le « vert » suivant est un faux. La
@@ -19,7 +19,13 @@ Trois pieges rendent la falsification manuelle peu fiable, et le script les trai
   3. **un test qui ne s'execute pas compte comme un succes.** `node --test` sort en 0 quand le
      motif ne designe aucun test ; cote Gradle, un filtre trop etroit donne un « BUILD
      SUCCESSFUL » sans avoir rien joue. Le script exige donc que la mutation fasse tomber
-     **au moins un** test, et refuse un resultat vide.
+     **au moins un** test, et refuse un resultat vide ;
+  4. **un verdict du cache passe pour un verdict du jour.** Une tache de test que Gradle sert
+     sans la rejouer — `FROM-CACHE`, `UP-TO-DATE` — rend le resultat d'une execution
+     **precedente** : le rapport XML n'est pas reecrit, donc rien ne tombe, et le harnais
+     accuserait le test de ne pas couvrir la regle alors qu'il n'a pas tourne. La tache nommee
+     est donc **toujours** rejouee (`--rerun`) ; et si malgre tout Gradle annonce l'un de ces
+     etats, le cas est declare **non concluant** — jamais « faux ».
 
 Usage
 -----
@@ -2550,6 +2556,243 @@ CAS: list[dict] = [
         "tache": ":navigation:testDebugUnitTest",
         "attendus": ["l'onglet Amis rend l'ecran des amis"],
     },
+
+    # --- Conversation : les regles de l'historique -------------------------------------------
+    {
+        # Une page courte est la **premiere** de la conversation. Ouvrir quand meme la porte
+        # afficherait « Charger les messages precedents » sous une conversation dont on sait
+        # qu'elle commence la : un chargement qui ne rend rien, et rien ne le dirait.
+        "nom": "conversation : une page courte ouvre quand meme l'historique",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Social.kt",
+        "avant": "            history.copy(hasOlder = history.hasOlder || size >= MESSAGE_PAGE)",
+        "apres": "            history.copy(hasOlder = true)",
+        "tache": ":core:domain:test",
+        "attendus": ["une page pleine ouvre l'historique, une page incomplete ne l'ouvre pas"],
+    },
+    {
+        # `exhausted` est ce qui empeche le bouton de **clignoter** : une fois le debut atteint,
+        # une page recente redevient pleine des qu'un message arrive, et rouvrirait la porte.
+        "nom": "conversation : un debut connu se rouvre a chaque message",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Social.kt",
+        "avant": "        if (history.exhausted) {",
+        "apres": "        if (false) {",
+        "tache": ":core:domain:test",
+        "attendus": ["une page ancienne incomplete referme l'historique pour toujours"],
+    },
+    {
+        # Fusionner sans fusionner : la page recue s'ajoute au lieu de remplacer par identifiant.
+        # Deux consequences, et les deux sont mesurees — le meme message en double, et l'ordre
+        # perdu.
+        "nom": "conversation : la fusion empile la page au lieu de la fusionner",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Social.kt",
+        "avant": "        return byId.values.sortedBy { it.createdAt }",
+        "apres": "        return previous + incoming",
+        "tache": ":core:domain:test",
+        "attendus": [
+            "la fusion remplace par identifiant au lieu d'empiler",
+            "la fusion trie par instant croissant, donc une page ancienne passe devant",
+        ],
+    },
+    {
+        # Le tri a l'envers : la page ancienne est lue **apres** la recente et doit se peindre
+        # **avant** elle. Inverse, il met le debut de la conversation a la fin.
+        "nom": "conversation : le tri des messages est decroissant",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Social.kt",
+        "avant": "        return byId.values.sortedBy { it.createdAt }",
+        "apres": "        return byId.values.sortedByDescending { it.createdAt }",
+        "tache": ":core:domain:test",
+        "attendus": ["la fusion trie par instant croissant, donc une page ancienne passe devant"],
+    },
+
+    # --- Conversation : l'en-tete et les droits ----------------------------------------------
+    {
+        # L'activite de l'autre passe avant tout : c'est ce qui se passe **maintenant**. La
+        # deplacer sous la nature du cercle ferait taire « Ecrit un message... » dans le seul
+        # ecran ou l'on attend une reponse.
+        "nom": "conversation : la presence passe avant l'activite de l'autre",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Social.kt",
+        "avant": "        otherTyping -> SocialText.TYPING\n        adminContact -> SocialText.ADMIN_CONTACT_LABEL",
+        "apres": "        adminContact -> SocialText.ADMIN_CONTACT_LABEL\n        otherTyping -> SocialText.TYPING",
+        "tache": ":core:domain:test",
+        "attendus": ["la ligne d'etat suit l'ordre activite, cercle, presence"],
+    },
+    {
+        # Un moderateur qui peut exclure le proprietaire peut s'emparer du cercle.
+        "nom": "conversation : un moderateur peut retirer le proprietaire",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Social.kt",
+        "avant": "    ): Boolean = member.userId != me && member.role != GroupRole.OWNER && isManager(members, me)",
+        "apres": "    ): Boolean = member.userId != me && isManager(members, me)",
+        "tache": ":core:domain:test",
+        "attendus": ["un moderateur ne peut pas retirer le proprietaire"],
+    },
+    {
+        # Le proprietaire qui se demet laisse le cercle sans personne pour le gerer.
+        "nom": "conversation : le proprietaire peut se demettre lui-meme",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Social.kt",
+        "avant": "        member.userId != me && member.acceptedAt != null && isOwner(members, me)",
+        "apres": "        member.acceptedAt != null && isOwner(members, me)",
+        "tache": ":core:domain:test",
+        "attendus": ["le proprietaire ne peut pas se demettre lui-meme"],
+    },
+    {
+        # « non vide » n'est pas « non blanc » : une ligne d'espaces passerait et ecrirait un
+        # message vide dans la conversation de l'autre.
+        "nom": "conversation : un message fait d'espaces part quand meme",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Social.kt",
+        "avant": "        !busy && draft.isNotBlank() && !suspended",
+        "apres": "        !busy && draft.isNotEmpty() && !suspended",
+        "tache": ":core:domain:test",
+        "attendus": ["un message fait d'espaces ne part pas"],
+    },
+    {
+        # Dans un cercle, l'etape partirait a plusieurs ; vers la moderation, on ne partage pas
+        # sa progression. L'original ne l'a jamais permis.
+        "nom": "conversation : le partage d'etape n'est plus reserve au tete-a-tete",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Social.kt",
+        "avant": "        isLink && !adminContact",
+        "apres": "        true",
+        "tache": ":core:domain:test",
+        "attendus": ["le partage d'etape est reserve au tete-a-tete"],
+    },
+    {
+        # Accepter sa propre proposition ecraserait l'attente de l'autre, et le bouton
+        # « Accepter » s'afficherait sur ce qu'on vient soi-meme de proposer.
+        "nom": "conversation : on peut accepter sa propre proposition",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Social.kt",
+        "avant": "        acceptedAt == null && proposedBy != me",
+        "apres": "        acceptedAt == null",
+        "tache": ":core:domain:test",
+        "attendus": ["une proposition ne s'accepte ni deux fois ni la sienne"],
+    },
+
+    # --- Conversation : le depot ------------------------------------------------------------
+    {
+        # Le curseur doit etre l'instant du message **le plus ancien** affiche : la requete
+        # demande ce qui lui est strictement anterieur. Partir du plus recent rend une page qui
+        # **recouvre** celle qu'on a deja.
+        "nom": "conversation : la page ancienne se demande a partir du mauvais message",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/SocialRepository.kt",
+        "avant": "        val oldest = room.messages.firstOrNull() ?: return",
+        "apres": "        val oldest = room.messages.lastOrNull() ?: return",
+        "tache": ":core:data:testDebugUnitTest",
+        "attendus": ["la page ancienne se demande a partir du plus ancien message affiche"],
+    },
+    {
+        # Ne pas appliquer la transition d'historique laisse le bouton ouvert sur un debut de
+        # conversation deja atteint : un chargement qui ne rend rien, a chaque appui.
+        "nom": "conversation : la page ancienne ne referme plus l'historique",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/SocialRepository.kt",
+        "avant": "                    history = Social.afterOlderPage(it.history, older.size),",
+        "apres": "                    history = it.history,",
+        "tache": ":core:data:testDebugUnitTest",
+        "attendus": ["une page ancienne incomplete referme le bouton pour de bon"],
+    },
+    {
+        # Garder l'etat de la piece precedente afficherait les propos d'un ami **sous le nom d'un
+        # autre** — la faute la plus grave que cet ecran puisse commettre.
+        "nom": "conversation : ouvrir une piece garde les messages de la precedente",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/SocialRepository.kt",
+        "avant": "        _state.value = _state.value.copy(room = RoomState(room = room, loading = true))",
+        "apres": "        _state.value = _state.value.copy(room = (_state.value.room ?: RoomState(room)).copy(room = room, loading = true))",
+        "tache": ":core:data:testDebugUnitTest",
+        "attendus": ["ouvrir une autre piece ne garde pas les messages de la precedente"],
+    },
+    {
+        # Laisser le compteur de la liste inchange apres une lecture annonce des messages non lus
+        # qui viennent d'etre lus.
+        "nom": "conversation : lire une conversation ne remet pas le compteur a zero",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/SocialRepository.kt",
+        "avant": "                    summaries = _state.value.summaries + (linkId to summary.copy(unread = 0)),",
+        "apres": "                    summaries = _state.value.summaries + (linkId to summary.copy(unread = summary.unread)),",
+        "tache": ":core:data:testDebugUnitTest",
+        "attendus": ["marquer comme lu remet le compteur de la liste a zero"],
+    },
+
+    # --- Conversation : la source unique de la taille de page --------------------------------
+    {
+        # Recopier le nombre fait diverger la requete et la regle « en reste-t-il ? ». La
+        # divergence est muette : la conversation s'affiche, et le bouton apparait au mauvais
+        # moment. C'est ce controle de forme qui la voit, et ce cas qui le prouve vivant.
+        #
+        # **La valeur mutee est la meme, et c'est voulu.** `Social.MESSAGE_PAGE` est un
+        # `const val` : `Social.MESSAGE_PAGE.toLong()` **s'inline** en `50L`, donc recopier `50L`
+        # est exactement ce que ferait quelqu'un qui ignore la regle — et la classe compilee est
+        # identique a l'octet pres. La mutation est donc invisible pour Gradle : seules les
+        # **lettres** du source changent, et le controle de forme, qui lit le source a
+        # l'execution, est le seul a pouvoir la voir.
+        #
+        # C'est pour cela que `lancer()` force `--rerun`. Sans lui, Gradle a servi
+        # `:core:data:testDebugUnitTest FROM-CACHE`, le rapport n'a pas ete reecrit, et le cas a
+        # rendu « FAUX : aucun test n'est tombe » — un verdict qui accusait le controle alors que
+        # le controle n'avait pas tourne. Ce cas est donc aussi le **temoin** de cette
+        # correction : si le drapeau disparait, il ne rendra plus « FAUX » mais « NON CONCLUANT »,
+        # ce qui est la bonne lecture.
+        "nom": "conversation : la taille de page est recopiee dans la source",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/remote/SupabaseSocialSource.kt",
+        "avant": "private val MESSAGE_PAGE = Social.MESSAGE_PAGE.toLong()",
+        "apres": "private val MESSAGE_PAGE = 50L",
+        "tache": ":core:data:testDebugUnitTest",
+        "attendus": ["la source ne recopie pas la taille de page, elle la lit au domaine"],
+    },
+
+    # --- Conversation : ce qui la rend visible, et ce qu'elle doit dire -----------------------
+    {
+        # Le fait qui fait basculer l'ecran. Un `false` en dur laisserait la piece ouverte dans le
+        # depot sans que rien ne la montre : la liste s'afficherait normalement, et la conversation
+        # serait inatteignable. Aucun ecran ne peut le contredire — c'est un fait du depot, et non
+        # un etat d'interface.
+        "nom": "conversation : la piece ouverte ne fait plus basculer l'ecran",
+        "fichier": "feature/social/src/main/kotlin/com/msoumaya/deepseekandroid/feature/social/SocialRenderer.kt",
+        "avant": "            conversationOpen = state.room != null,",
+        "apres": "            conversationOpen = false,",
+        "tache": ":feature:social:testDebugUnitTest",
+        "attendus": ["la piece ouverte du depot fait basculer l'ecran"],
+    },
+    {
+        # L'avis du depot, ecrit pour personne. La conversation est l'ecran qui produit la plupart
+        # des avis — « Etape partagee », « Aucun message a signaler », « Entre une date future » —,
+        # et la liste d'amis n'est plus la quand ils paraissent : le geste semblerait n'avoir rien
+        # fait, ce qui est exactement ce qu'un avis evite.
+        "nom": "conversation : l'avis du depot n'arrive plus a la conversation",
+        "fichier": "feature/social/src/main/kotlin/com/msoumaya/deepseekandroid/feature/social/ConversationRenderer.kt",
+        "avant": "            notice = state.notice,",
+        "apres": "            notice = null,",
+        "tache": ":feature:social:testDebugUnitTest",
+        "attendus": ["l'avis du depot parvient a la conversation"],
+    },
+    {
+        # Le **sens** du geste de moderation, inverse. Le bouton continuerait d'annoncer « Nommer
+        # moderateur » ou « Retirer la moderation » et ferait le contraire : une promotion la ou
+        # l'on croyait une retrogradation, sans que rien ne le signale. C'est precisement pour cela
+        # que le sens voyage comme une **valeur**, et non comme une phrase a interpreter.
+        "nom": "conversation : le sens du geste de moderation est inverse",
+        "fichier": "feature/social/src/main/kotlin/com/msoumaya/deepseekandroid/feature/social/ConversationRenderer.kt",
+        "avant": "                grantsModerator = member.role != GroupRole.MODERATOR,",
+        "apres": "                grantsModerator = member.role == GroupRole.MODERATOR,",
+        "tache": ":feature:social:testDebugUnitTest",
+        "attendus": ["le sens du geste de moderation suit le role actuel du membre"],
+    },
+    {
+        # La bascule de l'ecran, supprimee. La conversation existe, le depot la porte, et
+        # **aucun ecran ne la compose** : tout ce qu'elle contient serait ecrit pour personne.
+        "nom": "conversation : l'ecran des amis ne bascule plus sur la conversation",
+        "fichier": "feature/social/src/main/kotlin/com/msoumaya/deepseekandroid/feature/social/SocialScreen.kt",
+        "avant": "    if (state.conversationOpen) {",
+        "apres": "    if (false) {",
+        "tache": ":feature:social:testDebugUnitTest",
+        "attendus": ["la liste bascule sur la conversation quand une piece est ouverte"],
+    },
+    {
+        # La troisieme porte, qui perd son genre : un cercle s'ouvrirait comme s'il etait un lien,
+        # donc la source chercherait un lien qui n'existe pas et la piece resterait vide. Le geste
+        # paraîtrait n'avoir rien fait — et c'est le seul chemin vers le contenu d'un cercle.
+        "nom": "conversation : le bouton Ouvrir d'un cercle perd son genre",
+        "fichier": "feature/social/src/main/kotlin/com/msoumaya/deepseekandroid/feature/social/SocialScreen.kt",
+        "avant": "                onClick = { onOpen(circle.id, true) },",
+        "apres": "                onClick = { onOpen(circle.id, false) },",
+        "tache": ":feature:social:testDebugUnitTest",
+        "attendus": ["les trois portes de la conversation sont ouvertes"],
+    },
 ]
 
 
@@ -2574,18 +2817,67 @@ def commande_gradle() -> list[str]:
 
 
 def lancer(tache: str) -> tuple[int, str]:
-    """Joue une tache Gradle. `tache` peut porter des options (`--tests ...`)."""
+    """Joue une tache Gradle. `tache` peut porter des options (`--tests ...`).
+
+    **`--rerun` n'est pas un confort.** Une tache de test que Gradle sert sans la rejouer rend le
+    verdict d'une execution **precedente** : le rapport XML n'est pas reecrit, `echecs_depuis` ne
+    voit rien, et le harnais accuserait le test de ne pas couvrir la regle alors qu'il n'a pas
+    tourne. Le cas s'est produit pour de vrai : `Social.MESSAGE_PAGE` est un `const val`, la
+    mutation recopiait la **meme** valeur, la classe compilee etait identique a l'octet pres, et
+    Gradle a repondu `:core:data:testDebugUnitTest FROM-CACHE`.
+
+    La portee du drapeau est **mesuree**, pas supposee. Deux passes consecutives sur
+    `:core:domain:test` ont rendu `1 executed, 6 up-to-date`, avec `:core:domain:testClasses
+    UP-TO-DATE` : `--rerun` ne rejoue que les taches **nommees sur la ligne de commande**, et
+    laisse les dependances incrementales — ce qui garde le harnais utilisable sur vingt et un
+    modules. Et c'est bien le **cache** qui tombe, pas seulement le controle de fraicheur : sans
+    cela la seconde passe aurait repondu `FROM-CACHE`.
+
+    La surete vis-a-vis de la concurrence vient de cette fonction elle-meme : elle impose
+    `--max-workers=1` et `parallel=false`, donc aucun autre ouvrier Gradle ne lit l'arbre pendant
+    qu'une source est mutee.
+    """
     env = dict(os.environ)
     env["JAVA_HOME"] = JDK
     env["PATH"] = os.path.join(JDK, "bin") + os.pathsep + env.get("PATH", "")
     resultat = subprocess.run(
-        commande_gradle() + shlex.split(tache) + ["--max-workers=1", "-Dorg.gradle.parallel=false"],
+        commande_gradle() + shlex.split(tache) + [
+            "--rerun",
+            "--max-workers=1",
+            "-Dorg.gradle.parallel=false",
+        ],
         cwd=PROJET,
         env=env,
         capture_output=True,
         text=True,
     )
     return resultat.returncode, (resultat.stdout or "") + (resultat.stderr or "")
+
+
+#: Les etats par lesquels Gradle annonce qu'une tache **n'a pas ete executee**. `NO-SOURCE` en
+#: fait partie : une tache sans source ne joue rien, donc son silence ne prouve rien non plus.
+_ETATS_SANS_EXECUTION = ("UP-TO-DATE", "FROM-CACHE", "SKIPPED", "NO-SOURCE")
+
+
+def taches_non_rejouees(sortie: str, tache: str) -> list[str]:
+    """Les taches **demandees** que Gradle a servies sans les executer.
+
+    La portee est la ligne de commande, et rien d'autre. Un graphe de test contient des taches
+    voisines — `:core:domain:testClasses UP-TO-DATE` sort de **toutes** les executions — et les
+    compter ici declarerait « non concluant » a chaque cas. Ce qui compte est uniquement la tache
+    dont le rapport de tests est lu : c'est elle qui doit avoir tourne.
+    """
+    demandees = {jeton for jeton in tache.split() if jeton.startswith(":")}
+    arretees: list[str] = []
+    for ligne in sortie.splitlines():
+        morceaux = ligne.split()
+        if len(morceaux) < 3 or morceaux[0] != ">" or morceaux[1] != "Task":
+            continue
+        if morceaux[2] not in demandees:
+            continue
+        if morceaux[-1] in _ETATS_SANS_EXECUTION:
+            arretees.append(f"{morceaux[2]} {morceaux[-1]}")
+    return arretees
 
 
 def echecs_depuis(instant: float) -> list[str]:
@@ -2714,7 +3006,37 @@ def verifier_cas(choisis: list[dict]) -> int:
     return 1 if casses else 0
 
 
-def jouer(cas: dict) -> bool:
+#: Les verdicts d'un cas. Trois etats, et pas deux : un cas dont le test n'a **pas tourne** n'est
+#: ni concluant ni faux — c'est le harnais qui ne sait pas, et le dire evite d'accuser un test.
+CONCLUANT = "concluant"
+FAUX = "faux"
+NON_CONCLUANT = "non concluant"
+HARNAIS = "echec du harnais"
+
+
+def tache_atteinte(sortie: str, tache: str) -> bool:
+    """Vrai si Gradle a **nomme** au moins une tache demandee : signe qu'il est alle jusque-la.
+
+    Sans ce controle, un Gradle tombe avant la tache — option inconnue, configuration cassee —
+    rend le meme silence qu'un test qui ne couvre pas la regle, et le verdict accuserait le test.
+    """
+    demandees = {jeton for jeton in tache.split() if jeton.startswith(":")}
+    for ligne in sortie.splitlines():
+        morceaux = ligne.split()
+        if len(morceaux) >= 3 and morceaux[0] == ">" and morceaux[1] == "Task":
+            if morceaux[2] in demandees:
+                return True
+    return False
+
+
+def jouer(cas: dict) -> str:
+    """Joue un cas et rend son verdict : `CONCLUANT`, `FAUX`, `NON_CONCLUANT` ou `HARNAIS`.
+
+    **Pourquoi trois etats et pas deux.** Un « FAUX » affirme que le test ne couvre pas la regle.
+    Cette affirmation n'est fondee que si le test a **tourne**. Quand Gradle annonce la tache de
+    test `FROM-CACHE` ou `UP-TO-DATE`, le rapport lu date d'une execution precedente : le cas ne
+    prouve rien, et le declarer faux enverrait chercher un test manquant qui existe peut-etre.
+    """
     chemin = os.path.join(PROJET, cas["fichier"].replace("/", os.sep))
     avant = cas["avant"]
     apres = cas["apres"]
@@ -2724,7 +3046,7 @@ def jouer(cas: dict) -> bool:
     probleme = precondition(cas)
     if probleme is not None:
         print(f"  ECHEC DU HARNAIS : {probleme}")
-        return False
+        return HARNAIS
 
     print(f"  mutation : {avant.strip()!r}")
     print(f"         -> : {apres.strip()!r}")
@@ -2741,28 +3063,44 @@ def jouer(cas: dict) -> bool:
     # La restauration est verifiee par l'empreinte, pas par la bonne volonte du `finally`.
     if empreinte(chemin) != origine:
         print("  DANGER : la source n'a pas ete restauree a l'identique !")
-        return False
+        return HARNAIS
+
+    # Le cache se controle **avant** le rapport : une tache servie sans etre rejouee laisse le
+    # rapport intact, donc `echecs_depuis` ne rend rien, et l'ordre inverse ferait conclure
+    # « FAUX » — c'est exactement le faux verdict qu'on veut rendre impossible.
+    servies = taches_non_rejouees(sortie, cas["tache"])
+    if servies:
+        print(f"  NON CONCLUANT : {', '.join(servies)} — Gradle a servi cette tache sans la rejouer.")
+        print("                  Le rapport de tests date d'une execution precedente : ce cas ne")
+        print("                  prouve rien. Le relancer, et si cela se repete, c'est le harnais.")
+        return NON_CONCLUANT
 
     tombes = echecs_depuis(instant)
     if not tombes:
+        if not tache_atteinte(sortie, cas["tache"]):
+            print("  ECHEC DU HARNAIS : la tache n'a jamais ete atteinte — Gradle est tombe avant.")
+            print("  --- fin de sortie Gradle ---")
+            for ligne in sortie.strip().splitlines()[-12:]:
+                print("   " + ligne)
+            return HARNAIS
         print("  FAUX : aucun test n'est tombe. Le test ne couvre pas cette regle,")
         print("         ou la tache n'a rien joue (compilation en echec, filtre trop etroit).")
         print("  --- fin de sortie Gradle ---")
         for ligne in sortie.strip().splitlines()[-12:]:
             print("   " + ligne)
-        return False
+        return FAUX
 
     correspond = [t for t in tombes if any(a in t for a in cas["attendus"])]
     if not correspond:
         print(f"  FAUX : les tests tombes ne sont pas ceux attendus ({len(tombes)} tombes).")
         for t in tombes:
             print(f"    - {t}")
-        return False
+        return FAUX
 
     print(f"  OK : {len(tombes)} test(s) tombe(s), dont {len(correspond)} attendu(s) :")
     for t in tombes:
         print(f"    - {t}")
-    return True
+    return CONCLUANT
 
 
 def main() -> int:
@@ -2789,16 +3127,23 @@ def main() -> int:
         return verifier_cas(choisis)
 
     print(f"{len(choisis)} cas a falsifier.")
-    reussis = 0
+    verdicts: dict[str, int] = {}
     for numero, cas in enumerate(choisis, 1):
         print()
         print(f"[{numero}/{len(choisis)}] {cas['nom']}")
-        if jouer(cas):
-            reussis += 1
+        verdict = jouer(cas)
+        verdicts[verdict] = verdicts.get(verdict, 0) + 1
 
     print()
-    print(f"VERDICT : {reussis}/{len(choisis)} falsification(s) concluante(s)")
-    return 0 if reussis == len(choisis) else 1
+    # Le compte est rendu **par verdict**, et pas en « reussis / total » : un cas non concluant
+    # n'est pas un cas faux, et les fondre ferait perdre l'information qui dit quoi relancer.
+    print(f"VERDICT : {verdicts.get(CONCLUANT, 0)}/{len(choisis)} falsification(s) concluante(s)")
+    for etat, etiquette in ((NON_CONCLUANT, "non concluante(s)"),
+                            (FAUX, "fausse(s)"),
+                            (HARNAIS, "en echec du harnais")):
+        if verdicts.get(etat):
+            print(f"          {verdicts[etat]} {etiquette}")
+    return 0 if verdicts.get(CONCLUANT, 0) == len(choisis) else 1
 
 
 if __name__ == "__main__":

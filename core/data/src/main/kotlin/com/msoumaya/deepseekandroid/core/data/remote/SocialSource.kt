@@ -1,9 +1,15 @@
 package com.msoumaya.deepseekandroid.core.data.remote
 
+import com.msoumaya.deepseekandroid.core.model.ChatMessage
+import com.msoumaya.deepseekandroid.core.model.ChatMessageKind
 import com.msoumaya.deepseekandroid.core.model.ConversationSummary
 import com.msoumaya.deepseekandroid.core.model.FriendGroup
 import com.msoumaya.deepseekandroid.core.model.FriendLink
+import com.msoumaya.deepseekandroid.core.model.FriendOverview
 import com.msoumaya.deepseekandroid.core.model.FriendProfile
+import com.msoumaya.deepseekandroid.core.model.GroupMember
+import com.msoumaya.deepseekandroid.core.model.ReviewAppointment
+import com.msoumaya.deepseekandroid.core.model.SharedGoal
 import com.msoumaya.deepseekandroid.core.model.SocialSuspension
 
 // ---------------------------------------------------------------------------
@@ -17,10 +23,16 @@ import com.msoumaya.deepseekandroid.core.model.SocialSuspension
 // compte précédent. Ces règles se mesurent en substituant une source en mémoire — sans réseau,
 // sans serveur et sans appareil.
 //
-// **Ce qui n'est pas ici.** La messagerie d'une conversation (envoyer, supprimer, signaler,
-// marquer lu, objectifs partagés, rendez-vous, membres de cercle) arrive avec l'écran de
-// conversation. Ce fichier ne porte que ce que la **liste d'amis** demande : le profil, les
-// liens, les cercles, la suspension, l'aperçu des conversations, et les six gestes de la liste.
+// **Ce qui est ici.** Deux ensembles, et ils ne se recouvrent pas. D'un côté ce que la **liste
+// d'amis** demande — le profil, les liens, les cercles, la suspension, l'aperçu des
+// conversations, et ses six gestes. De l'autre ce que la **conversation** demande — lire et
+// écrire des messages, masquer, supprimer, signaler, marquer lu, l'aperçu d'un ami, les membres
+// d'un cercle, les objectifs partagés et les rendez-vous.
+//
+// **Ce qui n'est toujours pas ici.** Le temps réel. Dans le client d'origine, la saisie en cours
+// et l'arrivée d'un message passent par un canal Realtime ; le portage ne l'a pas encore, et
+// l'écran se relit à l'ouverture et après chaque geste au lieu d'être poussé. C'est une
+// différence de **fraîcheur**, pas de contenu : rien de ce qui s'écrit ici ne dépend d'elle.
 // ---------------------------------------------------------------------------
 
 /**
@@ -39,6 +51,23 @@ import com.msoumaya.deepseekandroid.core.model.SocialSuspension
 data class SocialInbox(
     val summaries: Map<String, ConversationSummary> = emptyMap(),
     val statuses: Map<String, Boolean> = emptyMap(),
+)
+
+/**
+ * La pièce d'une conversation : un **lien** ou un **cercle**, jamais les deux.
+ *
+ * Le client d'origine construit cet objet à la volée — `{linkId:selected.id}` ou
+ * `{groupId:selected.id}` — et le passe à `listMessages` comme à `sendMessage`. Le nommer ici
+ * évite que deux fonctions s'entendent sur une forme que rien ne déclare : un message dont les
+ * deux champs seraient nuls n'appartient à aucune conversation, et le serveur le refuserait
+ * sans que le type l'ait dit.
+ *
+ * Aucune garde n'est posée sur cette forme : elle est construite par l'écran à partir d'un
+ * choix — un lien **ou** un cercle —, et une garde qui ne peut pas se déclencher ne mesure rien.
+ */
+data class ChatRoom(
+    val linkId: String? = null,
+    val groupId: String? = null,
 )
 
 /**
@@ -103,4 +132,81 @@ interface SocialSource {
 
     /** Ouvre — ou retrouve — le cercle « contact administrateur », et rend son identifiant. */
     suspend fun openAdminContact(): String
+
+    // ------------------------------------------------------------------ conversation
+
+    /**
+     * L'aperçu public de [otherId] : objectif, semaine en cours, passage actuel, présence.
+     *
+     * Rend `null` quand rien n'est lisible. Le client d'origine **levait** dans ce cas ; ici
+     * l'absence est une réponse, parce que « progression privée » est un état normal — celui
+     * d'un ami qui ne partage pas — et non une panne. Les confondre afficherait une erreur à
+     * quelqu'un qui a simplement coché « non ».
+     */
+    suspend fun overview(otherId: String): FriendOverview?
+
+    /**
+     * Les messages de [room], du plus ancien au plus récent, bornés à **une page**.
+     *
+     * @param before instant du plus ancien message déjà à l'écran, ou `null` pour la première
+     *   page. Le sens de la lecture est celui de l'original : on demande les **derniers**
+     *   (`order desc`), puis on les remet dans l'ordre chronologique. Sans ce renversement, la
+     *   première page afficherait les messages les plus **anciens** de la conversation.
+     *
+     * Les messages masqués pour moi sont retirés ici, et non par l'écran : c'est le même
+     * filtrage qui décide de la page, et le faire ailleurs ferait compter les messages cachés
+     * dans la règle « reste-t-il des messages plus anciens ».
+     */
+    suspend fun messages(room: ChatRoom, before: String? = null): List<ChatMessage>
+
+    suspend fun sendMessage(
+        room: ChatRoom,
+        body: String,
+        kind: ChatMessageKind = ChatMessageKind.TEXT,
+    )
+
+    suspend fun deleteMessage(messageId: String)
+
+    suspend fun reportMessage(messageId: String, reason: String)
+
+    /** Marque la conversation [linkId] comme lue par le compte courant. */
+    suspend fun markConversationRead(linkId: String)
+
+    /** Position de lecture de [otherId] sur [linkId], ou `null` s'il ne l'a jamais ouverte. */
+    suspend fun otherReadAt(linkId: String, otherId: String): String?
+
+    /** Masque [messageId] **pour le compte courant seulement** : l'autre le voit toujours. */
+    suspend fun hideMessageForMe(messageId: String)
+
+    /** Les membres de [groupId], profil joint quand il est lisible. */
+    suspend fun members(groupId: String): List<GroupMember>
+
+    suspend fun inviteGroupMember(groupId: String, friendId: String)
+
+    suspend fun acceptGroupInvite(groupId: String)
+
+    suspend fun declineGroupInvite(groupId: String)
+
+    suspend fun setGroupModerator(groupId: String, memberId: String, enabled: Boolean)
+
+    suspend fun removeGroupMember(groupId: String, memberId: String)
+
+    /** Supprime le cercle **et ses messages**, définitivement. */
+    suspend fun deleteGroup(groupId: String)
+
+    /** Les objectifs partagés de [linkId], du plus récent au plus ancien, bornés. */
+    suspend fun sharedGoals(linkId: String): List<SharedGoal>
+
+    suspend fun proposeSharedGoal(linkId: String, weekStart: String, targetSessions: Int)
+
+    suspend fun acceptSharedGoal(goalId: String)
+
+    /** Les rendez-vous **à venir** de [linkId] : le passé n'est pas demandé. */
+    suspend fun appointments(linkId: String): List<ReviewAppointment>
+
+    suspend fun proposeAppointment(linkId: String, startsAt: String)
+
+    suspend fun acceptAppointment(appointmentId: String)
+
+    suspend fun cancelAppointment(appointmentId: String)
 }

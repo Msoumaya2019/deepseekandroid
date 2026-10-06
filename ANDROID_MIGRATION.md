@@ -378,10 +378,10 @@ C'est la différence entre une liste de rappels et un outil de mémorisation.
 | Profils d'amis | `src/services/social.ts` | `core:data` (`SupabaseSocialSource`), `feature:social` | `friend_profiles` | **Porté** | `ensureProfile()` crée le profil et rend le **code d'invitation**. **Le profil est lu avant la liste** : sans lui on ne sait pas qui est « moi », donc ni quelle invitation est reçue ni laquelle est envoyée. La liste est alors **vide, et non fausse** — c'est un test, et c'est la première des quatre familles que `SocialRendererTest` surveille |
 | Demandes d'amis | `friend_links` | `core:domain/Social.kt`, `SocialRepository` | `friend_links` | **Porté** | les six gestes — demander, accepter, refuser, retirer, bloquer, débloquer — passent par les RPC du serveur, jamais par une écriture directe. Les trois listes — reçues, envoyées, bloquées — **ne se recouvrent pas et couvrent tout** (test). Une ligne bloquée ne s'affiche que si c'est **moi** qui ai bloqué |
 | Avatars | `src/services/avatars.ts` | `core:data` (lecture), `feature:social` (repli) | `friend_profiles` | **Écrite** | `avatar_path` **est lu** et porté jusqu'au modèle ; l'écran, lui, dessine l'**initiale** dans un médaillon de 52 px — exactement le repli de `FriendAvatar.tsx` (`size × 0,43`, vert, fond `soft`, bordure `softBorder`). **Écart assumé** : l'image distante demanderait un chargeur et un cache d'images que le projet n'a pas, et un carré vide serait pire qu'une initiale |
-| Messagerie | `src/ui/MessagingButton.tsx`, `SocialScreens.tsx` | — | `friend_messages`, `friend_message_reads`, `friend_message_hidden`, `friend_message_reports` | **À faire** | phase D. C'est **le seul point qui manque à l'écran des amis** : ni le bouton « Message », ni l'appui sur la ligne, ni l'ouverture d'un cercle ne sont rendus. **Omis, et non grisés** — un bouton qui n'ouvre rien est pire qu'un bouton absent. Le compte des non-lus, lui, est déjà porté : il est passé du bouton « Message » au **médaillon** de l'ami |
-| Groupes | — | `feature:social` | `friend_groups`, `friend_group_members` | **Porté** | la liste des cercles et leur création — **les membres ne sont pas encore affichés**, faute d'écran de conversation. La règle du nom : **deux caractères utiles**, espaces rognés — sans quoi « A » entouré d'espaces passerait pour deux caractères et le serveur refuserait le cercle. Le cercle « contact administrateur » est **signalé** comme tel : le serveur le nomme `'Contact · <nom>'`, un nom qui ne dit pas ce qu'il est |
-| Partage de progression | `publishSocialProgress` | — | `friend_progress`, `friend_shared_goals` | **À faire** | phase D — arrive avec l'écran de conversation |
-| Rendez-vous de révision entre amis | — | — | `friend_review_appointments` | **À faire** | phase D — arrive avec l'écran de conversation |
+| Messagerie | `src/ui/MessagingButton.tsx`, `SocialScreens.tsx` | `SocialSource` / `SupabaseSocialSource`, `SocialRepository` | `friend_messages`, `friend_message_reads`, `friend_message_hidden`, `friend_message_reports` | **Portée** | la **couche de données** est écrite et éprouvée contre une **source factice** : quelle page se lit à l'ouverture d'une pièce, le curseur de la page ancienne — l'instant du message le plus **ancien** affiché —, les deux transitions d'historique, la remise à zéro d'une pièce ouverte, et les compléments qui n'effacent pas les messages. L'**écran** est porté : `ConversationScreen.kt` dispose, `ConversationRenderer` calcule **sans appareil**, et les **trois portes** de l'original sont ouvertes — l'appui sur la ligne, le bouton « Message », et le bouton « Ouvrir » d'un cercle. **Trois capacités restent dehors**, faute de matière : l'**écoute** d'une récitation (URL signée + lecteur distinct de la séance coranique), le bouton **🏆 Défier** (l'écran Quiz n'existe pas) et le **direct** (canal temps réel). Le compte des non-lus reste sur le **médaillon** de l'ami, et non dans le bouton comme dans l'original |
+| Groupes | — | `feature:social` | `friend_groups`, `friend_group_members` | **Porté** | la liste des cercles et leur création — **les membres sont lus** par le dépôt de la conversation (`members(groupId)`) et **affichés** dans la carte du cercle, avec leurs trois droits distincts — rejoindre, nommer ou démettre un modérateur, retirer un membre. La règle du nom : **deux caractères utiles**, espaces rognés — sans quoi « A » entouré d'espaces passerait pour deux caractères et le serveur refuserait le cercle. Le cercle « contact administrateur » est **signalé** comme tel : le serveur le nomme `'Contact · <nom>'`, un nom qui ne dit pas ce qu'il est |
+| Partage de progression | `publishSocialProgress` | `SupabaseSocialSource` (`sharedGoals`, `proposeSharedGoal`, `acceptSharedGoal`), `Social` | `friend_progress`, `friend_shared_goals` | **Écrite** | les objectifs partagés sont **lus, proposés et acceptés** par le dépôt, et la section « Objectif partagé » de la conversation les affiche ; la règle « une proposition ne s'accepte ni deux fois ni la sienne » est dans `Social`, et le texte du partage — « Mon objectif … est atteint à … % » — avec son **arrondi** est dans `SocialText`. Le bouton `🏆 Défier` de l'original, lui, **n'est pas porté** : il mène à l'écran Quiz, qui n'existe pas — et un bouton sans destination est **retiré** au lieu d'être grisé |
+| Rendez-vous de révision entre amis | — | `SupabaseSocialSource`, `Social.appointment` | `friend_review_appointments` | **Portée** | proposer, accepter, annuler : le dépôt le fait, et la section « Rendez-vous de révision » de la conversation les affiche. La saisie est refusée si le format n'est pas `AAAA-MM-JJ HH:mm` **ancré des deux côtés**, si la date n'existe pas — « 2026-02-31 » respecte le format, et un analyseur permissif la corrigerait **en silence** au 3 mars — ou si l'instant n'est pas **strictement futur** |
 | Temps réel | `src/services/social.ts` (Realtime) | — | — | **À faire** | phase D — le module Realtime est déjà branché sur le client |
 
 **L'écran.** `feature/social/SocialScreen.kt` porte la liste telle que `SocialScreens.tsx` la
@@ -392,6 +392,17 @@ contact de l'administration. Le calcul vit **hors de Compose**, dans `SocialRend
 fonction pure de `(état, recherche, filtre, dépliages, saisies)`, éprouvée **sans appareil**. L'écran
 ne calcule rien — il dispose.
 
+**L'écran de la conversation, et les trois portes.** Le même fichier porte les **trois portes**
+vers la conversation — l'appui sur la ligne d'un ami, son bouton « Message », et le bouton
+« Ouvrir » d'un cercle —, et bascule sur `feature/social/ConversationScreen.kt` quand une pièce est
+ouverte : c'est le dépôt qui le dit (`state.room != null`), et non l'écran, pour qu'il n'y ait
+qu'une réponse à « qu'est-ce qui est ouvert ». La conversation a son propre calcul,
+`ConversationRenderer`, **sans appareil** : l'en-tête et son geste de signalement, le dépliant
+« Profil et entraide » (aperçu de l'ami, objectif partagé, rendez-vous), la carte des membres d'un
+cercle, la discussion avec son historique paginé, sa suspension, ses messages et ses récitations
+partagées, le formulaire de signalement, et le compositeur — **hors de la zone défilante**,
+pour qu'on écrive en lisant un message ancien.
+
 **Quatre écarts, tous déclarés dans l'en-tête du fichier.**
 
 1. « Invitations reçues » **n'est plus imprimé à vide** : le client d'origine écrit toujours ce
@@ -399,9 +410,24 @@ ne calcule rien — il dispose.
    croire à un chargement qui n'en finit pas.
 2. Le pied « Contacter l'admin » **ne s'affiche plus quand personne n'est connecté** : il n'y a
    alors ni cercle à créer, ni compte pour le créer.
-3. Le **compte des non-lus** passe du bouton « Message » au médaillon — conséquence directe de
-   l'omission de la conversation.
+3. Le **compte des non-lus** reste sur le médaillon et **n'est pas** repris dans le bouton
+   « Message », revenu avec la conversation : c'est là que l'œil va en parcourant une
+   liste, et le mettre aussi dans le bouton ferait trois choses à lire — une icône, un mot,
+   un chiffre — dans un espace qui n'en tient pas trois.
 4. Les **avatars** sont des initiales (voir le tableau).
+
+**La couche de données de la conversation.** Vingt-deux opérations — lire une page, remonter l'historique, envoyer, supprimer,
+masquer, signaler, gérer les membres d'un cercle, fixer un objectif partagé, proposer un
+rendez-vous — vivent dans `SocialSource` et son implémentation Supabase, et leurs règles
+d'**ordonnancement et de survie** dans `SocialRepository`. Elles s'éprouvent contre la **même**
+source factice que la liste d'amis (23 tests), et un **contrôle de forme** tient la source
+**unique** de la taille de page : ce nombre sert deux fois — la requête le demande au serveur, et
+la règle « en reste-t-il ? » le relit pour savoir si la page reçue est pleine —, et le recopier
+ferait diverger les deux **en silence**.
+
+**Ce qu'elle ne prouve pas.** Rien n'a encore été exercé **contre le serveur** : les tables
+`friend_messages`, `friend_message_hidden`, `friend_message_reads`, `friend_group_members`,
+`friend_shared_goals` et `friend_review_appointments` ne sont lues que par la doublure.
 
 **Ce que l'écran ne prouve pas.** Le branchement — la fabrique du modèle, la relecture à
 l'ouverture, les quinze gestes et saisies — est tenu par un **contrôle de forme**

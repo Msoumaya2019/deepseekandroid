@@ -78,6 +78,7 @@ class SocialScreenWiringTest {
             "onUnblock = viewModel::onUnblock",
             "onCodeCopied = viewModel::onCodeCopied",
             "onAdminContact = viewModel::onOpenAdminContact",
+            "onOpenConversation = viewModel::onOpenConversation",
         )) {
             assertTrue(
                 source.contains(reference),

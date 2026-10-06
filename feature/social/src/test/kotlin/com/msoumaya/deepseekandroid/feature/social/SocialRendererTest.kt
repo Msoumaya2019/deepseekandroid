@@ -1,5 +1,7 @@
 package com.msoumaya.deepseekandroid.feature.social
 
+import com.msoumaya.deepseekandroid.core.data.remote.ChatRoom
+import com.msoumaya.deepseekandroid.core.data.repository.RoomState
 import com.msoumaya.deepseekandroid.core.data.repository.SocialState
 import com.msoumaya.deepseekandroid.core.domain.Social
 import com.msoumaya.deepseekandroid.core.domain.SocialText
@@ -103,6 +105,7 @@ class SocialRendererTest {
         suspension: SocialSuspension? = null,
         summaries: Map<String, ConversationSummary> = emptyMap(),
         online: Map<String, Boolean> = emptyMap(),
+        room: RoomState? = null,
         loading: Boolean = false,
         signedIn: Boolean = true,
         busy: Boolean = false,
@@ -120,6 +123,7 @@ class SocialRendererTest {
         suspension = suspension,
         summaries = summaries,
         online = online,
+        room = room,
     )
 
     private fun rendu(
@@ -655,5 +659,24 @@ class SocialRendererTest {
     @Test
     fun `sans suspension, il n'y a pas de bandeau`() {
         assertNull(rendu(etat(suspension = null)).suspension)
+    }
+
+    // -----------------------------------------------------------------------
+    // La pièce ouverte
+    // -----------------------------------------------------------------------
+
+    /**
+     * **Le fait qui fait basculer l'écran.** `conversationOpen` n'est pas un état d'interface : il
+     * est lu sur le dépôt, et c'est `SocialScreen` qui s'en sert pour composer la conversation à la
+     * place de la liste. Le tenir autrement — un booléen gardé par l'écran, par exemple —
+     * donnerait deux réponses à « qu'est-ce qui est ouvert », et l'écran finirait par montrer une
+     * conversation fermée, ou l'inverse.
+     */
+    @Test
+    fun `la piece ouverte du depot fait basculer l'ecran`() {
+        assertTrue(
+            rendu(etat(room = RoomState(room = ChatRoom(linkId = "lien-1")))).conversationOpen,
+        )
+        assertFalse(rendu(etat(room = null)).conversationOpen)
     }
 }

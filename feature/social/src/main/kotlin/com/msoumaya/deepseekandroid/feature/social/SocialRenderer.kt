@@ -69,6 +69,9 @@ internal object SocialRenderer {
             signedIn = state.signedIn,
             busy = state.busy,
             notice = state.notice,
+            // La même vérité que `ConversationUiState.open`, lue par l'autre écran : ce n'est pas
+            // l'écran qui décide de ce qui est ouvert, c'est le dépôt.
+            conversationOpen = state.room != null,
             suspension = state.suspension
                 ?.takeIf { Social.isSuspended(it, nowIso) }
                 ?.let { SocialText.suspended(it.reason) },

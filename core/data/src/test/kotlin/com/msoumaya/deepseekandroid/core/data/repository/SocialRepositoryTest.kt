@@ -1,18 +1,11 @@
 package com.msoumaya.deepseekandroid.core.data.repository
 
-import com.msoumaya.deepseekandroid.core.data.remote.OwnerStore
 import com.msoumaya.deepseekandroid.core.data.remote.SocialInbox
-import com.msoumaya.deepseekandroid.core.data.remote.SocialSource
 import com.msoumaya.deepseekandroid.core.domain.SocialText
 import com.msoumaya.deepseekandroid.core.model.ConversationSummary
 import com.msoumaya.deepseekandroid.core.model.FriendBrief
-import com.msoumaya.deepseekandroid.core.model.FriendGroup
 import com.msoumaya.deepseekandroid.core.model.FriendLink
 import com.msoumaya.deepseekandroid.core.model.FriendLinkStatus
-import com.msoumaya.deepseekandroid.core.model.FriendProfile
-import com.msoumaya.deepseekandroid.core.model.SocialSuspension
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
@@ -41,10 +34,14 @@ import kotlin.test.assertTrue
  *
  * ## La doublure
  *
- * [FakeSocialSource] est en mémoire, compte ses appels, et sait refuser **séparément** les
- * lectures principales, les compléments, la boîte de réception et les gestes. C'est cette
- * séparation qui rend mesurable ce que le client d'origine ne distinguait pas : un échec des
- * cercles et un échec de la liste d'amis n'ont pas les mêmes conséquences.
+ * [FakeSocialSource] vit dans `SocialTestDoubles.kt`, avec [FakeOwners], et sert aussi
+ * `ConversationRepositoryTest` : une seule doublure pour les deux dépôts qu'elle alimente, donc
+ * un seul endroit à compléter quand l'interface s'étend — deux copies auraient divergé au
+ * premier ajout, et le symptôme aurait été un test voisin qui échoue sans rien expliquer. Elle
+ * est en mémoire, compte ses appels, et sait refuser **séparément** les lectures principales, les
+ * compléments, la boîte de réception et les gestes. C'est cette séparation qui rend mesurable ce
+ * que le client d'origine ne distinguait pas : un échec des cercles et un échec de la liste
+ * d'amis n'ont pas les mêmes conséquences.
  *
  * ## Pourquoi [settle] et non `advanceUntilIdle`
  *
@@ -419,101 +416,4 @@ class SocialRepositoryTest {
         createdAt = "2026-01-01T10:00:00Z",
         other = FriendBrief(id = autre, displayName = "Ami $autre"),
     )
-
-    private class FakeOwners(owner: String?) : OwnerStore {
-        private val flow = MutableStateFlow(owner)
-        override val ownerId: Flow<String?> = flow
-        override suspend fun currentOwner(): String? = flow.value
-        override suspend fun setOwner(userId: String?) {
-            flow.value = userId
-        }
-    }
-
-    /**
-     * Doublure en mémoire, qui compte ses appels et refuse **par catégorie**.
-     *
-     * Le découpage des refus n'est pas un confort de test : c'est la seule façon de mesurer
-     * qu'un échec des cercles et un échec de la liste d'amis n'ont pas le même effet. Une
-     * doublure qui refuserait tout d'un bloc ne distinguerait pas les deux règles.
-     */
-    private class FakeSocialSource : SocialSource {
-
-        var profile = FriendProfile(id = "moi-0000", displayName = "Moi", inviteCode = "CODE1234")
-        var links: List<FriendLink> = emptyList()
-        var groups: List<FriendGroup> = emptyList()
-        var suspension: SocialSuspension? = null
-        var inbox = SocialInbox()
-
-        var failEssentials: Throwable? = null
-        var failExtras: Throwable? = null
-        var failInbox: Throwable? = null
-        var failAction: Throwable? = null
-
-        /** Appelé **pendant** un geste, donc pendant que le dépôt est occupé. */
-        var onAction: (() -> Unit)? = null
-
-        var calls = 0
-        var inboxCalls = 0
-        val actions = mutableListOf<String>()
-
-        private fun <T> refuser(error: Throwable?): T = throw error!!
-
-        override suspend fun ensureProfile(): FriendProfile {
-            calls++
-            failEssentials?.let { refuser<Nothing>(it) }
-            return profile
-        }
-
-        override suspend fun links(userId: String): List<FriendLink> {
-            calls++
-            failEssentials?.let { refuser<Nothing>(it) }
-            return links
-        }
-
-        override suspend fun groups(): List<FriendGroup> {
-            calls++
-            failExtras?.let { refuser<Nothing>(it) }
-            return groups
-        }
-
-        override suspend fun suspension(userId: String): SocialSuspension? {
-            calls++
-            failExtras?.let { refuser<Nothing>(it) }
-            return suspension
-        }
-
-        override suspend fun inbox(links: List<FriendLink>): SocialInbox {
-            inboxCalls++
-            failInbox?.let { refuser<Nothing>(it) }
-            return inbox
-        }
-
-        override suspend fun requestFriend(code: String) = geste("requestFriend")
-
-        override suspend fun acceptFriend(linkId: String) = geste("acceptFriend")
-
-        override suspend fun declineFriend(linkId: String) = geste("declineFriend")
-
-        override suspend fun removeFriend(linkId: String) = geste("removeFriend")
-
-        override suspend fun blockFriend(otherId: String) = geste("blockFriend")
-
-        override suspend fun unblockFriend(otherId: String) = geste("unblockFriend")
-
-        override suspend fun createGroup(name: String): String {
-            geste("createGroup")
-            return "g-1"
-        }
-
-        override suspend fun openAdminContact(): String {
-            geste("openAdminContact")
-            return "g-contact"
-        }
-
-        private fun geste(nom: String) {
-            actions += nom
-            onAction?.invoke()
-            failAction?.let { refuser<Nothing>(it) }
-        }
-    }
 }
