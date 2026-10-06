@@ -1,6 +1,8 @@
 package com.msoumaya.deepseekandroid.core.playback
 
+import androidx.media3.common.Player
 import com.msoumaya.deepseekandroid.core.audio.AudioOutput
+import com.msoumaya.deepseekandroid.core.audio.AudioOutputWithPlayer
 import com.msoumaya.deepseekandroid.core.audio.AudioSessionController
 import com.msoumaya.deepseekandroid.core.audio.AudioSessionState
 import com.msoumaya.deepseekandroid.core.domain.Audio
@@ -37,6 +39,16 @@ class AudioSessionHolder(
 ) {
 
     private val controller = AudioSessionController(output, scope, initialReciter)
+
+    /**
+     * Le lecteur publiable, si celui qu'on nous a donné en est un.
+     *
+     * `null` avec un double de test, et non une erreur : un double n'a aucun `Player` à
+     * publier, et rien dans la conduite d'une séance n'en dépend. C'est `:app` qui, lui,
+     * construit un [com.msoumaya.deepseekandroid.core.audio.AudioOutputWithPlayer] et dépose
+     * ce lecteur dans [PlaybackBridge] pour que le service le retrouve.
+     */
+    val player: Player? = (output as? AudioOutputWithPlayer)?.player
 
     /**
      * Ce que le mini-lecteur affiche.

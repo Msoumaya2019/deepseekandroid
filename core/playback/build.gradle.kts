@@ -1,3 +1,4 @@
+import org.gradle.api.tasks.PathSensitivity
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -50,4 +51,16 @@ tasks.withType<Test>().configureEach {
         events("passed", "skipped", "failed")
         exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
     }
+
+    // Les controles de forme de ce module lisent des fichiers **hors du module** : la
+    // declaration du service dans `app/AndroidManifest.xml`, et le depot du lecteur dans
+    // `DeepseekApplication`. Sans ces declarees en entrees, Gradle voit la tache « up-to-date »
+    // des que le code du module n'a pas bouge — et le test **passe sans etre rejoue**, en
+    // lisant un fichier dont le contenu a change. Le controle serait vert pour la mauvaise
+    // raison, ce qui est pire que rouge : le falsificateur l'a montre.
+    inputs.files(
+        rootProject.file("app/src/main/AndroidManifest.xml"),
+        rootProject.file("app/src/main/kotlin/com/msoumaya/deepseekandroid/DeepSeekApplication.kt"),
+    ).withPropertyName("fichiersDePublicationLusParLesControles")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
 }

@@ -39,6 +39,12 @@ dependencies {
     // pas.
     implementation(libs.androidx.media3.exoplayer)
 
+    // `Player` est **exposé par l'API** : `core:playback` doit pouvoir le lire pour le donner
+    // à un `MediaSession`, sans dépendre de l'implémentation ExoPlayer ni la reconstruire.
+    // Un `api` sur `media3-common` seul laisse `ExoPlayer` en `implementation` : la version
+    // reste déclarée une fois, et le lecteur concret reste caché.
+    api(libs.androidx.media3.common)
+
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.coroutines.android)
 

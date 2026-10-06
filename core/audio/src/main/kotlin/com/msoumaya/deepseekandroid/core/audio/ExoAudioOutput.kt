@@ -29,8 +29,13 @@ import kotlinx.coroutines.flow.receiveAsFlow
  *
  * Le mode silencieux du téléphone n'a rien à demander ici : sur Android il ne concerne pas le
  * flux multimédia. C'est une différence avec iOS, où `playsInSilentMode` devait être demandé.
+ *
+ * **Le lecteur est exposé** ([AudioOutputWithPlayer]) parce qu'un `MediaSession` se construit
+ * autour d'un `Player`, et non autour de cette interface : c'est le seul moyen de publier la
+ * séance vers l'écran verrouillé sans reconstruire un second ExoPlayer — deux lecteurs
+ * joueraient la même récitation, l'un par-dessus l'autre.
  */
-class ExoAudioOutput(context: Context) : AudioOutput {
+class ExoAudioOutput(context: Context) : AudioOutputWithPlayer {
 
     private val completionsChannel = Channel<Unit>(Channel.CONFLATED)
     private val failuresChannel = Channel<String>(Channel.CONFLATED)
@@ -38,7 +43,7 @@ class ExoAudioOutput(context: Context) : AudioOutput {
     override val completions: Flow<Unit> = completionsChannel.receiveAsFlow()
     override val failures: Flow<String> = failuresChannel.receiveAsFlow()
 
-    private val player: ExoPlayer = ExoPlayer.Builder(context).build().apply {
+    private val exoPlayer: ExoPlayer = ExoPlayer.Builder(context).build().apply {
         setAudioAttributes(
             AudioAttributes.Builder()
                 .setUsage(C.USAGE_MEDIA)
@@ -60,36 +65,39 @@ class ExoAudioOutput(context: Context) : AudioOutput {
         )
     }
 
+    /** Le lecteur publié : ce que le `MediaSession` de `core:playback` reçoit. */
+    override val player: Player get() = exoPlayer
+
     override fun play(url: String, startSeconds: Double?) {
-        player.setMediaItem(MediaItem.fromUri(url))
-        player.prepare()
+        exoPlayer.setMediaItem(MediaItem.fromUri(url))
+        exoPlayer.prepare()
         // Le rembobinage est explicite, même à zéro : un lecteur qui a terminé son fichier reste
         // à la fin, et répéter le même verset ne produirait alors aucun son.
-        player.seekTo(((startSeconds ?: 0.0) * 1000.0).toLong())
-        player.playWhenReady = true
+        exoPlayer.seekTo(((startSeconds ?: 0.0) * 1000.0).toLong())
+        exoPlayer.playWhenReady = true
     }
 
     override fun setSpeed(speed: Float) {
-        player.setPlaybackSpeed(speed)
+        exoPlayer.setPlaybackSpeed(speed)
     }
 
     override fun pause() {
-        player.playWhenReady = false
+        exoPlayer.playWhenReady = false
     }
 
     override fun resume() {
-        player.playWhenReady = true
+        exoPlayer.playWhenReady = true
     }
 
     override fun stop() {
-        player.stop()
-        player.clearMediaItems()
+        exoPlayer.stop()
+        exoPlayer.clearMediaItems()
         // Une fin non encore consommée ferait avancer la séance suivante d'un verset.
         completionsChannel.tryReceive()
     }
 
     override fun release() {
-        player.release()
+        exoPlayer.release()
     }
 
     private companion object {

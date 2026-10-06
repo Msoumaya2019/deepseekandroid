@@ -24,6 +24,12 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- Rappel de 19 h et notifications de messages. Demandee a partir d'Android 13. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Lecture ecran eteint. Android n'autorise un lecteur a continuer qu'au travers d'un
+         service d'avant-plan ; ces deux permissions sont ce qui permet de l'elever. La premiere
+         existe depuis Android 8, la seconde est obligatoire a partir d'Android 14 et doit citer
+         le type `mediaPlayback`. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 
     <application
         android:name=".DeepSeekApplication"
@@ -47,5 +53,26 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!--
+          La lecture audible ecran eteint.
+
+          `exported="true"` est exige : c'est le systeme, et non l'application, qui lie ce
+          service pour l'ecran verrouille et les ecouteurs Bluetooth. Le filtrer rendrait la
+          notification inoperante.
+
+          `foregroundServiceType="mediaPlayback"` dit a Android ce que le service fait, et
+          conditionne l'autorisation de tourner en avant-plan sur les versions recentes. Le
+          service herite de `MediaSessionService`, qui eleve et abaisse lui-meme l'avant-plan
+          selon que la lecture est en cours ou arretee : rien a gerer a la main.
+        -->
+        <service
+            android:name="com.msoumaya.deepseekandroid.core.playback.PlaybackService"
+            android:exported="true"
+            android:foregroundServiceType="mediaPlayback">
+            <intent-filter>
+                <action android:name="androidx.media3.session.MediaSessionService" />
+            </intent-filter>
+        </service>
     </application>
 </manifest>

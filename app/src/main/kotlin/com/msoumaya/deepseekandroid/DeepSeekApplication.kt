@@ -4,6 +4,7 @@ import android.app.Application
 import com.msoumaya.deepseekandroid.core.audio.ExoAudioOutput
 import com.msoumaya.deepseekandroid.core.data.AppContainer
 import com.msoumaya.deepseekandroid.core.data.remote.SupabaseConfig
+import com.msoumaya.deepseekandroid.core.playback.PlaybackBridge
 
 /**
  * Point d'entrée de l'application : construit le graphe d'objets une seule fois.
@@ -44,5 +45,16 @@ class DeepSeekApplication : Application() {
             // qui survivrait mal à la fermeture de celle-ci.
             audioOutput = ExoAudioOutput(applicationContext),
         )
+        // Le lecteur unique est **depose** pour le service : celui-ci peut etre reveille par
+        // Android alors que l'application n'existe plus en memoire, et n'a donc aucun autre
+        // moyen de le retrouver. Deposer un lecteur qui ne joue pas encore est sans effet :
+        // aucune session n'est publiee tant qu'aucune recreation n'a commence.
+        //
+        // Les deux `?.` sont distincts, et pas redondants : le conteneur n'a **aucun** detenteur
+        // quand aucun lecteur ne lui a ete donne, et le detenteur n'a **aucun** lecteur a publier
+        // quand son `AudioOutput` n'est pas un lecteur Media3 — c'est le cas d'une doublure de
+        // test. `:app` fournit toujours un `ExoAudioOutput`, donc les deux sont non nuls ici ;
+        // mais l'expression dit ce dont elle depend, et ne suppose rien.
+        container.playback?.player?.let { PlaybackBridge.publish(it) }
     }
 }

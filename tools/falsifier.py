@@ -3141,6 +3141,71 @@ CAS: list[dict] = [
         "tache": ":feature:reader:testDebugUnitTest",
         "attendus": ["le lecteur ne libere plus la seance en partant"],
     },
+    {
+        # Le type d'avant-plan disparait : le code compile, les tests passent, et l'application
+        # s'arrete a la premiere lecture ecran eteint, sur Android 14. Rien d'autre ne le voit.
+        "nom": "publication : le service perd son type d'avant-plan",
+        "fichier": "app/src/main/AndroidManifest.xml",
+        "avant": "            android:foregroundServiceType=\"mediaPlayback\">",
+        "apres": "            >",
+        "tache": ":core:playback:testDebugUnitTest",
+        "attendus": ["le service est declare avec le type d'avant-plan de lecture"],
+    },
+    {
+        # Le service cesse d'etre exporte : le systeme ne le lie plus pour l'ecran verrouille,
+        # donc la notification et les commandes Bluetooth cessent d'exister.
+        "nom": "publication : le service cesse d'etre exporte",
+        "fichier": "app/src/main/AndroidManifest.xml",
+        "avant": "            android:exported=\"true\"\n            android:foregroundServiceType=\"mediaPlayback\">",
+        "apres": "            android:exported=\"false\"\n            android:foregroundServiceType=\"mediaPlayback\">",
+        "tache": ":core:playback:testDebugUnitTest",
+        "attendus": ["le service est declare exporte avec l'action de media3"],
+    },
+    {
+        # Le service construit son propre lecteur : deux lecteurs jouent la meme recitation,
+        # l'un par-dessus l'autre, decales de quelques millisecondes.
+        #
+        # La mutation ecrit `ExoAudioOutput(` et non `ExoPlayer.Builder(` : `core:playback` a
+        # `core:audio` en `api`, donc ce nom compile sans ajouter de dependance. Ecrire
+        # `ExoPlayer` demanderait `media3-exoplayer`, que ce module n'a pas — et l'ajouter
+        # **pour faire passer le cas** aurait ete un contresens.
+        "nom": "publication : le service construit son propre lecteur",
+        "fichier": "core/playback/src/main/kotlin/com/msoumaya/deepseekandroid/core/playback/PlaybackService.kt",
+        "avant": "        val player = PlaybackBridge.player ?: return null",
+        "apres": "        val player: Player = com.msoumaya.deepseekandroid.core.audio.ExoAudioOutput(this).player",
+        "tache": ":core:playback:testDebugUnitTest",
+        "attendus": ["le service reprend le lecteur au lieu d'en construire un"],
+    },
+    {
+        # L'application cesse de deposer le lecteur : le service, reveille sans elle, ne trouve
+        # plus rien a publier — et se contente d'une session vide, ou de rien.
+        "nom": "publication : l'application ne depose plus le lecteur",
+        "fichier": "app/src/main/kotlin/com/msoumaya/deepseekandroid/DeepSeekApplication.kt",
+        "avant": "        container.playback?.player?.let { PlaybackBridge.publish(it) }",
+        "apres": "        // depose retire",
+        "tache": ":core:playback:testDebugUnitTest",
+        "attendus": ["le pont est depose par l'application et non par un ecran"],
+    },
+    {
+        # Le service se met a conduire la seance : deux conducteurs pour un seul lecteur, donc
+        # deux seances concurrentes qui se disputent le verset suivant.
+        "nom": "publication : le service conduit la seance",
+        "fichier": "core/playback/src/main/kotlin/com/msoumaya/deepseekandroid/core/playback/PlaybackService.kt",
+        "avant": "        return MediaSession.Builder(this, player).build()",
+        "apres": "        val suivant = com.msoumaya.deepseekandroid.core.domain.AudioQueue.next(\n            range = com.msoumaya.deepseekandroid.core.model.Range(1, 1),\n            current = com.msoumaya.deepseekandroid.core.model.AudioPosition(1, 1),\n            mode = com.msoumaya.deepseekandroid.core.model.RepeatMode.PASSAGE,\n            count = 1,\n            autoStop = false,\n            gapSeconds = 0,\n        )\n        require(suivant is com.msoumaya.deepseekandroid.core.domain.AudioStep)\n        return MediaSession.Builder(this, player).build()",
+        "tache": ":core:playback:testDebugUnitTest",
+        "attendus": ["le service ne conduit aucune decision de seance"],
+    },
+    {
+        # La mise en forme du titre derive : l'ecran verrouille affiche « verset 1 » sans dire
+        # de quelle application il s'agit. Le client d'origine prefixe toujours par « Coran · ».
+        "nom": "publication : le titre perd le nom de l'application",
+        "fichier": "core/playback/src/main/kotlin/com/msoumaya/deepseekandroid/core/playback/AudioNotification.kt",
+        "avant": "    fun title(verseLabel: String): String = \"Coran · $verseLabel\"",
+        "apres": "    fun title(verseLabel: String): String = verseLabel",
+        "tache": ":core:playback:testDebugUnitTest",
+        "attendus": ["le titre porte le passage, precede du nom de l'application"],
+    },
 ]
 
 
