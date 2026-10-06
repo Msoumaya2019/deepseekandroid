@@ -362,6 +362,10 @@ fun ReaderRoute(
         initialPage = page,
         source = source,
         pages = pages,
+        // La séance d'écoute vient du conteneur, et non du lecteur : elle vit donc aussi
+        // longtemps que l'application. Revenir au lecteur retrouve la récitation en cours au
+        // lieu de la faire repartir du premier verset.
+        playback = container.playback,
         onClose = quitter,
         // Le premier rapport répète la page d'ouverture : ce n'est pas un geste, et le marquer
         // interdirait d'adopter la page mémorisée, qui arrive après l'état du compte. Les

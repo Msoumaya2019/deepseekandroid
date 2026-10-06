@@ -38,6 +38,11 @@ dependencies {
     api(project(":core:model"))
     api(project(":core:domain"))
 
+    // La séance d'écoute vit dans le conteneur, à l'échelle de l'application : elle doit donc
+    // être atteignable depuis les fonctionnalités, qui ne dépendent pas de `:app`. Exposée par
+    // l'API, comme `core:domain` : un appelant qui reçoit la séance reçoit aussi son état.
+    api(project(":core:playback"))
+
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.coroutines.android)

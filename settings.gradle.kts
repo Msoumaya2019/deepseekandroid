@@ -24,6 +24,7 @@ rootProject.name = "deepseekandroid"
 //  core:data      -> persistance locale (SQLite, DataStore, Keystore) + Supabase
 //  core:design    -> jetons de design et composants Compose partagés
 //  core:audio     -> lecture audio (Media3) et enchaînement des versets
+//  core:playback  -> la séance d'écoute a l'echelle de l'application : elle survit a l'ecran
 //  feature:*      -> un module par domaine fonctionnel
 //  navigation     -> graphe de navigation unique
 //  app            -> point d'entrée, assemblage, DI manuelle
@@ -36,6 +37,7 @@ include(":core:domain")
 include(":core:data")
 include(":core:design")
 include(":core:audio")
+include(":core:playback")
 
 include(":navigation")
 

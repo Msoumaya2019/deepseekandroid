@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.msoumaya.deepseekandroid.core.audio"
+    namespace = "com.msoumaya.deepseekandroid.core.playback"
     compileSdk = 36
 
     defaultConfig {
@@ -26,18 +26,15 @@ kotlin {
 }
 
 dependencies {
-    // Le domaine est exposé par l'API : l'enchaînement des versets est une règle de
-    // `core:domain`, ce module ne fait que l'exécuter. Un appelant qui reçoit un état de
-    // lecture reçoit aussi `AudioPosition` et `Range`.
-    api(project(":core:domain"))
+    // La lecture est exposée par l'API : ce module ne fait que **tenir** une séance, et un
+    // appelant qui la reçoit reçoit aussi son état, ses réglages et sa position.
+    api(project(":core:audio"))
 
-    // ExoPlayer, et **pas** `media3-session` : une session de média sert à publier des
-    // commandes vers l'écran verrouillé et les écouteurs Bluetooth, ce qui suppose un service
-    // d'avant-plan et une notification. Cette dépendance appartient à `core:playback`, qui
-    // portera ce service — et qui la déclare déjà. L'ajouter ici donnerait une seconde source
-    // de vérité pour la même version, et une notification fantôme tant que le service n'existe
-    // pas.
-    implementation(libs.androidx.media3.exoplayer)
+    // Media3 Session arrive **ici**, et non dans `core:audio` : c'est ce module qui publiera la
+    // séance vers l'écran verrouillé et les écouteurs Bluetooth, une fois le service d'avant-plan
+    // écrit. Tant qu'il ne l'est pas, la dépendance est déclarée mais aucun `MediaSession` n'est
+    // construit — une session sans service donnerait une notification fantôme.
+    implementation(libs.androidx.media3.session)
 
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.coroutines.android)

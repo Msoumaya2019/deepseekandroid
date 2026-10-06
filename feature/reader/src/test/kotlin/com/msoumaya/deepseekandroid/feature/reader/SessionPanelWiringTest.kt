@@ -153,7 +153,7 @@ class SessionPanelWiringTest {
         // montrer ce qui joue.
         assertTrue(
             sourceDuLecteur().contains(
-                "active = if (audioState.isOpen) ReviewText.Action.LISTEN else null,",
+                "active = if (audioState?.isOpen == true) ReviewText.Action.LISTEN else null,",
             ),
             "La barre ne sait plus quel geste est en cours : « Écouter » ne se distinguerait " +
                 "plus quand la lecture est ouverte.",

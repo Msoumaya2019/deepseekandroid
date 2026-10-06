@@ -78,7 +78,7 @@ class VerseActionsWiringTest {
     @Test
     fun `ecouter joue la plage d'un seul verset`() {
         assertTrue(
-            sourceDuLecteur().contains("audio.start(Range(verseId, verseId), single)"),
+            sourceDuLecteur().contains("playback?.start(Range(verseId, verseId), single)"),
             "« Écouter ce verset » ne lance plus la plage d'un seul verset : il jouerait la " +
                 "page, ou rien du tout, alors que le bouton annonce ce verset.",
         )

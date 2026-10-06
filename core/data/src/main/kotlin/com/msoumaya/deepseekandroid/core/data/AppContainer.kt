@@ -39,6 +39,8 @@ import com.msoumaya.deepseekandroid.core.domain.Quran
 import com.msoumaya.deepseekandroid.core.domain.QuranArchive
 import com.msoumaya.deepseekandroid.core.domain.QuranDataLoader
 import com.msoumaya.deepseekandroid.core.domain.StoredAudioSettings
+import com.msoumaya.deepseekandroid.core.audio.AudioOutput
+import com.msoumaya.deepseekandroid.core.playback.AudioSessionHolder
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -86,7 +88,15 @@ private val Context.sessionDataStore: DataStore<Preferences> by preferencesDataS
  */
 class AppContainer(
     context: Context,
-    val supabase: SupabaseConfig = SupabaseConfig.PLACEHOLDER,
+    private val supabase: SupabaseConfig = SupabaseConfig.PLACEHOLDER,
+    /**
+     * Le lecteur natif, construit par `:app`.
+     *
+     * Il est **reçu**, et non construit ici : `ExoAudioOutput` demande un `Context` et Media3,
+     * et le conteneur doit rester éprouvable sans appareil. Un défaut `null` laisse le
+     * conteneur utilisable dans les tests qui n'écoutent rien.
+     */
+    audioOutput: AudioOutput? = null,
 ) {
 
     private val appContext = context.applicationContext
@@ -100,6 +110,22 @@ class AppContainer(
      * de calcul, pas d'attente disque.
      */
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    /**
+     * La séance d'écoute de l'application — **une seule**, pour toute la vie du processus.
+     *
+     * Elle vivait dans un `remember` du lecteur et mourait avec l'écran : quitter la page
+     * coupait la récitation, et y revenir la faisait repartir du premier verset. Elle est ici
+     * parce que le conteneur vit aussi longtemps que l'application, et que la portée est
+     * exactement ce qui décidait du défaut.
+     *
+     * Elle est déclarée **après** [scope], dont elle dépend : l'initialiser plus haut compilerait
+     * à tort si `scope` devenait un jour `const`, et l'ordre dit la dépendance.
+     *
+     * `null` quand aucun lecteur natif n'a été fourni : les tests qui n'écoutent rien n'ont
+     * pas à en construire un, et les appelants doivent alors savoir qu'il n'y a rien à piloter.
+     */
+    val playback: AudioSessionHolder? = audioOutput?.let { AudioSessionHolder(it, scope) }
 
     // -----------------------------------------------------------------------
     // Stockage local

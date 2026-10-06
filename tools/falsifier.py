@@ -3101,6 +3101,46 @@ CAS: list[dict] = [
         "tache": ":feature:progress:testDebugUnitTest",
         "attendus": ["le renderer recoit l'instantane et le compte"],
     },
+    {
+        # Le detenteur ne retient plus les reglages : relancer le meme passage repart des valeurs
+        # par defaut, et la personne retrouve ses reglages perdus sans qu'on le lui dise.
+        "nom": "seance : les reglages ne sont plus retenus par le detenteur",
+        "fichier": "core/playback/src/main/kotlin/com/msoumaya/deepseekandroid/core/playback/AudioSessionHolder.kt",
+        "avant": "    fun updateSettings(value: AudioSession) {\n        settings = value",
+        "apres": "    fun updateSettings(value: AudioSession) {\n        settings = AudioSession()",
+        "tache": ":core:playback:testDebugUnitTest",
+        "attendus": ["les reglages sont retenus par le detenteur"],
+    },
+    {
+        # La reprise perd la seance : relancer repart d'une plage vide au lieu de la seance
+        # ouverte. Le bouton reste la, et ne fait plus ce qu'il annonce.
+        "nom": "seance : la reprise repart d'une seance vide",
+        "fichier": "core/playback/src/main/kotlin/com/msoumaya/deepseekandroid/core/playback/AudioSessionHolder.kt",
+        "avant": "    fun start(range: Range) = controller.start(range, settings)",
+        "apres": "    fun start(range: Range) = controller.start(range, AudioSession())",
+        "tache": ":core:playback:testDebugUnitTest",
+        "attendus": ["start sans reglages reprend la derniere valeur connue"],
+    },
+    {
+        # Le detenteur libere le lecteur natif des qu'une seance se ferme : c'est le defaut
+        # d'origine, deplace d'un cran. Fermer une seance doit l'arreter, pas detruire le lecteur.
+        "nom": "seance : fermer une seance libere le lecteur natif",
+        "fichier": "core/playback/src/main/kotlin/com/msoumaya/deepseekandroid/core/playback/AudioSessionHolder.kt",
+        "avant": "    fun close() = controller.close()",
+        "apres": "    fun close() {\n        controller.release()\n    }",
+        "tache": ":core:playback:testDebugUnitTest",
+        "attendus": ["close ferme la seance et arrete le lecteur natif"],
+    },
+    {
+        # Le lecteur se remet a construire sa propre seance : quitter l'ecran la tuera de nouveau.
+        # Le controle de forme est seul a pouvoir le voir — un `@Composable` ne s'ouvre pas en test.
+        "nom": "seance : le lecteur reconstruit sa propre seance",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/ReaderScreen.kt",
+        "avant": "    val audioState = playback?.state?.collectAsState()?.value",
+        "apres": "    val audioState = playback?.state?.collectAsState()?.value\n    val relache = { playback?.release() }\n    relache()",
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": ["le lecteur ne libere plus la seance en partant"],
+    },
 ]
 
 

@@ -142,6 +142,9 @@ dependencies {
     // `:app` en a besoin directement — le conteneur est construit ici, le theme applique ici.
     implementation(project(":core:data"))
     implementation(project(":core:design"))
+    // Le lecteur natif est construit ici : c'est le seul module qui ait à la fois un `Context`
+    // d'application et le droit d'assembler. `core:data` reçoit l'objet, il ne le crée pas.
+    implementation(project(":core:audio"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)

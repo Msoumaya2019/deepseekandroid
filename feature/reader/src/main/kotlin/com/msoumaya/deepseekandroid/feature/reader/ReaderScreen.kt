@@ -14,14 +14,12 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.listSaver
@@ -31,11 +29,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.msoumaya.deepseekandroid.core.audio.AudioSessionController
-import com.msoumaya.deepseekandroid.core.audio.ExoAudioOutput
+import com.msoumaya.deepseekandroid.core.playback.AudioSessionHolder
 import com.msoumaya.deepseekandroid.core.design.component.AppCard
 import com.msoumaya.deepseekandroid.core.design.theme.AppTheme
 import com.msoumaya.deepseekandroid.core.domain.Audio
@@ -223,6 +219,11 @@ fun ReaderScreen(
     // La demande d'ouvrir le panneau de séance. Voir la note du compteur, plus bas : ce n'est pas
     // un état mais un **événement**, et c'est pourquoi c'est un entier et non un booléen.
     sessionPanelRequest: Int = 0,
+    // La séance d'écoute de l'application. `null` quand personne n'écoute — tests, aperçus,
+    // appelants sans conteneur : le mini-lecteur disparaît alors au lieu de piloter un lecteur
+    // qui n'existe pas. Elle est **reçue**, jamais créée ici : c'est ce qui la fait survivre à
+    // l'écran.
+    playback: AudioSessionHolder? = null,
 ) {
     val colors = AppTheme.colors
     val totalPages = remember { Quran.pages.size.takeIf { it > 0 } ?: DEFAULT_TOTAL_PAGES }
@@ -295,19 +296,14 @@ fun ReaderScreen(
         }
     }
 
-    // Le lecteur audio vit aussi longtemps que l'écran : c'est la portée qui décide, et
-    // `DisposableEffect` libère le lecteur natif quand on quitte. Sans service d'avant-plan,
-    // l'écoute s'arrête en quittant le lecteur — c'est honnête, et ce sera l'affaire des
-    // notifications que de la poursuivre.
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val audio = remember(context) {
-        AudioSessionController(ExoAudioOutput(context.applicationContext), scope)
-    }
-    DisposableEffect(audio) {
-        onDispose { audio.release() }
-    }
-    val audioState by audio.state.collectAsState()
+    // La séance d'écoute **n'appartient plus à cet écran**. Elle est tenue par le conteneur, à
+    // l'échelle de l'application, et reçue ici : quitter le lecteur cesse de l'observer, et ne
+    // la libère plus. Un `DisposableEffect` qui appellerait `release()` en partant ramènerait
+    // exactement le défaut que ce branchement existe pour corriger.
+    //
+    // `null` veut dire « personne n'écoute » : tests, aperçus et appelants sans conteneur. Le
+    // mini-lecteur n'apparaît alors pas, au lieu de piloter un lecteur qui n'existe pas.
+    val audioState = playback?.state?.collectAsState()?.value
 
     // Les réglages d'écoute et le récitateur. Ils vivent **ici**, et non dans la feuille : c'est
     // ici qu'ils sont appliqués au contrôleur, et la feuille n'est qu'un moyen de les changer.
@@ -343,7 +339,7 @@ fun ReaderScreen(
 
     // Poussé au contrôleur à la première composition, puis à chaque changement : le verset
     // suivant vient du bon récitateur, sans interrompre celui qui joue.
-    LaunchedEffect(reciter) { audio.useReciter(reciter) }
+    LaunchedEffect(reciter) { playback?.useReciter(reciter) }
 
     val page by pageState
     val zoom = zoomState.value
@@ -437,7 +433,7 @@ fun ReaderScreen(
         selected = selectedVerse,
         // Le verset en cours d'écoute, s'il y en a une. La séance peut être en pause : la marque
         // reste, comme dans l'original, qui ne l'efface qu'à l'arrêt de la séance.
-        playing = audioState.takeIf { it.isOpen }?.position?.verseId,
+        playing = audioState?.takeIf { it.isOpen }?.position?.verseId,
         bookmarks = bookmarkIds,
         difficult = difficultIds,
         selecting = bookmarkMode,
@@ -507,9 +503,9 @@ fun ReaderScreen(
     // présente et sans effet. La plage est celle du **découpage de la source affichée** : lire
     // une page du paquet avec la table du moushaf de Médine ferait commencer l'écoute au
     // mauvais verset.
-    val listenAction: (() -> Unit)? = remember(page, settings, source) {
+    val listenAction: (() -> Unit)? = remember(page, settings, source, playback) {
         runCatching { MushafSourceNavigation.pageRange(source, page) }.getOrNull()?.let { range ->
-            { audio.start(range, settings) }
+            { playback?.start(range, settings) }
         }
     }
 
@@ -825,13 +821,16 @@ fun ReaderScreen(
 
         // Le mini-lecteur prend sa hauteur, comme la coquille : la page reste entière, et le
         // dernier verset ne passe jamais dessous.
-        if (audioState.isOpen) {
+        val session = audioState
+        if (session != null && session.isOpen) {
             MiniPlayer(
-                state = audioState,
+                state = session,
                 reciterName = reciter.name,
                 countLabel = countLabel,
-                onToggle = { audio.toggle() },
-                onStop = { audio.close() },
+                // `playback` est non nul ici : `audioState` ne peut venir que de lui, et le
+                // compilateur le sait. La session est donc toujours pilotable quand elle s'affiche.
+                onToggle = { playback.toggle() },
+                onStop = { playback.close() },
             )
         }
 
@@ -891,7 +890,7 @@ fun ReaderScreen(
             onSettings = {
                 regleParLaPersonne = true
                 settings = it
-                audio.updateSettings(it)
+                playback?.updateSettings(it)
                 onAudioSettingsChanged(it, reciterId)
             },
             onReciter = {
@@ -906,7 +905,13 @@ fun ReaderScreen(
             // Redémarrer repart de la plage de la **séance** ouverte, et non de la page : si
             // l'auditeur a tourné la page pendant l'écoute, la séance ne l'a pas suivi. Le
             // client d'origine reprend `rangeRef.current`, et le contrôleur la connaît.
-            onRestart = audioState.range?.let { session -> { audio.start(session, settings) } },
+            //
+            // L'entrée n'existe que si les **deux** sont là : une plage sans détenteur, ou un
+            // détenteur sans plage, ne peut rien relancer. Le compilateur le réclame pour que
+            // l'absence de l'un ne devienne pas une entrée qui ne fait rien.
+            onRestart = playback?.let { holder ->
+                audioState?.range?.let { session -> { holder.start(session, settings) } }
+            },
             onClose = { panel = ReaderPanel.NONE },
         )
 
@@ -976,7 +981,7 @@ fun ReaderScreen(
                         )
                         regleParLaPersonne = true
                         settings = single
-                        audio.start(Range(verseId, verseId), single)
+                        playback?.start(Range(verseId, verseId), single)
                         onAudioSettingsChanged(single, reciterId)
                         verseState.value = null
                         panel = ReaderPanel.NONE
@@ -988,7 +993,7 @@ fun ReaderScreen(
                         val passage = settings.copy(mode = RepeatMode.PASSAGE)
                         regleParLaPersonne = true
                         settings = passage
-                        audio.updateSettings(passage)
+                        playback?.updateSettings(passage)
                         onAudioSettingsChanged(passage, reciterId)
                         verseState.value = null
                         panel = ReaderPanel.AUDIO
@@ -1073,7 +1078,7 @@ fun ReaderScreen(
                 },
                 // Le geste en cours : « Écouter » quand le lecteur audio est ouvert. C'est le
                 // `audioDock ? 'audio' : null` du source, et le seul état qu'il passe jamais.
-                active = if (audioState.isOpen) ReviewText.Action.LISTEN else null,
+                active = if (audioState?.isOpen == true) ReviewText.Action.LISTEN else null,
             )
         }
 
@@ -1096,7 +1101,7 @@ fun ReaderScreen(
                 // Une conversion qui échoue laisse le lecteur où il est. Sauter à une page
                 // devinée serait pire : rien ne dirait qu'elle est fausse.
                 if (target != null) {
-                    audio.close()
+                    playback?.close()
                     goToPage(target)
                 }
                 panel = ReaderPanel.NONE

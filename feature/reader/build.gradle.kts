@@ -45,7 +45,12 @@ dependencies {
     // L'écoute. `core:audio` porte le lecteur Media3 et l'enchaînement des versets ; il est
     // exposé par l'implémentation seule, car aucun type de Media3 ne doit apparaître dans la
     // signature publique de ce module.
+    //
+    // `core:playback` porte la **séance** : le lecteur la reçoit au lieu de la créer, ce qui la
+    // fait survivre à l'écran. Exposé par l'API, car le paramètre public `playback` porte son
+    // type — un appelant qui branche le lecteur doit pouvoir le nommer.
     implementation(project(":core:audio"))
+    api(project(":core:playback"))
 
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.compose.material.icons.extended)

@@ -1,6 +1,7 @@
 package com.msoumaya.deepseekandroid
 
 import android.app.Application
+import com.msoumaya.deepseekandroid.core.audio.ExoAudioOutput
 import com.msoumaya.deepseekandroid.core.data.AppContainer
 import com.msoumaya.deepseekandroid.core.data.remote.SupabaseConfig
 
@@ -37,6 +38,11 @@ class DeepSeekApplication : Application() {
                 url = BuildConfig.SUPABASE_URL,
                 anonKey = BuildConfig.SUPABASE_ANON_KEY,
             ),
+            // Le lecteur natif est construit **ici**, à la vie de l'application : la séance
+            // d'écoute n'appartient plus à un écran, et quitter le lecteur ne coupe donc plus
+            // la récitation. Le `Context` d'application est passé, et non celui d'une activité,
+            // qui survivrait mal à la fermeture de celle-ci.
+            audioOutput = ExoAudioOutput(applicationContext),
         )
     }
 }
