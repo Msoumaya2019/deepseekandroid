@@ -8,6 +8,7 @@ import io.github.jan.supabase.auth.SessionManager
 import io.github.jan.supabase.createSupabaseClient
 import io.github.jan.supabase.postgrest.Postgrest
 import io.github.jan.supabase.realtime.Realtime
+import io.github.jan.supabase.serializer.KotlinXSerializer
 import io.github.jan.supabase.storage.Storage
 
 /**
@@ -59,7 +60,14 @@ object SupabaseProvider {
                 autoSaveToStorage = true
                 alwaysAutoRefresh = true
             }
-            install(Postgrest)
+            // **Le sérialiseur est `AppJson`, et non celui de la bibliothèque.** C'est une
+            // décision, pas un détail : `AppJson` porte `ignoreUnknownKeys`, et c'est ce qui
+            // permet aux lignes d'une table de ne déclarer que les colonnes qu'elles lisent.
+            // Avec un décodeur strict, une colonne ajoutée par une migration ferait échouer la
+            // lecture de la table entière — un ami disparaîtrait de la liste, et rien ne le
+            // dirait. C'est aussi la politique JSON unique de l'application, celle qui porte
+            // `explicitNulls`, `coerceInputValues` et `isLenient`.
+            install(Postgrest) { serializer = KotlinXSerializer(AppJson) }
             install(Realtime)
             install(Storage)
         }

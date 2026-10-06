@@ -133,7 +133,8 @@ modifiées :
 | Renvoi du courriel de confirmation | **code écrit** | `resendEmail(OtpType.Email.SIGNUP, …)`, même réserve sur la redirection |
 | Lien profond de confirmation | **à faire** | schéma d'URL à définir et à faire vérifier par le domaine. En attendant, le lien reçu ouvre la page du projet Supabase et non l'application |
 | Notifications (FCM, `push_devices`) | **à faire** | phase D |
-| Amis, Quiz, contenus, récitations | **à faire** | phases C et D |
+| Amis — profils, liens, invitations, cercles | **code écrit** | `SocialSource`, `SupabaseSocialSource` et `SocialRepository`, éprouvés contre une **source factice** (20 tests) : la lecture du profil, `friend_inbox()`, les six RPC de lien, la création de cercle et l'ouverture du contact administrateur. **Rien n'a encore été exercé contre le serveur** — ni `ensureProfile`, ni `friend_inbox` : le vérifier demande un **second compte réel**, et c'est le prochain pas |
+| Conversation, Quiz, contenus, récitations | **à faire** | phases C et D |
 
 ### Deux règles qui protègent le compte existant
 

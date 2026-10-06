@@ -126,6 +126,21 @@ internal fun coranDeLaCoquille(): String =
 internal fun progresDeLaCoquille(): String =
     sansCommentaires(blocApres("composable(AppDestination.PROGRESS.route)"))
 
+/**
+ * Le bloc de l'écran « Amis » seul, **commentaires retirés**.
+ *
+ * Le retrait sert ici pour la même raison qu'au Coran et au Progrès : ce bloc peut porter un
+ * commentaire qui nomme l'écran des amis, et un contrôle écrit sur le texte brut y trouverait sa
+ * propre documentation — il vérifierait ce qu'on **attend** de la route au lieu de ce qu'elle
+ * **fait**.
+ *
+ * La borne de [blocApres] s'applique : le `composable(` du tableau de bord des révisions suit
+ * celui des amis, donc le bloc est délimité et une assertion ne peut pas être satisfaite par la
+ * porte voisine.
+ */
+internal fun amisDeLaCoquille(): String =
+    sansCommentaires(blocApres("composable(AppDestination.FRIENDS.route)"))
+
 /** Le texte privé de ses lignes de commentaire — celles qui commencent par `//`. */
 internal fun sansCommentaires(texte: String): String =
     texte.lines().filterNot { it.trimStart().startsWith("//") }.joinToString("\n")

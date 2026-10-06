@@ -375,14 +375,39 @@ C'est la différence entre une liste de rappels et un outil de mémorisation.
 
 | Fonctionnalité RN | Source RN | Équivalent Android | Tables | Statut | Points d'attention |
 |---|---|---|---|---|---|
-| Profils d'amis | `src/services/social.ts` | `feature:social` | `friend_profiles` | **À faire** | phase D |
-| Demandes d'amis | `friend_links` | `feature:social` | `friend_links` | **À faire** | phase D |
-| Avatars | `src/services/avatars.ts` | `feature:social` | `friend_profiles` | **À faire** | phase D |
-| Messagerie | `src/ui/MessagingButton.tsx`, `SocialScreens.tsx` | `feature:social` | `friend_messages`, `friend_message_reads`, `friend_message_hidden`, `friend_message_reports` | **À faire** | phase D |
-| Groupes | — | `feature:social` | `friend_groups`, `friend_group_members` | **À faire** | phase D |
-| Partage de progression | `publishSocialProgress` | `feature:social` | `friend_progress`, `friend_shared_goals` | **À faire** | phase D |
-| Rendez-vous de révision entre amis | — | `feature:social` | `friend_review_appointments` | **À faire** | phase D |
-| Temps réel | `src/services/social.ts` (Realtime) | `core/data` (Realtime installé) | — | **À faire** | phase D — le module Realtime est déjà branché sur le client |
+| Profils d'amis | `src/services/social.ts` | `core:data` (`SupabaseSocialSource`), `feature:social` | `friend_profiles` | **Porté** | `ensureProfile()` crée le profil et rend le **code d'invitation**. **Le profil est lu avant la liste** : sans lui on ne sait pas qui est « moi », donc ni quelle invitation est reçue ni laquelle est envoyée. La liste est alors **vide, et non fausse** — c'est un test, et c'est la première des quatre familles que `SocialRendererTest` surveille |
+| Demandes d'amis | `friend_links` | `core:domain/Social.kt`, `SocialRepository` | `friend_links` | **Porté** | les six gestes — demander, accepter, refuser, retirer, bloquer, débloquer — passent par les RPC du serveur, jamais par une écriture directe. Les trois listes — reçues, envoyées, bloquées — **ne se recouvrent pas et couvrent tout** (test). Une ligne bloquée ne s'affiche que si c'est **moi** qui ai bloqué |
+| Avatars | `src/services/avatars.ts` | `core:data` (lecture), `feature:social` (repli) | `friend_profiles` | **Écrite** | `avatar_path` **est lu** et porté jusqu'au modèle ; l'écran, lui, dessine l'**initiale** dans un médaillon de 52 px — exactement le repli de `FriendAvatar.tsx` (`size × 0,43`, vert, fond `soft`, bordure `softBorder`). **Écart assumé** : l'image distante demanderait un chargeur et un cache d'images que le projet n'a pas, et un carré vide serait pire qu'une initiale |
+| Messagerie | `src/ui/MessagingButton.tsx`, `SocialScreens.tsx` | — | `friend_messages`, `friend_message_reads`, `friend_message_hidden`, `friend_message_reports` | **À faire** | phase D. C'est **le seul point qui manque à l'écran des amis** : ni le bouton « Message », ni l'appui sur la ligne, ni l'ouverture d'un cercle ne sont rendus. **Omis, et non grisés** — un bouton qui n'ouvre rien est pire qu'un bouton absent. Le compte des non-lus, lui, est déjà porté : il est passé du bouton « Message » au **médaillon** de l'ami |
+| Groupes | — | `feature:social` | `friend_groups`, `friend_group_members` | **Porté** | la liste des cercles et leur création — **les membres ne sont pas encore affichés**, faute d'écran de conversation. La règle du nom : **deux caractères utiles**, espaces rognés — sans quoi « A » entouré d'espaces passerait pour deux caractères et le serveur refuserait le cercle. Le cercle « contact administrateur » est **signalé** comme tel : le serveur le nomme `'Contact · <nom>'`, un nom qui ne dit pas ce qu'il est |
+| Partage de progression | `publishSocialProgress` | — | `friend_progress`, `friend_shared_goals` | **À faire** | phase D — arrive avec l'écran de conversation |
+| Rendez-vous de révision entre amis | — | — | `friend_review_appointments` | **À faire** | phase D — arrive avec l'écran de conversation |
+| Temps réel | `src/services/social.ts` (Realtime) | — | — | **À faire** | phase D — le module Realtime est déjà branché sur le client |
+
+**L'écran.** `feature/social/SocialScreen.kt` porte la liste telle que `SocialScreens.tsx` la
+compose : la carte de suspension, la recherche, le sélecteur à trois filtres — « Tous », « En
+ligne », « Demandes » —, la section « Mes amis (*n*) » avec son repli à cinq entrées, le bloc
+d'invitation, les trois listes d'invitations, le dépliage des cercles, et le pied qui ouvre le
+contact de l'administration. Le calcul vit **hors de Compose**, dans `SocialRenderer` : une
+fonction pure de `(état, recherche, filtre, dépliages, saisies)`, éprouvée **sans appareil**. L'écran
+ne calcule rien — il dispose.
+
+**Quatre écarts, tous déclarés dans l'en-tête du fichier.**
+
+1. « Invitations reçues » **n'est plus imprimé à vide** : le client d'origine écrit toujours ce
+   titre, le portage le retire quand les trois listes sont vides — un titre suivi de rien laisse
+   croire à un chargement qui n'en finit pas.
+2. Le pied « Contacter l'admin » **ne s'affiche plus quand personne n'est connecté** : il n'y a
+   alors ni cercle à créer, ni compte pour le créer.
+3. Le **compte des non-lus** passe du bouton « Message » au médaillon — conséquence directe de
+   l'omission de la conversation.
+4. Les **avatars** sont des initiales (voir le tableau).
+
+**Ce que l'écran ne prouve pas.** Le branchement — la fabrique du modèle, la relecture à
+l'ouverture, les quinze gestes et saisies — est tenu par un **contrôle de forme**
+(`SocialScreenWiringTest`, 5 tests) qui lit le source : le projet n'a pas d'outillage d'interface,
+et un vert de forme ne dit rien de l'apparence. Les quarante-trois autres tests de l'écran
+éprouvent le **calcul**, pas le rendu.
 
 ---
 

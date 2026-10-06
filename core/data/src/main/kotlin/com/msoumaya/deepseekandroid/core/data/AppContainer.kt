@@ -19,12 +19,14 @@ import com.msoumaya.deepseekandroid.core.data.remote.SessionPreferences
 import com.msoumaya.deepseekandroid.core.data.remote.SupabaseAuthGateway
 import com.msoumaya.deepseekandroid.core.data.remote.SupabaseConfig
 import com.msoumaya.deepseekandroid.core.data.remote.SupabaseProvider
+import com.msoumaya.deepseekandroid.core.data.remote.SupabaseSocialSource
 import com.msoumaya.deepseekandroid.core.data.remote.SupabaseStateSource
 import com.msoumaya.deepseekandroid.core.data.remote.UnavailableAuthGateway
 import com.msoumaya.deepseekandroid.core.data.remote.VaultSessionManager
 import com.msoumaya.deepseekandroid.core.data.repository.AudioSettingsRepository
 import com.msoumaya.deepseekandroid.core.data.repository.AuthRepository
 import com.msoumaya.deepseekandroid.core.data.repository.QuranArchiveStore
+import com.msoumaya.deepseekandroid.core.data.repository.SocialRepository
 import com.msoumaya.deepseekandroid.core.data.repository.UserRepository
 import com.msoumaya.deepseekandroid.core.data.security.SecretVault
 import com.msoumaya.deepseekandroid.core.domain.Dates
@@ -159,6 +161,20 @@ class AppContainer(
         session = session,
         outbox = outbox,
         remote = remoteState,
+    )
+
+    /**
+     * Les amis, les cercles et l'aperçu des conversations.
+     *
+     * Il est construit **sans source** quand aucun projet n'est configuré : le dépôt sait alors
+     * répondre « personne de connecté » sans qu'aucune requête ne parte, et l'écran affiche
+     * l'invitation à se connecter plutôt qu'une erreur réseau — qui serait fausse, puisqu'il n'y
+     * a pas de réseau à atteindre.
+     */
+    val social: SocialRepository = SocialRepository(
+        source = supabaseClient?.let { SupabaseSocialSource(it) },
+        session = session,
+        scope = scope,
     )
 
     /**

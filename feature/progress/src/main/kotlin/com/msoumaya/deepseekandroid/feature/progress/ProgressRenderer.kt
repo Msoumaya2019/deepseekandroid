@@ -152,7 +152,7 @@ internal object ProgressRenderer {
         val base = when (period) {
             ProgressText.Period.MONTH -> at.substring(0, 7) + "-01"
             ProgressText.Period.DAY -> Dates.addDays(at, -6)
-            ProgressText.Period.WEEK -> Dates.addDays(at, -((Dates.dayOf(at) + 6) % 7))
+            ProgressText.Period.WEEK -> Dates.weekStart(at)
         }
 
         val windows = (0 until count).map { index ->

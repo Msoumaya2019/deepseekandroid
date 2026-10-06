@@ -33,6 +33,19 @@ object Dates {
     /** Jour de la semaine, 0 = dimanche … 6 = samedi. Convention identique à JavaScript. */
     fun dayOf(key: String): Int = parse(key).dayOfWeek.value % 7
 
+    /**
+     * Lundi de la semaine de [key], au format `AAAA-MM-JJ`.
+     *
+     * La semaine commence le **lundi** — c'est celle de `weeklyProgress` dans le client
+     * d'origine, celle du graphique de l'écran « Progrès », et celle de l'objectif partagé
+     * entre deux amis. La règle est écrite **une seule fois** ici : un décalage d'un jour ne se
+     * verrait que sur l'un des trois écrans, et rien ne le signalerait.
+     *
+     * Un dimanche appartient donc à la semaine du lundi **précédent**, ce que le `% 7` de
+     * [dayOf] exprime sans cas particulier : pour un dimanche (`dayOf` = 0) le recul vaut 6.
+     */
+    fun weekStart(key: String = todayLocal()): String = addDays(key, -((dayOf(key) + 6) % 7))
+
     /** Nombre de jours entiers entre deux dates. */
     fun age(from: String, to: String): Int =
         ChronoUnit.DAYS.between(parse(from), parse(to)).toInt()

@@ -32,10 +32,16 @@ kotlin {
 }
 
 dependencies {
-    // Ce module ne depend que du design et du modele : il ne connait ni le reseau, ni le
-    // stockage, ni les autres fonctionnalites. Quand il aura besoin de lire des donnees, il
-    // declarera `core:data` — comme `feature:home` — et rien d'autre.
+    // Le module declare desormais `core:data`, comme `feature:home`, `feature:program` et
+    // `feature:progress` : la liste d'amis lit des donnees, et c'est le conteneur qui les
+    // fournit. Rien d'autre n'est ajoute — ni le reseau, ni une autre fonctionnalite.
     api(project(":core:design"))
+    implementation(project(":core:data"))
+
     implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.compose.material.icons.extended)
+
+    testImplementation(libs.junit)
+    testImplementation(libs.kotlin.test)
 }

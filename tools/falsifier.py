@@ -2358,6 +2358,198 @@ CAS: list[dict] = [
         "tache": ":core:domain:test",
         "attendus": ["le titre du graphique ne suit pas le nom de la periode"],
     },
+
+    # --- Amis : le rendu de la liste ---------------------------------------------------------
+    {
+        # `Social.otherId` retombe sur le demandeur quand on ne reconnait ni l'un ni l'autre
+        # participant. Avec un identifiant vide, **chaque** lien rend donc son demandeur, et la
+        # liste affiche des gens au hasard. La faute est silencieuse : la liste s'affiche.
+        "nom": "amis : sans profil, la liste se calcule quand meme",
+        "fichier": "feature/social/src/main/kotlin/com/msoumaya/deepseekandroid/feature/social/SocialRenderer.kt",
+        "avant": "        val me = state.profile?.id",
+        "apres": '        val me = state.profile?.id ?: ""',
+        "tache": ":feature:social:testDebugUnitTest",
+        "attendus": ["sans profil, aucune liste d'amis n'est calculee"],
+    },
+    {
+        # Les apercus sont indexes par **lien** et les presences par **personne**. Les confondre
+        # n'affiche ni erreur ni ami : seulement des amis qui paraissent tous hors ligne.
+        "nom": "amis : la presence est lue sous la cle du lien",
+        "fichier": "feature/social/src/main/kotlin/com/msoumaya/deepseekandroid/feature/social/SocialRenderer.kt",
+        "avant": "        val online = state.online[other] == true",
+        "apres": "        val online = state.online[link.id] == true",
+        "tache": ":feature:social:testDebugUnitTest",
+        "attendus": ["la presence se lit sur la personne, jamais sur le lien"],
+    },
+    {
+        # La presence passe avant la date parce qu'elle est vraie **maintenant**. L'inverser ferait
+        # dire « 2 mars 09:30 » a un ami qui est en ligne a l'instant.
+        "nom": "amis : la date passe avant la presence",
+        "fichier": "feature/social/src/main/kotlin/com/msoumaya/deepseekandroid/feature/social/SocialRenderer.kt",
+        "avant": "            subtitle = if (online) {",
+        "apres": "            subtitle = if (false) {",
+        "tache": ":feature:social:testDebugUnitTest",
+        "attendus": ["un ami dont la presence est connue et vraie dit En ligne"],
+    },
+    {
+        # Un lien que le serveur rend sans profil ne doit pas faire disparaitre le nom : la
+        # conversation existe, et la cacher ferait croire a une amitie perdue.
+        "nom": "amis : un ami sans profil perd son nom",
+        "fichier": "feature/social/src/main/kotlin/com/msoumaya/deepseekandroid/feature/social/SocialRenderer.kt",
+        "avant": "            name = link.other?.displayName ?: SocialText.FRIEND,",
+        "apres": '            name = link.other?.displayName ?: "",',
+        "tache": ":feature:social:testDebugUnitTest",
+        "attendus": ["un ami sans profil porte le nom de repli"],
+    },
+    {
+        # Le nombre du titre est le nombre d'amis **acceptes** : il ne bouge ni au filtre, ni a la
+        # recherche, ni au depliage. Le faire suivre le filtre annoncerait « Mes amis (0) » a
+        # quelqu'un qui cherche un nom qu'il a mal orthographie.
+        "nom": "amis : le compte du titre suit le filtre",
+        "fichier": "feature/social/src/main/kotlin/com/msoumaya/deepseekandroid/feature/social/SocialRenderer.kt",
+        "avant": "            friendCount = Social.acceptedCount(links),",
+        "apres": "            friendCount = Social.acceptedCount(links.filter { inputs.filter == Social.Filter.ALL }),",
+        "tache": ":feature:social:testDebugUnitTest",
+        "attendus": ["le compte du titre ne depend ni du filtre, ni de la recherche"],
+    },
+    {
+        # Le code d'invitation vient du profil. Le perdre laisserait la carte d'invitation sans
+        # code — ou, ici, la ferait disparaitre, et personne ne saurait pourquoi.
+        "nom": "amis : le code d'invitation n'est plus lu",
+        "fichier": "feature/social/src/main/kotlin/com/msoumaya/deepseekandroid/feature/social/SocialRenderer.kt",
+        "avant": "            inviteCode = state.profile?.inviteCode,",
+        "apres": "            inviteCode = null,",
+        "tache": ":feature:social:testDebugUnitTest",
+        "attendus": ["avec un profil, la liste est calculee et le code est la"],
+    },
+    {
+        # Le cercle de l'administration vit dans la meme table que les autres, et son nom ne dit
+        # pas sa nature : « Contact · <nom> ». C'est ce drapeau qui la dit.
+        "nom": "amis : le cercle administrateur n'est plus signale",
+        "fichier": "feature/social/src/main/kotlin/com/msoumaya/deepseekandroid/feature/social/SocialRenderer.kt",
+        "avant": "                CircleRow(id = it.id, name = it.name, isAdminContact = it.contactUserId != null)",
+        "apres": "                CircleRow(id = it.id, name = it.name, isAdminContact = false)",
+        "tache": ":feature:social:testDebugUnitTest",
+        "attendus": ["un cercle marque comme contact administrateur est signale"],
+    },
+    {
+        # Un code fait d'espaces n'est pas un code. `isNotEmpty` au lieu de `isNotBlank` active le
+        # bouton sur une espace tapee par erreur, et le serveur refuse un code qui n'existe pas.
+        "nom": "amis : une espace suffit a activer l'invitation",
+        "fichier": "feature/social/src/main/kotlin/com/msoumaya/deepseekandroid/feature/social/SocialRenderer.kt",
+        "avant": "            canSendInvitation = inputs.code.isNotBlank() && !state.busy,",
+        "apres": "            canSendInvitation = inputs.code.isNotEmpty() && !state.busy,",
+        "tache": ":feature:social:testDebugUnitTest",
+        "attendus": ["l'invitation ne part pas avec un code vide ou fait d'espaces"],
+    },
+
+    # --- Amis : les regles du domaine --------------------------------------------------------
+    {
+        # « Demandes » **vide** la liste au lieu de la remplir : dans l'original, la section des
+        # demandes vit sous la liste, et choisir ce filtre la deplie sans meler les deux.
+        "nom": "amis : le filtre Demandes remplit la liste au lieu de la vider",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Social.kt",
+        "avant": "            .filter { filter != Filter.REQUESTS }",
+        "apres": "            .filter { true }",
+        "tache": ":core:domain:test",
+        "attendus": ["le filtre Demandes vide la liste au lieu de la remplir"],
+    },
+    {
+        # La coupe a cinq entrees est ce qui rend « Voir tout » utile. Sans elle, la liste entiere
+        # s'affiche et le depliage ne fait plus rien — un bouton sans effet.
+        "nom": "amis : la liste n'est plus bornee a cinq",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Social.kt",
+        "avant": "        return if (all) visibles else visibles.take(LIST_LIMIT)",
+        "apres": "        return if (all) visibles else visibles",
+        "tache": ":core:domain:test",
+        "attendus": ["la liste est bornee a cinq entrees, et le pli la libere"],
+    },
+    {
+        # La recherche porte sur le nom affiche, sans distinguer la casse. La retirer ne fait pas
+        # d'erreur : elle rend simplement une liste vide sur une recherche qui devrait trouver.
+        "nom": "amis : la recherche distingue la casse",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Social.kt",
+        "avant": "        val needle = query.lowercase()",
+        "apres": "        val needle = query",
+        "tache": ":core:domain:test",
+        "attendus": ["la recherche ignore la casse"],
+    },
+    {
+        # Le nom d'un cercle se juge **rogne** : sans le rognage, « A » entoure d'espaces passe
+        # pour deux caracteres, et le serveur refuse le cercle.
+        "nom": "amis : le nom de cercle n'est plus rogne",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Social.kt",
+        "avant": "    fun validGroupName(raw: String): Boolean = raw.trim().length >= MIN_GROUP_NAME",
+        "apres": "    fun validGroupName(raw: String): Boolean = raw.length >= MIN_GROUP_NAME",
+        "tache": ":core:domain:test",
+        "attendus": ["un nom de cercle demande deux caracteres utiles"],
+    },
+    {
+        # Une suspension **sans terme** est active pour toujours : c'est le cas d'une exclusion. La
+        # lire comme « expiree » rouvrirait la messagerie a quelqu'un qu'on vient d'en ecarter.
+        "nom": "amis : une suspension sans terme est lue comme expiree",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Social.kt",
+        "avant": "        val until = suspension.suspendedUntil ?: return true",
+        "apres": "        val until = suspension.suspendedUntil ?: return false",
+        "tache": ":core:domain:test",
+        "attendus": ["une suspension sans terme est active pour toujours"],
+    },
+    {
+        # Le client d'origine demande `fr-FR` explicitement. Un telephone regle en anglais doit
+        # afficher « 2 mars 09:30 », et non « Mar 2, 09:30 » : les deux clients montreraient sinon
+        # la meme conversation de deux facons.
+        "nom": "amis : la date d'un message suit la locale de l'appareil",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/SocialText.kt",
+        "avant": '    private val STAMP: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMM HH:mm", FR)',
+        "apres": '    private val STAMP: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMM HH:mm", Locale.ENGLISH)',
+        "tache": ":core:domain:test",
+        "attendus": ["l'instant d'un message est ecrit au format de l'original"],
+    },
+    {
+        # Le controle des etiquettes lit les constantes sur l'objet lui-meme. Une constante videe
+        # doit donc tomber : c'est ce qui prouve que le controle mesure, et qu'il ne se contente pas
+        # de parcourir une liste recopiee a la main.
+        "nom": "amis : une etiquette est videe",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/SocialText.kt",
+        "avant": '    const val CANCEL = "Annuler"',
+        "apres": '    const val CANCEL = ""',
+        "tache": ":core:domain:test",
+        "attendus": ["toutes les etiquettes fixes sont renseignees"],
+    },
+
+    # --- Amis : le branchement de l'ecran ----------------------------------------------------
+    {
+        # Un rappel de geste a une valeur par defaut vide : l'oublier compile, s'affiche, et laisse
+        # un bouton sans effet. C'est deja arrive sur l'accueil, ou trois rappels oublies faisaient
+        # trois boutons morts.
+        "nom": "amis : le geste d'administration n'est plus branche",
+        "fichier": "feature/social/src/main/kotlin/com/msoumaya/deepseekandroid/feature/social/SocialScreen.kt",
+        "avant": "        onAdminContact = viewModel::onOpenAdminContact,",
+        "apres": "        onAdminContact = {},",
+        "tache": ":feature:social:testDebugUnitTest",
+        "attendus": ["l'ecran branche toutes les saisies et tous les gestes"],
+    },
+    {
+        # Le depot charge a sa construction, mais il ne sait pas quand l'onglet s'ouvre. Sans cet
+        # appel, la liste s'affiche et reste **perimee** : un ami accepte depuis l'autre appareil
+        # n'apparaitrait jamais, et rien ne le dirait.
+        "nom": "amis : l'ecran ne se relit plus a l'ouverture",
+        "fichier": "feature/social/src/main/kotlin/com/msoumaya/deepseekandroid/feature/social/SocialScreen.kt",
+        "avant": "    LaunchedEffect(Unit) { viewModel.onVisible() }",
+        "apres": "    LaunchedEffect(Unit) { }",
+        "tache": ":feature:social:testDebugUnitTest",
+        "attendus": ["l'ecran se relit a l'ouverture"],
+    },
+    {
+        # L'onglet « Amis » a longtemps rendu un panneau de phase. Le remplacer par un autre ecran
+        # compile parfaitement : la route est servie, et ce n'est plus la liste d'amis.
+        "nom": "amis : l'onglet ne rend plus l'ecran des amis",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/AppScaffold.kt",
+        "avant": "        composable(AppDestination.FRIENDS.route) { SocialScreen() }",
+        "apres": "        composable(AppDestination.FRIENDS.route) { ProgressScreen() }",
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["l'onglet Amis rend l'ecran des amis"],
+    },
 ]
 
 
@@ -2420,6 +2612,59 @@ def echecs_depuis(instant: float) -> list[str]:
     return sorted(tombes)
 
 
+_SOURCES_DE_TEST: dict[str, str] = {}
+
+
+def modules_de_la_tache(tache: str) -> list[str]:
+    """Les modules Gradle que ce cas fait jouer, dans l'ordre.
+
+    Un cas peut en nommer **plusieurs** — `:core:model:test :core:domain:test` —, et il faut
+    les lire tous : ne garder que le premier ferait declarer introuvable un nom qui vit dans
+    le second.
+    """
+    modules: list[str] = []
+    for jeton in tache.split():
+        if not jeton.startswith(":"):
+            continue  # une option (`--tests`) ou son filtre
+        module = "/".join(jeton.split(":")[1:-1])
+        if module and module not in modules:
+            modules.append(module)
+    return modules
+
+
+def sources_de_test(module: str) -> str:
+    """Tout le texte des tests d'un module, lu une seule fois par module.
+
+    **Pourquoi ce controle existe.** Une passe a annonce deux cas « FAUX » alors que le test
+    tombe etait exactement le bon. Le nom fige dans `attendus` etait celui du test de
+    `feature:social` — « la liste est bornee a cinq amis, puis deployee » — alors que le cas
+    joue `:core:domain:test`, ou la **meme regle** est eprouvee sous un autre nom — « la liste
+    est bornee a cinq entrees, et le pli la libere ». Le harnais refusait donc pour un mauvais
+    pretexte, et son message envoyait chercher un test manquant qui existait deja.
+
+    La portee est le **module de la tache**, et rien de plus. Chercher dans tout le projet
+    rendrait ce controle complaisant : deux tests distincts portent ici le meme nom dans deux
+    modules, et valider un nom qu'aucune tache de ce cas ne peut produire redonnerait
+    exactement le faux verdict qu'on veut eviter.
+    """
+    if module not in _SOURCES_DE_TEST:
+        racine = os.path.join(PROJET, module.replace("/", os.sep), "src", "test")
+        morceaux: list[str] = []
+        for dossier, sous_dossiers, fichiers in os.walk(racine):
+            # On elague au lieu de filtrer apres coup : un `os.walk` qui descend dans les
+            # `build/` de vingt et un modules traverse des dizaines de milliers d'artefacts
+            # pour ne lire aucun `.kt`.
+            sous_dossiers[:] = [d for d in sous_dossiers if d not in ("build", ".gradle", ".git")]
+            for fichier in fichiers:
+                if fichier.endswith(".kt"):
+                    try:
+                        morceaux.append(open(os.path.join(dossier, fichier), encoding="utf-8").read())
+                    except OSError:
+                        continue
+        _SOURCES_DE_TEST[module] = "\n".join(morceaux)
+    return _SOURCES_DE_TEST[module]
+
+
 def precondition(cas: dict) -> str | None:
     """Ce qui empeche de jouer ce cas, ou `None` s'il est jouable.
 
@@ -2428,6 +2673,11 @@ def precondition(cas: dict) -> str | None:
     le remplacement toucherait un endroit qu'on n'a pas choisi. Dans les deux cas la tache
     Gradle tournerait, mais elle ne prouverait pas ce que le cas annonce — d'ou ce controle
     **avant** de depenser une execution.
+
+    Le nom attendu est verifie **avant** de jouer, pour la meme raison : un nom qu'aucune tache
+    du cas ne peut produire fait rendre « FAUX » a un cas pourtant concluant, et le verdict
+    accuse alors le test au lieu du cas. Le controle porte sur les **modules des taches du
+    cas** — voir `sources_de_test`.
     """
     chemin = os.path.join(PROJET, cas["fichier"].replace("/", os.sep))
     if not os.path.exists(chemin):
@@ -2436,6 +2686,16 @@ def precondition(cas: dict) -> str | None:
     if occurrences != 1:
         return (f"le texte a remplacer apparait {occurrences} fois (1 attendu) "
                 f"dans {cas['fichier']} : {cas['avant'].strip()!r}")
+    modules = modules_de_la_tache(cas["tache"])
+    if not modules:
+        return (f"la tache {cas['tache']!r} ne nomme aucun module : le nom attendu ne peut "
+                f"pas etre verifie")
+    texte = "\n".join(sources_de_test(module) for module in modules)
+    for attendu in cas["attendus"]:
+        if attendu not in texte:
+            return (f"le nom attendu {attendu!r} n'existe dans aucun test de "
+                    f"{' + '.join(modules)} : le cas ne peut pas conclure, et le verdict "
+                    f"accuserait le test a tort")
     return None
 
 
