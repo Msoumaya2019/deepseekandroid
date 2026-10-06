@@ -2793,6 +2793,143 @@ CAS: list[dict] = [
         "tache": ":feature:social:testDebugUnitTest",
         "attendus": ["les trois portes de la conversation sont ouvertes"],
     },
+
+    # --- Quiz : l'ordre, la file et le disque -------------------------------------------------
+    {
+        # Lire l'instantane avant de vider la file ferait lire un etat **anterieur** a l'envoi,
+        # donc sans la reponse qu'on vient de faire : elle disparaitrait de l'ecran le temps d'un
+        # rafraichissement, puis reviendrait. La mutation retire la purge ; l'ordre se mesure par
+        # la suite des appels de la doublure, qui est justement ecrite pour cela.
+        "nom": "quiz : la file d'attente n'est plus videe avant la lecture",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/QuizRepository.kt",
+        "avant": "                for (entry in outbox.list(owner)) {",
+        "apres": "                for (entry in outbox.list(owner).filter { false }) {",
+        "tache": ":core:data:testDebugUnitTest",
+        "attendus": ["la file est videe avant que l'instantane ne soit lu"],
+    },
+    {
+        # Publier le reseau avant le disque afficherait un ecran vide sans connexion, alors que
+        # tout le quiz est sur l'appareil. Le controle photographie l'etat publie **au moment** ou
+        # la doublure est appelee : c'est la seule facon de voir cet ordre depuis un test.
+        "nom": "quiz : l'instantane du disque n'est plus publie avant le reseau",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/QuizRepository.kt",
+        "avant": "            snapshot = store.current(),",
+        "apres": "            snapshot = null,",
+        "tache": ":core:data:testDebugUnitTest",
+        "attendus": ["l'instantane du disque est publie avant le premier appel reseau"],
+    },
+    {
+        # Remplacer la fusion par la seule reponse du serveur effacerait une reponse faite hors
+        # ligne, que le serveur ne connait pas encore. C'est la perte de travail la plus discrete
+        # du Quiz : rien ne leve, la reponse disparait simplement de l'ecran.
+        "nom": "quiz : la fusion n'est plus faite avec l'instantane du disque",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/QuizRepository.kt",
+        "avant": "                val merged = store.update { Quiz.mergeSnapshot(remote, it) }",
+        "apres": "                val merged = store.update { remote }",
+        "tache": ":core:data:testDebugUnitTest",
+        "attendus": ["la fusion garde une reponse locale que le serveur ne connait pas"],
+    },
+    {
+        # Ne plus enfiler la reponse la perdrait definitivement : elle serait a l'ecran jusqu'au
+        # prochain demarrage, puis n'aurait jamais existe pour le serveur. L'ecran ne le dirait
+        # pas, puisque la reponse s'affiche.
+        "nom": "quiz : la reponse faite hors ligne n'est plus enfilee",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/QuizRepository.kt",
+        "avant": "        outbox.enqueue(owner, id = \"$owner:$day\", payload = AppJson.encodeToString(payload))",
+        "apres": "        if (false) outbox.enqueue(owner, id = \"$owner:$day\", payload = AppJson.encodeToString(payload))",
+        "tache": ":core:data:testDebugUnitTest",
+        "attendus": ["une reponse faite hors ligne est rangee puis renvoyee"],
+    },
+    {
+        # Acquitter **avant** d'envoyer perd la reponse des que l'envoi echoue : la file ne la
+        # porte plus, et personne ne le saura. C'est la mutation qui coute le plus cher, et celle
+        # dont le symptome est le plus tardif — la reponse manque une semaine plus loin.
+        "nom": "quiz : la file est acquittee avant que l'envoi n'ait abouti",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/QuizRepository.kt",
+        "avant": (
+            "                    api.answerDaily(AppJson.decodeFromString<DailyAnswerPayload>(entry.payload))\n"
+            "                    outbox.acknowledge(listOf(entry.id))"
+        ),
+        "apres": (
+            "                    outbox.acknowledge(listOf(entry.id))\n"
+            "                    api.answerDaily(AppJson.decodeFromString<DailyAnswerPayload>(entry.payload))"
+        ),
+        "tache": ":core:data:testDebugUnitTest",
+        "attendus": ["un echec d'envoi ne perd pas la reponse en attente"],
+    },
+    {
+        # Le document est par compte, comme la table `quiz_cache(user_id, data)` de l'original.
+        # Un fichier unique ferait apparaitre la reponse d'un compte sous le nom d'un autre : ce
+        # n'est pas une gene d'affichage, c'est le travail de quelqu'un montre a quelqu'un d'autre.
+        "nom": "quiz : le cache n'est plus range par compte",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/local/QuizCacheStore.kt",
+        "avant": "                file = File(root, \"quiz_${LocalStateStore.fileToken(id)}.json\"),",
+        "apres": "                file = File(root, \"quiz.json\"),",
+        "tache": ":core:data:testDebugUnitTest",
+        "attendus": ["changer de compte efface le quiz du precedent"],
+    },
+    {
+        # Se deconnecter laisserait le quiz a l'ecran, sous aucun compte : l'ecran de quelqu'un
+        # d'autre, ou de personne, mais toujours lisible.
+        "nom": "quiz : la deconnexion garde le quiz affiche",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/QuizRepository.kt",
+        "avant": "        _state.value = QuizState(signedIn = false, loading = false)",
+        "apres": "        _state.value = _state.value.copy(signedIn = false, loading = false)",
+        "tache": ":core:data:testDebugUnitTest",
+        "attendus": ["la deconnexion efface le quiz affiche"],
+    },
+    {
+        # Une panne sans rien a l'ecran doit se lire comme une panne, et non comme un avis : un
+        # avis se lit « c'est fait », et il n'y a rien a l'ecran pour le confirmer.
+        "nom": "quiz : un echec sans rien a montrer devient un simple avis",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/QuizRepository.kt",
+        "avant": "            failure = if (empty) text else null,",
+        "apres": "            failure = null,",
+        "tache": ":core:data:testDebugUnitTest",
+        "attendus": ["un echec sans rien a montrer est une panne"],
+    },
+    {
+        # Sans cette traduction, un appareil sans reseau afficherait le texte brut du moteur HTTP
+        # au lieu de la phrase de l'original. Le fait est le meme, la phrase ne l'est plus.
+        "nom": "quiz : un defi sans reseau perd sa phrase",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/QuizRepository.kt",
+        "avant": "                notice = if (error.isOffline()) QuizText.CHALLENGE_OFFLINE else describe(error),",
+        "apres": "                notice = describe(error),",
+        "tache": ":core:data:testDebugUnitTest",
+        "attendus": ["creer un defi sans reseau dit qu'il faut une connexion"],
+    },
+    {
+        # La garde de double geste, retiree : un second appui partirait pendant que le premier
+        # n'est pas fini. L'ecran desactive ses boutons, mais c'est une intention d'interface, pas
+        # une regle du depot — et un geste de Quiz ecrit chez le serveur.
+        "nom": "quiz : la garde de double geste disparait",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/QuizRepository.kt",
+        "avant": "        if (_state.value.busy) return false",
+        "apres": "        if (false) return false",
+        "tache": ":core:data:testDebugUnitTest",
+        "attendus": ["un second geste pendant le premier est ignore"],
+    },
+    {
+        # Le code PostgREST `PGRST202` ne dit pas la panne d'un appel : il dit que la fonction
+        # n'existe pas dans le schema, donc que la migration du Quiz n'est pas deployee. Le
+        # confondre avec un refus ordinaire enverrait chercher le reseau au lieu du schema.
+        "nom": "quiz : le code de fonction absente n'est plus lu",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Quiz.kt",
+        "avant": "        code == MISSING_FUNCTION_CODE -> QuizText.SERVICE_MISSING",
+        "apres": "        false -> QuizText.SERVICE_MISSING",
+        "tache": ":core:domain:test",
+        "attendus": ["un code de fonction absente prime sur le texte du serveur"],
+    },
+    {
+        # Un defi est du contenu : l'oublier dans « rien a montrer » ferait dire « Aucune question
+        # publiee aujourd'hui » a quelqu'un qui a justement un defi en cours.
+        "nom": "quiz : un defi ne compte plus comme du contenu",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Quiz.kt",
+        "avant": "        snapshot.daily == null && snapshot.responses.isEmpty() && snapshot.challenges.isEmpty()",
+        "apres": "        snapshot.daily == null && snapshot.responses.isEmpty()",
+        "tache": ":core:domain:test",
+        "attendus": ["un defi suffit a remplir l'ecran"],
+    },
 ]
 
 

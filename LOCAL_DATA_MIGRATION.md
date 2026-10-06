@@ -53,6 +53,36 @@ opération.
 d'origine refuse un état dont `schema !== 1` et retombe sur l'état par défaut ; Android fait de
 même (`Program.isValidPersistedState`), et **archive** le fichier refusé au lieu de l'écraser.
 
+### La base du Quiz, qui est à part dès l'origine
+
+Le client React Native ouvre une **seconde** base — `coran-quiz.db`, et non la base principale —,
+avec deux tables :
+
+```sql
+CREATE TABLE quiz_cache  (user_id TEXT PRIMARY KEY, data TEXT NOT NULL);
+CREATE TABLE quiz_outbox (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, payload TEXT NOT NULL,
+                          created_at TEXT NOT NULL);
+```
+
+| Table React Native | Équivalent Android | Remarque |
+|---|---|---|
+| `quiz_cache` (par `user_id`) | `quiz_<jeton>.json`, **un document par compte** | le **jour** est porté par le document et non par le nom du fichier : l'écran compare `data.day` à `quizDay()`, et un fichier par jour aurait fait disparaître cette comparaison — donc la règle « un instantané d'hier ne vaut pas pour aujourd'hui » |
+| `quiz_outbox` | `quiz_outbox.json`, **une file unique** | la clé primaire de l'original est `« <compte>:<jour> »`, et cette forme est **reproduite** telle quelle : elle rend l'enfilement idempotent, une seconde réponse pour le même jour ne pouvant pas produire une seconde entrée |
+
+**Pourquoi une file séparée, et pas `outbox.json`.** `OutboxStore` rend ses opérations par compte
+**sans filtrer leur nature**, et le worker de synchronisation les envoie toutes comme des
+instantanés d'état. Verser une réponse de Quiz dans la file commune la ferait donc pousser comme
+un état complet : le serveur l'**accepterait**, et une progression serait écrasée — un envoi
+réussi qui détruit des données. L'original a deux tables distinctes pour la même raison, et il
+n'aurait pas suffi de renommer les choses.
+
+**Ce qui n'est pas recopié.** Le catalogue des questions ne quitte pas le serveur. Ce qui est mis
+en cache est l'**instantané** rendu par `quiz_snapshot` : la question du jour, **dépouillée de sa
+solution** — le serveur en retire `correctAnswerId`, l'explication et la source —, les réponses du
+compte, ses défis et les quiz thématiques. La correction ne se lit donc que dans la **réponse
+enregistrée**, qui porte la question complète ; c'est pourquoi le repli de l'écran est
+`response?.question ?? daily`, et non `daily` seul.
+
 ---
 
 ## Les clés AsyncStorage

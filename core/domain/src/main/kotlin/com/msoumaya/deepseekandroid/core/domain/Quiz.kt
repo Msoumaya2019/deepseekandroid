@@ -118,4 +118,47 @@ object Quiz {
         )
         return snapshot.copy(responses = listOf(response) + snapshot.responses)
     }
+
+    /**
+     * Vrai si l'instantané ne porte rien de montrable : ni question du jour, ni réponse, ni défi.
+     *
+     * **La question ne se pose qu'à cause d'un échec, jamais toute seule.** Un instantané vide
+     * après une lecture **réussie** est une information : « aucune question n'est publiée
+     * aujourd'hui », ce que l'écran sait déjà dire. Le même instantané vide après une lecture
+     * **ratée** ne dit rien du tout — l'écran ignore si la question manque ou s'il n'a pas pu la
+     * lire, et afficher « Aucune question publiée » serait alors une affirmation fausse, faite
+     * au pire moment. C'est ce partage que le dépôt fait, et c'est la seule raison d'être de
+     * cette fonction.
+     *
+     * Les quiz thématiques ne comptent pas : ils ne servent qu'à l'écran de création d'un défi,
+     * où leur absence n'annonce rien de faux.
+     */
+    fun isEmpty(snapshot: QuizSnapshot): Boolean =
+        snapshot.daily == null && snapshot.responses.isEmpty() && snapshot.challenges.isEmpty()
+
+    /** Code PostgREST d'une fonction absente du schéma : la migration n'est pas déployée. */
+    private const val MISSING_FUNCTION_CODE = "PGRST202"
+
+    /**
+     * Message lisible d'une erreur du service Quiz.
+     *
+     * La **règle d'ordre** est celle de [Social.errorText] — un message explicite d'abord, et le
+     * repli seulement s'il n'y en a pas —, mais le repli **diffère** : voir
+     * [QuizText.GENERIC_ERROR]. Un message fait d'espaces ne compte pas, sans quoi l'écran
+     * afficherait un cadre vide là où il y a une erreur à comprendre.
+     *
+     * **Le code prime sur le message, et c'est l'ordre de l'original.** `quizRpc` de
+     * `services/quiz.ts` teste `error.code === 'PGRST202'` **avant** de retomber sur le texte du
+     * serveur. Ce code ne décrit pas la panne d'un appel : il dit que la fonction n'existe pas
+     * dans le schéma — donc que la migration du Quiz n'est pas déployée. C'est un diagnostic
+     * d'installation, et le texte du serveur le noie sous des détails de PostgREST.
+     *
+     * @param message texte du serveur, ou `null`.
+     * @param code code PostgREST, ou `null` quand l'erreur n'en porte pas.
+     */
+    fun errorText(message: String? = null, code: String? = null): String = when {
+        code == MISSING_FUNCTION_CODE -> QuizText.SERVICE_MISSING
+        !message.isNullOrBlank() -> message
+        else -> QuizText.GENERIC_ERROR
+    }
 }

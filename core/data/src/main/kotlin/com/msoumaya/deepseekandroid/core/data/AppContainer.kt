@@ -11,6 +11,9 @@ import com.msoumaya.deepseekandroid.core.data.local.JsonFileStore
 import com.msoumaya.deepseekandroid.core.data.local.LocalStateStore
 import com.msoumaya.deepseekandroid.core.data.local.Outbox
 import com.msoumaya.deepseekandroid.core.data.local.OutboxStore
+import com.msoumaya.deepseekandroid.core.data.local.QuizCacheStore
+import com.msoumaya.deepseekandroid.core.data.local.QuizOutbox
+import com.msoumaya.deepseekandroid.core.data.local.QuizOutboxStore
 import com.msoumaya.deepseekandroid.core.data.local.QuranArchiveInstaller
 import com.msoumaya.deepseekandroid.core.data.remote.AuthGateway
 import com.msoumaya.deepseekandroid.core.data.remote.OwnerStore
@@ -19,12 +22,14 @@ import com.msoumaya.deepseekandroid.core.data.remote.SessionPreferences
 import com.msoumaya.deepseekandroid.core.data.remote.SupabaseAuthGateway
 import com.msoumaya.deepseekandroid.core.data.remote.SupabaseConfig
 import com.msoumaya.deepseekandroid.core.data.remote.SupabaseProvider
+import com.msoumaya.deepseekandroid.core.data.remote.SupabaseQuizSource
 import com.msoumaya.deepseekandroid.core.data.remote.SupabaseSocialSource
 import com.msoumaya.deepseekandroid.core.data.remote.SupabaseStateSource
 import com.msoumaya.deepseekandroid.core.data.remote.UnavailableAuthGateway
 import com.msoumaya.deepseekandroid.core.data.remote.VaultSessionManager
 import com.msoumaya.deepseekandroid.core.data.repository.AudioSettingsRepository
 import com.msoumaya.deepseekandroid.core.data.repository.AuthRepository
+import com.msoumaya.deepseekandroid.core.data.repository.QuizRepository
 import com.msoumaya.deepseekandroid.core.data.repository.QuranArchiveStore
 import com.msoumaya.deepseekandroid.core.data.repository.SocialRepository
 import com.msoumaya.deepseekandroid.core.data.repository.UserRepository
@@ -174,6 +179,33 @@ class AppContainer(
     val social: SocialRepository = SocialRepository(
         source = supabaseClient?.let { SupabaseSocialSource(it) },
         session = session,
+        scope = scope,
+    )
+
+    /**
+     * Le Quiz : question du jour, défis entre amis, statistiques.
+     *
+     * Même règle que pour l'espace social : construit **sans source** quand aucun projet n'est
+     * configuré, il répond « personne de connecté » sans qu'aucune requête ne parte.
+     *
+     * **Sa file d'attente est distincte de celle de l'état applicatif**, et ce n'est pas un
+     * doublon. La file commune rend ses opérations par compte **sans filtrer leur nature**, et le
+     * worker de synchronisation les envoie toutes comme des instantanés d'état : une réponse de
+     * Quiz versée dedans serait poussée comme un état complet — acceptée par le serveur, et une
+     * progression écrasée. La raison complète est dans `QuizOutboxStore`.
+     */
+    val quiz: QuizRepository = QuizRepository(
+        source = supabaseClient?.let { SupabaseQuizSource(it) },
+        session = session,
+        cache = QuizCacheStore(root),
+        outbox = QuizOutboxStore(
+            store = JsonFileStore(
+                file = File(root, "quiz_outbox.json"),
+                serializer = QuizOutbox.serializer(),
+                default = { QuizOutbox() },
+            ),
+            nowIso = { Dates.nowIso() },
+        ),
         scope = scope,
     )
 

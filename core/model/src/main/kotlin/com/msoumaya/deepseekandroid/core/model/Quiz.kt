@@ -55,7 +55,21 @@ data class DailyResponse(
 data class ChallengeAnswer(
     val userId: String,
     val questionId: String,
-    val selectedAnswerId: String,
+    /**
+     * Réponse choisie, ou `null` quand elle n'est pas encore montrable.
+     *
+     * **Le serveur envoie bien `null` ici, et le type de `quiz.ts` mentait en disant le
+     * contraire.** La fonction `quiz_snapshot` écrit
+     * `case when ca.user_id=auth.uid() or c.status='completed' then ca.answer_id else null end` :
+     * tant qu'un défi est en cours, la réponse de l'**autre** joueur arrive nulle — sans quoi on
+     * lirait son choix avant d'avoir joué. C'est l'état **normal** d'un défi asynchrone, pas un
+     * cas limite.
+     *
+     * Déclarer `String` faisait donc lever la désérialisation sur le cas le plus fréquent : un
+     * défi où l'adversaire a répondu avant moi. `coerceInputValues` ne rattrape pas ce cas — il
+     * ne substitue une valeur par défaut qu'aux propriétés qui en ont une.
+     */
+    val selectedAnswerId: String? = null,
     val answeredAt: String,
     val isCorrect: Boolean? = null,
 )
