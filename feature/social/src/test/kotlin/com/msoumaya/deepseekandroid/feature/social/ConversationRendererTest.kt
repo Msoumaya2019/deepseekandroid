@@ -346,6 +346,40 @@ class ConversationRendererTest {
     }
 
     /**
+     * Le destinataire du bouton « 🏆 Défier » est le **compte** de l'ami, et non le lien d'amitié.
+     *
+     * L'original écrit `links.find(l => l.id === selected.id)?.other?.id` : il cherche le lien
+     * pour en rendre le **compte**, parce que le Quiz crée un défi entre deux joueurs et que le
+     * serveur attend un identifiant de compte. Rendre `link.id` ferait naître un défi contre
+     * personne — et l'écran s'ouvrirait normalement, ce qui est le propre d'un défaut muet.
+     *
+     * Les deux valeurs sont distinctes dans ce banc (`lien-1` et `ami`), donc la confusion est
+     * **mesurable** : un test qui les aurait confondues passerait dans les deux cas.
+     *
+     * Les deux exclusions sont mesurées séparément, parce qu'elles seules décident de l'existence
+     * du bouton : `null` veut dire « pas de bouton », jamais « bouton sans destinataire ». Un
+     * cercle n'a pas d'adversaire unique — le Quiz n'oppose que deux joueurs —, et rien n'est
+     * ouvert tant qu'aucune pièce ne l'est.
+     */
+    @Test
+    fun `le destinataire d'un defi est le compte de l'ami, et non le lien`() {
+        assertEquals(
+            ami,
+            rendre(ouverte = piece()).challengeFriendId,
+            "Le destinataire du défi doit être le compte de l'ami (`other.id`), et non " +
+                "l'identifiant du lien d'amitié : le serveur créerait un défi contre personne.",
+        )
+        assertNull(
+            rendre(ouverte = pieceDeCercle(), cercles = listOf(cercle())).challengeFriendId,
+            "Un cercle n'a pas d'adversaire unique : le bouton « Défier » ne doit pas y exister.",
+        )
+        assertNull(
+            rendre(ouverte = null).challengeFriendId,
+            "Sans pièce ouverte, il n'y a personne à défier.",
+        )
+    }
+
+    /**
      * L'avis du dépôt est **publié par la conversation**, et pas seulement par la liste d'amis.
      *
      * La conversation est l'écran qui produit la plupart des avis — « Étape partagée avec cet

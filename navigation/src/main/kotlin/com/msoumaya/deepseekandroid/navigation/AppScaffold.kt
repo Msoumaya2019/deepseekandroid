@@ -180,6 +180,19 @@ private fun AppNavHost(
                 onOpenProgram = { navController.navigateToTab(AppDestination.PROGRAM) },
                 onOpenProgress = { navController.navigateToTab(AppDestination.PROGRESS) },
                 onOpenReviews = { navController.navigate(AppRoutes.REVIEW) { launchSingleTop = true } },
+                // La carte « Quiz » de l'accueil — **la porte principale de l'écran**. Sans elle,
+                // le Quiz n'aurait que le bouton « 🏆 Défier » d'une conversation : il faudrait un
+                // ami pour ouvrir une question du jour.
+                //
+                // `quizRoute()` sans argument plutôt que la constante `QUIZ` : la route est
+                // construite en un seul endroit, et si un jour un argument devient nécessaire,
+                // c'est cette fonction qui le portera — la constante, elle, resterait fausse.
+                // `launchSingleTop` comme depuis le programme et le Coran : appuyer deux fois ne
+                // doit pas empiler deux Quiz.
+                onOpenQuiz = { navController.navigate(AppRoutes.quizRoute()) { launchSingleTop = true } },
+                // La carte « Amis » **bascule** vers l'onglet au lieu d'empiler un écran : c'est
+                // le geste de la barre basse, et l'original écrit `setTab('Amis')`.
+                onOpenFriends = { navController.navigateToTab(AppDestination.FRIENDS) },
             )
         }
         // L'écran « Coran » : la liste des sourates, celle des Juz', celle des Hizb. Il est porté
@@ -229,7 +242,21 @@ private fun AppNavHost(
                 onOpenGoal = { navController.navigate(AppRoutes.GOAL) { launchSingleTop = true } },
             )
         }
-        composable(AppDestination.FRIENDS.route) { SocialScreen() }
+        // Les amis et les cercles. La conversation qui s'y ouvre porte le bouton « 🏆 Défier », et
+        // c'est **ici** que l'on sait où mène un défi : un écran qui appellerait `navigate`
+        // lui-même ne pourrait plus être composé ailleurs — même raison que pour le lecteur et le
+        // tableau de bord des révisions.
+        //
+        // La route est construite par `quizRoute` et non recollée sur place : une route écrite en
+        // deux endroits finit par diverger, et la divergence serait muette — la navigation
+        // n'échouerait pas, elle ouvrirait l'accueil du Quiz au lieu de la création d'un défi.
+        composable(AppDestination.FRIENDS.route) {
+            SocialScreen(
+                onChallenge = { friendId ->
+                    navController.navigate(AppRoutes.quizRoute(friendId = friendId))
+                },
+            )
+        }
 
         // Le tableau de bord des révisions. Plein écran — l'original le posait par-dessus tout —,
         // donc il porte lui-même son bouton de retour, et c'est la coquille qui décide où l'on
@@ -340,7 +367,38 @@ private fun AppNavHost(
                 onClose = { navController.popBackStack() },
             )
         }
-        composable(AppRoutes.QUIZ) { QuizScreen() }
+        // Le Quiz s'ouvre de trois façons : depuis l'accueil — rien à préciser —, depuis le bouton
+        // « 🏆 Défier » d'une conversation, qui apporte **l'ami**, et, plus tard, depuis une
+        // notification, qui apportera **le défi**. Les deux arguments sont facultatifs : `quiz`
+        // seul reste une route valide, et c'est ce qui permet d'ouvrir l'écran sans savoir ce
+        // qu'on vient y faire.
+        //
+        // C'est le motif, et non la route nue, qui est déclaré : sans lui la navigation ne
+        // saurait pas distinguer « défier cet ami » de « ouvrir le Quiz », et la seconde
+        // intention écraserait la première — le défaut muet que `readerRoute` a déjà connu.
+        composable(
+            route = AppRoutes.QUIZ_PATTERN,
+            arguments = listOf(
+                navArgument(AppRoutes.QUIZ_FRIEND) {
+                    type = NavType.StringType
+                    defaultValue = ""
+                },
+                navArgument(AppRoutes.QUIZ_CHALLENGE) {
+                    type = NavType.StringType
+                    defaultValue = ""
+                },
+            ),
+        ) { entry ->
+            // `takeIf { it.isNotEmpty() }` : un argument absent n'arrive pas en `null` mais en
+            // chaîne vide, et une chaîne vide n'est pas un identifiant. La laisser passer ferait
+            // chercher un ami qui n'existe pas — l'écran s'ouvrirait normalement, ce qui est le
+            // propre d'un défaut muet.
+            QuizScreen(
+                friendId = entry.arguments?.getString(AppRoutes.QUIZ_FRIEND)?.takeIf { it.isNotEmpty() },
+                challengeId = entry.arguments?.getString(AppRoutes.QUIZ_CHALLENGE)?.takeIf { it.isNotEmpty() },
+                onClose = { navController.popBackStack() },
+            )
+        }
 
         composable(AppRoutes.PROFILE) { ProfileScreen(mode = ProfileMode.PROFILE) }
         composable(AppRoutes.SETTINGS) { ProfileScreen(mode = ProfileMode.SETTINGS) }

@@ -68,6 +68,16 @@ data class ProgressUiState(
     /** Carte « Mon objectif ». */
     val goal: GoalLine? = null,
 
+    /**
+     * Le bloc « Quiz » du bas de page, ou `null` tant que l'instantané n'a pas été lu.
+     *
+     * **Il est affiché même à zéro**, et c'est la différence avec [goal] : la carte d'objectif
+     * n'existe que si un objectif est fixé, alors que le bloc de quiz compte des réponses dont
+     * l'absence est une information. « 0 bonne réponse / 0 » se lit « tu n'as pas encore joué »,
+     * ce qui est exact ; le taire ferait croire à une fonctionnalité absente.
+     */
+    val quiz: QuizSummary? = null,
+
     /** Les quatre compteurs du bas, dans l'ordre du client d'origine. */
     val counters: List<Counter> = emptyList(),
 )
@@ -157,3 +167,28 @@ enum class CounterKind(val label: String) {
  */
 @Immutable
 data class Counter(val kind: CounterKind, val value: Int)
+
+/**
+ * Le bloc « Quiz » de l'écran « Progrès ».
+ *
+ * **Trois lignes, toutes pré-résolues.** Le comptage vit dans `Quiz.statistics`, dans le domaine,
+ * où il est éprouvé ; la mise en forme vit dans `QuizText` ; le renderer ne fait que les relier.
+ * L'écran, lui, ne pose que trois `AppLabel` — c'est ce qui rend « 7 bonnes réponses / 9 »
+ * vérifiable sans appareil.
+ *
+ * Les trois lignes sont **distinctes** et non un seul texte à sauts : l'original leur donne trois
+ * tailles et deux couleurs différentes, et le titre du bloc est une `Heading` de 19. Les replier
+ * en une chaîne ferait perdre cette hiérarchie, qui est ce qui rend le bloc lisible.
+ *
+ * @param title titre du bloc.
+ * @param daily bonnes réponses et total, mis en forme.
+ * @param rate taux de réussite, mis en forme.
+ * @param challenges défis joués, victoires et égalités, mis en forme.
+ */
+@Immutable
+data class QuizSummary(
+    val title: String,
+    val daily: String,
+    val rate: String,
+    val challenges: String,
+)

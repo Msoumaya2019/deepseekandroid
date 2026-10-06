@@ -70,9 +70,10 @@ import com.msoumaya.deepseekandroid.core.domain.ProgressText
 // déclarée `spaced = false` — c'est au parent de décider —, et l'écart entre les deux rangées est
 // donc porté ici.
 //
-// **Ce qui n'est pas là.** Le bloc `QuizStats` du client d'origine — bonnes réponses et défis —
-// arrive avec l'écran de quiz, en phase D. Il n'est pas remplacé par un équivalent local : sans
-// question du jour, un bloc de quiz n'aurait rien à compter. Même choix qu'à l'accueil.
+// **Le bloc `QuizStats` y est.** Il est posé entre la carte d'objectif et les compteurs, comme
+// dans l'original, et il ne dépend **pas** du sélecteur de période : c'est un cumul depuis le
+// début. Ses trois lignes vivent dans `QuizSummary`, déjà mises en forme par `ProgressRenderer` —
+// l'écran ne compte rien, il ne fait que les poser.
 // ---------------------------------------------------------------------------
 
 /** Retrait horizontal du contenu, sous la bande d'en-tête. Valeur du programme et du Coran. */
@@ -250,6 +251,12 @@ private fun ProgressBody(
             )
 
             state.goal?.let { goal -> GoalCard(goal = goal, onOpen = onOpenGoal) }
+
+            // Le bloc de quiz, **après** la carte d'objectif et **avant** les compteurs — c'est sa
+            // place dans l'original. Il ne dépend ni de la période ni du graphique : c'est un cumul
+            // depuis le début. Le placer sous le sélecteur « Jour / Semaine / Mois » laisserait
+            // croire qu'il change avec lui.
+            state.quiz?.let { summary -> QuizStats(summary = summary) }
 
             AppSectionHeader(title = ProgressText.STATISTICS)
 

@@ -80,6 +80,20 @@ data class ConversationUiState(
      */
     val canReport: Boolean = false,
 
+    /**
+     * L'ami à défier, ou `null` quand il n'y a pas lieu de proposer un défi.
+     *
+     * **Une valeur pour trois conditions.** L'original les écrit dans l'écran —
+     * `!selected.adminContact && selected.kind==='link' && onChallenge` —, puis il cherche
+     * l'identifiant de l'ami dans la liste des liens. Les replier ici fait qu'il n'y a qu'un
+     * endroit à relire, et que l'écran n'a plus à savoir ce qu'est un lien d'amitié.
+     *
+     * C'est l'identifiant du **compte** de l'ami — `other.id` —, celui que le Quiz attend pour
+     * créer un défi. `null` veut donc dire « pas de bouton », et jamais « bouton sans
+     * destinataire ».
+     */
+    val challengeFriendId: String? = null,
+
     // --- Profil et entraide ---
 
     /** Vrai si le bloc peut être ouvert. Faux dans le cercle de l'administration. */

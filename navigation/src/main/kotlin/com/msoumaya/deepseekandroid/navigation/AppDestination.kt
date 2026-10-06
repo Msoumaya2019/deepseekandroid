@@ -214,6 +214,50 @@ object AppRoutes {
     /** Le défi de quiz, ouvert depuis l'accueil ou depuis un défi d'ami. */
     const val QUIZ = "quiz"
 
+    /**
+     * L'ami à défier, en argument **facultatif** de la route du Quiz.
+     *
+     * L'identifiant du **compte**, et non celui du lien d'amitié : le Quiz défie un joueur, et
+     * c'est ce que le serveur attend. Confondre les deux ferait créer un défi contre personne — et
+     * l'écran s'ouvrirait normalement, ce qui est le propre d'un défaut muet.
+     */
+    const val QUIZ_FRIEND = "ami"
+
+    /**
+     * Le défi à ouvrir, en argument **facultatif**.
+     *
+     * Il n'a pas encore de producteur : « Défier » ouvre la **création** d'un défi, et la
+     * notification qui ouvrirait un défi précis n'existe pas. L'argument est accepté avant d'avoir
+     * un appelant, parce que c'est la seule façon d'ouvrir un défi nommé sans repasser par la
+     * liste — et que l'écran, lui, sait déjà le faire.
+     */
+    const val QUIZ_CHALLENGE = "defi"
+
+    /**
+     * Le motif de la route du Quiz, arguments compris.
+     *
+     * Les deux arguments sont facultatifs, comme ceux du lecteur : `quiz` seul reste une route
+     * valide, et c'est ce qui permet d'ouvrir l'écran sans savoir ce qu'on vient y faire.
+     */
+    val QUIZ_PATTERN: String =
+        "$QUIZ?$QUIZ_FRIEND={$QUIZ_FRIEND}&$QUIZ_CHALLENGE={$QUIZ_CHALLENGE}"
+
+    /**
+     * La route du Quiz, ouverte sur un ami, sur un défi, ou sur rien.
+     *
+     * Construite ici, et non recollée chez l'appelant : une route écrite en deux endroits finit par
+     * diverger, et la divergence serait **muette** — la navigation n'échouerait pas, elle ouvrirait
+     * l'accueil de l'écran au lieu de la vue visée. C'est exactement le défaut que [readerRoute] a
+     * déjà connu, et qui l'a fait écrire.
+     */
+    fun quizRoute(friendId: String? = null, challengeId: String? = null): String {
+        val arguments = buildList {
+            if (friendId != null) add("$QUIZ_FRIEND=$friendId")
+            if (challengeId != null) add("$QUIZ_CHALLENGE=$challengeId")
+        }
+        return if (arguments.isEmpty()) QUIZ else "$QUIZ?" + arguments.joinToString("&")
+    }
+
     /** Les contenus du jour : invocation, hadith, verset à méditer. */
     const val DAILY = "quotidien"
 

@@ -112,6 +112,12 @@ internal object ConversationRenderer {
                 )
             },
             canReport = isLink,
+            // **Les trois conditions de l'original, repliées en une valeur.** Il écrivait
+            // `!selected.adminContact && selected.kind==='link' && onChallenge`, puis cherchait
+            // l'ami par `links.find(l=>l.id===selected.id)?.other?.id`. Le lien est déjà résolu
+            // juste au-dessus, donc `other.id` suffit — et `null` veut dire « pas de bouton »,
+            // jamais « bouton sans destinataire ».
+            challengeFriendId = if (!adminContact && isLink) link?.other?.id else null,
 
             showTools = showTools,
             toolsOpen = toolsOpen,

@@ -112,8 +112,14 @@ fun AppProfileButton(
  * affiché un demi-caractère pour un prénom commençant par un emoji ou une lettre hors BMP.
  *
  * @return la lettre en capitale, ou `null` si le prénom est absent ou blanc.
+ *
+ * **Publique, et non `internal`.** Le médaillon d'un ami n'existe pas que dans l'en-tête : l'écran
+ * du Quiz affiche le même — un rond, une initiale, rien d'autre — pour l'adversaire d'un défi et
+ * pour l'ami à défier. `feature:social` en a écrit un second de son côté, qui lit une seule unité
+ * UTF-16 là où celle-ci lit un point de code ; le jour où il adoptera celle-ci, les deux médaillons
+ * cesseront de diverger sur un prénom qui commence hors du plan de base.
  */
-internal fun initialeDe(firstName: String?): String? {
+fun initialeDe(firstName: String?): String? {
     val rogne = firstName?.trim().orEmpty()
     if (rogne.isEmpty()) return null
     val point = rogne.codePointAt(0)

@@ -34,16 +34,26 @@ object Quiz {
      *
      * Le statut serveur prime ; l'expiration est ensuite déduite de `expiresAt`, ce qui rend
      * l'affichage correct même si le serveur n'a pas encore basculé le statut.
+     *
+     * **Les quatre libellés vivent dans [QuizText]**, et non ici en clair. L'écran doit
+     * reconnaître « à moi de jouer » pour mettre la ligne en avant ; comparer une phrase
+     * recopiée à deux endroits est précisément ce qui les fait diverger sans que rien ne le
+     * dise, et c'est le défaut que l'écran de conversation a déjà évité pour le geste de
+     * modération.
      */
     fun challengeStatus(challenge: QuizChallenge, userId: String, now: Long = System.currentTimeMillis()): String {
-        if (challenge.status == ChallengeStatus.COMPLETED) return "Terminé"
+        if (challenge.status == ChallengeStatus.COMPLETED) return QuizText.CHALLENGE_DONE
         if (challenge.status == ChallengeStatus.EXPIRED ||
             Dates.parseIsoMillis(challenge.expiresAt) <= now
         ) {
-            return "Expiré"
+            return QuizText.CHALLENGE_EXPIRED
         }
         val answered = challenge.answers.count { it.userId == userId }
-        return if (answered == challenge.questionCount) "En attente de l’ami" else "À toi de jouer"
+        return if (answered == challenge.questionCount) {
+            QuizText.CHALLENGE_WAITING
+        } else {
+            QuizText.CHALLENGE_YOUR_TURN
+        }
     }
 
     /**

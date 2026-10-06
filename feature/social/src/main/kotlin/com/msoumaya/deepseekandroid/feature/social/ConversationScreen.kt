@@ -62,15 +62,19 @@ import com.msoumaya.deepseekandroid.core.domain.SocialText
 // ancien sans avoir à redescendre. La colonne défilante est donc celle du corps, et la bande du
 // compositeur lui est sœur — d'où le `weight(1f)` sur la première.
 //
-// **Ce que l'écran ne fait pas encore, et pourquoi il le tait.** Trois capacités de l'original
+// **Ce que l'écran ne fait pas encore, et pourquoi il le tait.** Deux capacités de l'original
 // n'ont pas de matière ici, et chacune serait un bouton qui n'agit pas :
 //
 //  1. **l'écoute d'une récitation partagée** — elle demande une URL **signée** pour un fichier
 //     déposé dans un espace privé, et un lecteur qui ne se confonde pas avec la séance en cours du
 //     lecteur coranique. Le bloc affiche donc le passage et sa durée, sans bouton ;
-//  2. **le bouton « 🏆 Défier »** — il mène à l'écran Quiz, qui n'existe pas encore ;
-//  3. **le direct** — « Écrit un message… » et l'arrivée d'un message sans rien toucher demandent
+//  2. **le direct** — « Écrit un message… » et l'arrivée d'un message sans rien toucher demandent
 //     le canal temps réel. L'état de l'en-tête n'a donc jamais cette valeur.
+//
+// **Le bouton « 🏆 Défier », lui, n'est plus tu.** Il l'a été tant que l'écran Quiz n'existait
+// pas ; il est là depuis que la route du Quiz porte l'ami à défier. Son destinataire — le compte de
+// l'ami, `other.id` — vient de l'état, où les trois conditions de l'original sont déjà repliées :
+// l'écran ne compose le bouton que si l'état lui donne quelqu'un à défier.
 //
 // **Un écart assumé, de défilement celui-là.** L'original ouvre la conversation **en haut** de la
 // page chargée, c'est-à-dire sur le plus ancien des cinquante derniers messages : il faut faire
@@ -105,6 +109,15 @@ private const val MESSAGE_MAX = 2000
 @Composable
 internal fun ConversationSection(
     modifier: Modifier = Modifier,
+    /**
+     * Ouverture du Quiz sur l'ami de cette conversation.
+     *
+     * **Le rappel, et non la navigation.** Cet écran n'est pas une destination : c'est
+     * `SocialScreen` qui le compose, et c'est la route qui sait où l'on va. Le rappel porte
+     * l'identifiant **du compte de l'ami** — `other.id` —, celui que le Quiz attend pour créer un
+     * défi ; il vient de l'état, où les trois conditions de l'original sont déjà repliées.
+     */
+    onChallenge: (String) -> Unit = {},
     viewModel: ConversationViewModel = viewModel(
         factory = ConversationViewModel.factory(LocalAppContainer.current),
     ),
@@ -120,6 +133,7 @@ internal fun ConversationSection(
     ConversationContent(
         state = state,
         modifier = modifier,
+        onChallenge = onChallenge,
         onClose = viewModel::onClose,
         onToggleTools = viewModel::onToggleTools,
         onDraftChange = viewModel::onDraftChange,
@@ -158,6 +172,14 @@ internal fun ConversationSection(
 internal fun ConversationContent(
     state: ConversationUiState,
     modifier: Modifier = Modifier,
+    /**
+     * Ouverture du Quiz sur l'ami de cette conversation, porté par l'état.
+     *
+     * Le rappel descend jusqu'au corps, qui affiche le bouton : c'est la même valeur que
+     * [ConversationUiState.challengeFriendId], donc l'écran n'a pas à décider si le bouton a lieu
+     * d'être — il ne le compose que si l'état lui donne un destinataire.
+     */
+    onChallenge: (String) -> Unit = {},
     onClose: () -> Unit = {},
     onToggleTools: () -> Unit = {},
     onDraftChange: (String) -> Unit = {},
@@ -225,6 +247,7 @@ internal fun ConversationContent(
 
                     else -> ConversationBody(
                         state = state,
+                        onChallenge = onChallenge,
                         onToggleTools = onToggleTools,
                         onLoadOlder = onLoadOlder,
                         onDeleteMessage = onDeleteMessage,
@@ -411,6 +434,7 @@ private fun ConversationBody(
     onToggleModerator: (String, Boolean) -> Unit,
     onRemoveMember: (String) -> Unit,
     onAskDeleteGroup: () -> Unit,
+    onChallenge: (String) -> Unit,
 ) {
     // Le dépliant « Profil et entraide ». Il n'existe pas dans le cercle de l'administration :
     // c'est `showTools` qui le dit, et il vient du domaine.
@@ -423,6 +447,24 @@ private fun ConversationBody(
                 .fillMaxWidth()
                 .padding(top = AppTheme.spacing.sm),
             onClick = onToggleTools,
+        )
+    }
+
+    // « 🏆 Défier », juste après le dépliant — c'est la place de l'original, où les deux boutons
+    // se suivent. La garde d'existence est **la même** que la sienne (`!adminContact`), mais elle
+    // n'est pas réécrite ici : elle est déjà repliée dans `challengeFriendId`, qui vaut `null`
+    // pour le cercle de l'administration, pour un lien qui n'est pas une amitié, et pour une
+    // amitié dont le compte d'en face est inconnu. Le bouton ne peut donc pas naître sans
+    // quelqu'un à défier.
+    state.challengeFriendId?.let { friendId ->
+        AppButton(
+            text = SocialText.CHALLENGE,
+            secondary = true,
+            small = true,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = AppTheme.spacing.sm),
+            onClick = { onChallenge(friendId) },
         )
     }
 

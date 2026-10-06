@@ -39,6 +39,20 @@ data class HomeUiState(
     val week: WeekSummary = WeekSummary(),
 
     /**
+     * Les deux cartes de quiz.
+     *
+     * **Jamais nulles une fois l'état calculé**, et c'est délibéré : les deux cartes de l'original
+     * ne sont conditionnées par rien, et elles mènent au Quiz même quand aucune question n'est
+     * publiée — c'est une porte, pas un compteur.
+     *
+     * Le `null` ne décrit donc pas « pas de quiz » : il décrit « l'accueil n'a pas encore calculé
+     * son contenu », c'est-à-dire les deux états d'attente et de panne, où l'écran n'affiche de
+     * toute façon pas ce bloc. Le distinguer d'un état calculé évite d'inventer des cartes pour un
+     * écran qui montre autre chose.
+     */
+    val quiz: QuizCards? = null,
+
+    /**
      * Message d'échec, ou `null`.
      *
      * Renseigné quand le référentiel coranique n'a pas pu être chargé : dans ce cas aucune
@@ -118,3 +132,34 @@ data class WeekSummary(
         const val DAYS = 7
     }
 }
+
+/**
+ * Les deux cartes de quiz de l'accueil : « Quiz » et « Amis ».
+ *
+ * **Tout est pré-résolu en texte.** L'écran ne choisit pas entre trois sous-titres, ne compte rien
+ * et ne compare aucune date : c'est [HomeRenderer] qui décide, à partir de l'instantané et du jour.
+ * Un choix fait dans le composable serait rejoué à chaque recomposition, et ne serait éprouvable
+ * qu'avec un hôte Compose.
+ *
+ * [quizAlert] porte la **pastille rouge** de l'original, et c'est la seule chose qui ne soit pas du
+ * texte. La source écrit `available && !done` — deux conditions distinctes, et non la négation
+ * l'une de l'autre : une question peut être publiée **et** déjà répondue, auquel cas la pastille
+ * disparaît, ou non publiée **et** sans réponse, auquel cas elle n'apparaît pas non plus.
+ */
+@Immutable
+data class QuizCards(
+    /** Titre de la première carte — « Quiz ». */
+    val quizTitle: String,
+    /** Sous-titre : l'état du jour, dit en toutes lettres. */
+    val quizSub: String,
+    /** Détail : « 1/1 aujourd'hui » une fois la question répondue, sinon l'invitation. */
+    val quizDetail: String,
+    /** Vrai quand la pastille doit signaler une question du jour non encore répondue. */
+    val quizAlert: Boolean,
+    /** Titre de la seconde carte — « Amis ». */
+    val friendsTitle: String,
+    /** Sous-titre : « Défie tes amis ». */
+    val friendsSub: String,
+    /** Détail : « Quiz entre amis ». */
+    val friendsDetail: String,
+)

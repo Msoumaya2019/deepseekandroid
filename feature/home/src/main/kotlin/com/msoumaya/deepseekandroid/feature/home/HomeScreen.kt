@@ -80,6 +80,11 @@ import com.msoumaya.deepseekandroid.core.domain.StudySession
  * @param onOpenProgram bascule vers l'onglet Programme.
  * @param onOpenProgress bascule vers l'onglet Progrès.
  * @param onOpenReviews ouverture du tableau de bord des révisions.
+ * @param onOpenQuiz ouverture de l'écran Quiz. **La porte principale du Quiz** : c'est par la
+ *   carte de l'accueil qu'on y arrive sans avoir d'ami à défier.
+ * @param onOpenFriends bascule vers l'onglet « Amis ». Distinct de [onOpenQuiz] : l'une ouvre le
+ *   Quiz, l'autre va chercher quelqu'un à défier — et c'est l'original qui les sépare, en donnant
+ *   à chaque carte son propre geste.
  * @param viewModel état de l'écran. Par défaut, celui du conteneur applicatif.
  */
 @Composable
@@ -93,6 +98,8 @@ fun HomeScreen(
     onOpenProgram: () -> Unit = {},
     onOpenProgress: () -> Unit = {},
     onOpenReviews: () -> Unit = {},
+    onOpenQuiz: () -> Unit = {},
+    onOpenFriends: () -> Unit = {},
     viewModel: HomeViewModel = viewModel(factory = HomeViewModel.factory(LocalAppContainer.current)),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -105,6 +112,8 @@ fun HomeScreen(
         onOpenProgram = onOpenProgram,
         onOpenProgress = onOpenProgress,
         onOpenReviews = onOpenReviews,
+        onOpenQuiz = onOpenQuiz,
+        onOpenFriends = onOpenFriends,
     )
 }
 
@@ -117,6 +126,8 @@ private fun HomeContent(
     onOpenProgram: () -> Unit = {},
     onOpenProgress: () -> Unit = {},
     onOpenReviews: () -> Unit = {},
+    onOpenQuiz: () -> Unit = {},
+    onOpenFriends: () -> Unit = {},
 ) {
     when {
         state.failure != null -> HomeFailure(message = state.failure, modifier = modifier)
@@ -184,6 +195,20 @@ private fun HomeContent(
                         },
                         modifier = Modifier.weight(1f),
                         revision = true,
+                    )
+                }
+
+                // Les deux cartes de quiz, **entre** « Aujourd'hui » et « Ma semaine » — c'est
+                // leur place dans l'original. Les remonter en tête reléguerait la reprise de
+                // lecture au second plan, alors que le Coran reste la raison d'être de l'écran.
+                //
+                // Elles ne sont composées que si l'état les porte : `null` veut dire « instantané
+                // pas encore lu », et l'accueil n'affiche de toute façon rien avant.
+                state.quiz?.let { cards ->
+                    QuizHomeCards(
+                        cards = cards,
+                        onQuiz = onOpenQuiz,
+                        onFriends = onOpenFriends,
                     )
                 }
 

@@ -111,7 +111,7 @@ class ConversationScreenWiringTest {
                 "s'ouvrirait dans le dépôt sans que rien ne la montre.",
         )
         assertTrue(
-            source.contains("ConversationSection(modifier = modifier)"),
+            source.contains("ConversationSection(modifier = modifier, onChallenge = onChallenge)"),
             "L'écran des amis ne compose plus la conversation à la place de la liste.",
         )
     }
@@ -134,6 +134,35 @@ class ConversationScreenWiringTest {
                     "fermé, et rien ne le signale.",
             )
         }
+    }
+
+    @Test
+    fun `le bouton Defier suit l'etat et ouvre le Quiz sur l'ami`() {
+        // L'original pose « 🏆 Défier » juste après le dépliant « Profil et entraide », sous la
+        // même garde que lui. Ici, ses trois conditions — pas un contact d'administration, un lien
+        // d'amitié, un destinataire connu — sont repliées dans `challengeFriendId`, qui vit dans
+        // le domaine et s'y éprouve. L'écran n'a donc qu'à composer le bouton si l'état lui donne
+        // quelqu'un, et à lui passer cet identifiant.
+        //
+        // Ce qui disparaîtrait sans un mot : un `let` remplacé par une garde sur `showTools` ferait
+        // naître le bouton dans un cercle où il n'a pas de sens — et `onChallenge` a une valeur par
+        // défaut vide, donc un bouton qui n'appelle rien compile et s'affiche.
+        val source = sourceDeLEcran()
+
+        assertTrue(
+            source.contains("state.challengeFriendId?.let { friendId ->"),
+            "Le bouton « 🏆 Défier » ne dépend plus de l'état : il pourrait naître sans " +
+                "destinataire, et « Défier » ne défierait personne.",
+        )
+        assertTrue(
+            source.contains("text = SocialText.CHALLENGE,"),
+            "Le bouton « 🏆 Défier » n'emprunte plus son libellé à `SocialText`.",
+        )
+        assertTrue(
+            source.contains("onClick = { onChallenge(friendId) },"),
+            "Le bouton « 🏆 Défier » n'ouvre plus le Quiz sur l'ami : ce serait un bouton mort, " +
+                "et rien d'autre ne le dirait.",
+        )
     }
 
     @Test

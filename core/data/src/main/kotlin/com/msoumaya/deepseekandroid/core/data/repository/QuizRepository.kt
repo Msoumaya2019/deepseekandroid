@@ -67,8 +67,22 @@ import kotlinx.coroutines.sync.withLock
  * réseau, et l'écran n'a jamais à distinguer « pas encore lu » de « lu, et vide ».
  */
 data class QuizState(
-    /** Vrai si un compte est ouvert. Faux aussi hors configuration Supabase. */
-    val signedIn: Boolean = false,
+    /**
+     * L'identifiant du compte ouvert, ou `null`. C'est **la** source de l'identité du Quiz.
+     *
+     * Le Quiz en a besoin pour compter **mes** réponses et pour savoir de quel côté d'un défi je
+     * me trouve : `Quiz.challengeStatus` compte les réponses de ce compte, et la ligne d'un défi
+     * affiche le nom de **l'autre** joueur. Un identifiant faux ou absent produirait donc deux
+     * erreurs silencieuses — « à toi de jouer » sur un défi auquel j'ai déjà répondu, et le nom
+     * du mauvais adversaire.
+     *
+     * **Il est publié ici plutôt que lu depuis l'état social.** Le profil de l'espace « Amis »
+     * n'est pas toujours chargé, et ne l'est pas du tout hors configuration Supabase ; le dépôt
+     * du Quiz, lui, connaît son propriétaire, puisque c'est lui qui déclenche ses lectures. Un
+     * booléen `signedIn` vivait ici avant lui : il était écrit deux fois et **lu nulle part**,
+     * donc il ne disait rien que `ownerId != null` ne dise.
+     */
+    val ownerId: String? = null,
 
     /** Vrai tant que le premier instantané n'a pas été lu. Le défaut est donc « en attente ». */
     val loading: Boolean = true,
@@ -151,7 +165,7 @@ class QuizRepository(
         //    statistiques et ses défis. L'original fait de même, mais depuis l'écran — ici le
         //    dépôt en est seul maître, donc il le fait lui-même.
         _state.value = _state.value.copy(
-            signedIn = true,
+            ownerId = owner,
             loading = false,
             snapshot = store.current(),
             failure = null,
@@ -339,7 +353,9 @@ class QuizRepository(
 
     /** État « personne de connecté » : rien à montrer, et ce n'est pas une panne. */
     private fun clear() {
-        _state.value = QuizState(signedIn = false, loading = false)
+        // `ownerId` retombe à `null` par défaut : c'est exactement ce que « aucun compte » veut
+        // dire, et il n'y a donc rien à écrire de plus.
+        _state.value = QuizState(loading = false)
     }
 
     /**

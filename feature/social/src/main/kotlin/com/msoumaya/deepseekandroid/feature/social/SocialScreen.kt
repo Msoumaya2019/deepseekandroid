@@ -140,11 +140,14 @@ private val ONLINE_DOT = Color(0xFF53A963)
  * Mes amis : liste, invitations, cercles privés, contact de l'administration.
  *
  * @param modifier modificateur de disposition.
+ * @param onChallenge ouverture du Quiz sur l'ami d'une conversation. C'est ici qu'on sait où l'on
+ *   va : la conversation n'est pas une destination, c'est cet écran qui la compose.
  * @param viewModel état de l'écran. Par défaut, celui du conteneur applicatif.
  */
 @Composable
 fun SocialScreen(
     modifier: Modifier = Modifier,
+    onChallenge: (String) -> Unit = {},
     viewModel: SocialViewModel = viewModel(
         factory = SocialViewModel.factory(LocalAppContainer.current),
     ),
@@ -162,7 +165,7 @@ fun SocialScreen(
     // cohabiter dans une même colonne défilante mettrait le champ d'écriture à la suite des
     // invitations.
     if (state.conversationOpen) {
-        ConversationSection(modifier = modifier)
+        ConversationSection(modifier = modifier, onChallenge = onChallenge)
         return
     }
 

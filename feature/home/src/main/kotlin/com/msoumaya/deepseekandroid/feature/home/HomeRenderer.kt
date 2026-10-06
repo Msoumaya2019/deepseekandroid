@@ -4,12 +4,14 @@ import com.msoumaya.deepseekandroid.core.domain.Dates
 import com.msoumaya.deepseekandroid.core.domain.Program
 import com.msoumaya.deepseekandroid.core.domain.ProgramText
 import com.msoumaya.deepseekandroid.core.domain.Quran
+import com.msoumaya.deepseekandroid.core.domain.QuizText
 import com.msoumaya.deepseekandroid.core.domain.Review
 import com.msoumaya.deepseekandroid.core.domain.StudyProgressCalculator
 import com.msoumaya.deepseekandroid.core.domain.StudySession
 import com.msoumaya.deepseekandroid.core.domain.WeeklyProgress
 import com.msoumaya.deepseekandroid.core.model.AppState
 import com.msoumaya.deepseekandroid.core.model.MushafSource
+import com.msoumaya.deepseekandroid.core.model.QuizSnapshot
 import com.msoumaya.deepseekandroid.core.model.Range
 import com.msoumaya.deepseekandroid.core.model.SessionStatus
 import com.msoumaya.deepseekandroid.core.model.StudyMode
@@ -41,9 +43,16 @@ internal object HomeRenderer {
      * Calcule l'état affichable à partir de l'état applicatif.
      *
      * @param state état applicatif persisté.
-     * @param at jour courant, au format `AAAA-MM-JJ`.
+     * @param at jour courant, au format `AAAA-MM-JJ`. Il sert aussi de **jour du Quiz** : les deux
+     *   calendriers sont le même — `Quiz.quizDay()` est `Dates.zone()`, et `Dates.todayLocal()` le
+     *   même fuseau —, et le passer en entrée plutôt que de le relire rend les cartes de quiz
+     *   éprouvables sans horloge.
+     * @param quiz instantané du Quiz, ou `null` tant que le disque n'a pas été lu — et pour
+     *   toujours hors configuration Supabase. **Facultatif à dessein** : l'accueil s'affiche sans
+     *   le Quiz, et les deux cartes annoncent alors la question du jour, ce qui est exact
+     *   puisqu'elles ne promettent rien de plus.
      */
-    fun render(state: AppState, at: String): HomeUiState {
+    fun render(state: AppState, at: String, quiz: QuizSnapshot? = null): HomeUiState {
         val stats = Program.stats(state, at)
         val week = WeeklyProgress.weeklyProgress(state, at)
         val active = activity(state, at)
@@ -102,6 +111,53 @@ internal object HomeRenderer {
                 },
                 goalRatio = week.ratio.toFloat(),
             ),
+            quiz = quizCards(quiz, at),
+        )
+    }
+
+    /**
+     * Les deux cartes de quiz de l'accueil.
+     *
+     * ## Les deux conditions de l'original, recopiées mot pour mot
+     *
+     * `done` est vrai dès qu'une réponse **quelconque** porte le jour courant
+     * (`responses.some(r => r.day === quizDay())`) ; `available` demande en plus que l'instantané
+     * soit **celui du jour** et qu'il porte la question publiée. Les deux ne se déduisent pas l'une
+     * de l'autre, et les confondre produirait deux erreurs muettes : un instantané d'hier peut
+     * porter des réponses d'aujourd'hui — la carte annoncerait « terminée » d'après un instantané
+     * qui ne sait rien du jour —, et un instantané du jour peut n'avoir aucune question publiée,
+     * auquel cas « disponible » serait un mensonge.
+     *
+     * ## La pastille
+     *
+     * `available && !done` : une question publiée et pas encore répondue. C'est la seule chose qui
+     * ne soit pas du texte, et l'écran ne la calcule pas — il la reçoit décidée.
+     *
+     * ## Le repli
+     *
+     * Un instantané nul rend « Question du jour » et l'invitation, qui ne promettent rien. C'est le
+     * cas du tout premier affichage, et celui d'une application sans projet Supabase configuré.
+     */
+    private fun quizCards(snapshot: QuizSnapshot?, at: String): QuizCards {
+        val done = snapshot?.responses?.any { it.day == at } == true
+        val available = snapshot != null && snapshot.day == at && snapshot.daily != null
+
+        return QuizCards(
+            quizTitle = QuizText.HOME_CARD_QUIZ,
+            quizSub = when {
+                done -> QuizText.HOME_CARD_QUIZ_DONE
+                available -> QuizText.HOME_CARD_QUIZ_AVAILABLE
+                else -> QuizText.HOME_CARD_QUIZ_PENDING
+            },
+            quizDetail = if (done) {
+                QuizText.HOME_CARD_QUIZ_DETAIL_DONE
+            } else {
+                QuizText.HOME_CARD_QUIZ_DETAIL
+            },
+            quizAlert = available && !done,
+            friendsTitle = QuizText.HOME_CARD_FRIENDS,
+            friendsSub = QuizText.HOME_CARD_FRIENDS_SUB,
+            friendsDetail = QuizText.HOME_CARD_FRIENDS_DETAIL,
         )
     }
 

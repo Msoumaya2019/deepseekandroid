@@ -5,8 +5,11 @@ import com.msoumaya.deepseekandroid.core.domain.Dates
 import com.msoumaya.deepseekandroid.core.domain.Program
 import com.msoumaya.deepseekandroid.core.domain.ProgramText
 import com.msoumaya.deepseekandroid.core.domain.ProgressText
+import com.msoumaya.deepseekandroid.core.domain.Quiz
+import com.msoumaya.deepseekandroid.core.domain.QuizText
 import com.msoumaya.deepseekandroid.core.domain.Quran
 import com.msoumaya.deepseekandroid.core.model.AppState
+import com.msoumaya.deepseekandroid.core.model.QuizSnapshot
 import com.msoumaya.deepseekandroid.core.model.SessionStatus
 import com.msoumaya.deepseekandroid.core.model.StudyMode
 import com.msoumaya.deepseekandroid.core.model.effectiveReviewHistory
@@ -48,11 +51,21 @@ internal object ProgressRenderer {
      * @param period la période choisie : elle décide de la fenêtre des versets appris et de la
      *   largeur du graphique.
      * @param at jour courant, injectable pour que les tests ne dépendent pas de l'horloge.
+     * @param quiz instantané du Quiz, ou `null` tant que le disque n'a pas été lu. Facultatif à
+     *   dessein : l'écran s'affiche sans le Quiz, et son bloc de statistiques disparaît alors —
+     *   plutôt que d'annoncer des zéros qui ne viendraient d'aucune lecture.
+     * @param userId l'identifiant du compte ouvert, ou `null`. Il décide **de quel côté** d'un défi
+     *   je me trouve : `Quiz.statistics` compte mes bonnes réponses et celles de l'autre joueur,
+     *   donc un identifiant faux inverserait victoires et égalités sans que rien ne le dise. Sans
+     *   compte, `null` se lit comme un identifiant vide — c'est ce que fait l'original
+     *   (`userId ?? ''`), et le résultat est le même : aucun défi n'est gagné.
      */
     fun render(
         state: AppState,
         period: ProgressText.Period,
         at: String = Dates.todayLocal(),
+        quiz: QuizSnapshot? = null,
+        userId: String? = null,
     ): ProgressUiState {
         val progress = Program.progress(state)
         val stats = Program.stats(state, at)
@@ -103,6 +116,42 @@ internal object ProgressRenderer {
                 Counter(CounterKind.PAGES_READ, pagesRead(state)),
                 Counter(CounterKind.VERSES, known.size),
             ),
+            quiz = quizSummary(quiz, userId),
+        )
+    }
+
+    /**
+     * Le bloc « Quiz », ou `null` tant qu'aucun instantané n'a été lu.
+     *
+     * ## Pourquoi le comptage n'est pas réécrit ici
+     *
+     * `Quiz.statistics` porte déjà les trois règles de l'original, et il les porte **avec** les
+     * autres décisions du Quiz — le statut d'un défi, la fusion d'un instantané. Les recopier
+     * donnerait deux comptages qui divergeraient au premier changement de règle, et c'est celui
+     * qu'on ne relit pas qui resterait. Le renderer ne fait donc que mettre en forme.
+     *
+     * ## Ce que compte chaque ligne
+     *
+     * `correct` et `total` ne retiennent que les réponses **confirmées** : une réponse en attente
+     * de synchronisation gonflerait le score affiché. `played` ne retient que les défis
+     * **terminés** — un défi en cours n'a pas de vainqueur —, et `ties` ceux où les deux joueurs
+     * ont le même nombre de bonnes réponses.
+     *
+     * ## Pourquoi un instantané nul ne rend pas des zéros
+     *
+     * « 0 bonne réponse / 0 » se lirait « tu n'as jamais joué », ce qui est une affirmation sur la
+     * personne. Tant que rien n'a été lu, le bloc disparaît — c'est la même distinction que la
+     * panne et la discussion vide de l'écran de conversation.
+     */
+    private fun quizSummary(snapshot: QuizSnapshot?, userId: String?): QuizSummary? {
+        if (snapshot == null) return null
+
+        val stats = Quiz.statistics(snapshot, userId.orEmpty())
+        return QuizSummary(
+            title = QuizText.STATS_TITLE,
+            daily = QuizText.statsDaily(stats.correct, stats.total),
+            rate = QuizText.statsRate(stats.rate),
+            challenges = QuizText.statsChallenges(stats.played, stats.wins, stats.ties),
         )
     }
 

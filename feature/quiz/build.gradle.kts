@@ -32,10 +32,23 @@ kotlin {
 }
 
 dependencies {
-    // Ce module ne depend que du design et du modele : il ne connait ni le reseau, ni le
-    // stockage, ni les autres fonctionnalites. Quand il aura besoin de lire des donnees, il
-    // declarera `core:data` — comme `feature:home` — et rien d'autre.
+    // Ce module ne depend que du design, du modele et du domaine : il ne connait ni le reseau,
+    // ni le stockage, ni les autres fonctionnalites. Le domaine est necessaire pour les regles
+    // du Quiz (`Quiz.challengeStatus`, `Quiz.quizDay`) et pour ses libelles (`QuizText`), qui
+    // doivent rester la seule copie des mots que l'utilisateur voit.
+    //
+    // `core:data` est la pour l'ecran seul : il lit le depot du Quiz, celui des amis et l'etat du
+    // compte. Le **calcul**, lui, n'en depend pas — le `ViewModel` extrait la liste d'amis de
+    // `SocialState` pour la passer au renderer en `List<FriendLink>`, ce qui garde le renderer
+    // pur, donc eprouvable sans appareil.
     api(project(":core:design"))
+    api(project(":core:domain"))
+    implementation(project(":core:data"))
+
     implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.compose.material.icons.extended)
+
+    testImplementation(libs.junit)
+    testImplementation(libs.kotlin.test)
 }

@@ -141,6 +141,21 @@ internal fun progresDeLaCoquille(): String =
 internal fun amisDeLaCoquille(): String =
     sansCommentaires(blocApres("composable(AppDestination.FRIENDS.route)"))
 
+/**
+ * Le bloc de l'écran « Quiz » seul, **commentaires retirés**.
+ *
+ * Le retrait sert ici plus qu'ailleurs : le bloc explique en commentaire pourquoi la route est
+ * servie par son **motif** et non par la route nue, et ce commentaire écrit noir sur blanc
+ * `takeIf { it.isNotEmpty() }` — l'expression même que le contrôle surveille. Un contrôle écrit
+ * sur le texte brut y trouverait sa propre documentation, et resterait vert sur une route
+ * débranchée. C'est le piège du bloc du Coran, en plus rapproché.
+ *
+ * La borne de [blocApres] s'applique : le `composable(` du profil suit celui du Quiz, donc le bloc
+ * est délimité et une assertion ne peut pas être satisfaite par la porte voisine.
+ */
+internal fun quizDeLaCoquille(): String =
+    sansCommentaires(blocApres("route = AppRoutes.QUIZ_PATTERN,"))
+
 /** Le texte privé de ses lignes de commentaire — celles qui commencent par `//`. */
 internal fun sansCommentaires(texte: String): String =
     texte.lines().filterNot { it.trimStart().startsWith("//") }.joinToString("\n")

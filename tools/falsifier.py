@@ -2551,8 +2551,11 @@ CAS: list[dict] = [
         # compile parfaitement : la route est servie, et ce n'est plus la liste d'amis.
         "nom": "amis : l'onglet ne rend plus l'ecran des amis",
         "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/AppScaffold.kt",
-        "avant": "        composable(AppDestination.FRIENDS.route) { SocialScreen() }",
-        "apres": "        composable(AppDestination.FRIENDS.route) { ProgressScreen() }",
+        # La mutation remplace l'ecran **entier**, arguments compris : garder `SocialScreen(` en
+        # changeant seulement le nom du composable ne compilerait pas — `onChallenge` n'existe pas
+        # ailleurs —, et le cas prouverait une erreur de compilation au lieu d'un test rouge.
+        "avant": "        composable(AppDestination.FRIENDS.route) {\n            SocialScreen(\n                onChallenge = { friendId ->\n                    navController.navigate(AppRoutes.quizRoute(friendId = friendId))\n                },\n            )\n        }",
+        "apres": "        composable(AppDestination.FRIENDS.route) {\n            ProgressScreen()\n        }",
         "tache": ":navigation:testDebugUnitTest",
         "attendus": ["l'onglet Amis rend l'ecran des amis"],
     },
@@ -2873,8 +2876,12 @@ CAS: list[dict] = [
         # d'autre, ou de personne, mais toujours lisible.
         "nom": "quiz : la deconnexion garde le quiz affiche",
         "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/QuizRepository.kt",
-        "avant": "        _state.value = QuizState(signedIn = false, loading = false)",
-        "apres": "        _state.value = _state.value.copy(signedIn = false, loading = false)",
+        # L'ancre porte sur l'etat **vide**, et non sur un `signedIn` disparu : le champ a ete
+        # remplace par `ownerId`, qui retombe a `null` par defaut. La mutation garde donc
+        # l'instantane precedent en ne changeant que `loading` — c'est exactement le defaut que le
+        # test surveille, et il compile.
+        "avant": "        _state.value = QuizState(loading = false)",
+        "apres": "        _state.value = _state.value.copy(loading = false)",
         "tache": ":core:data:testDebugUnitTest",
         "attendus": ["la deconnexion efface le quiz affiche"],
     },
@@ -2929,6 +2936,170 @@ CAS: list[dict] = [
         "apres": "        snapshot.daily == null && snapshot.responses.isEmpty()",
         "tache": ":core:domain:test",
         "attendus": ["un defi suffit a remplir l'ecran"],
+    },
+
+    # --- Quiz : la route, l'ecran et ses portes ----------------------------------------------
+    {
+        # Le Quiz est plein ecran : il n'a **pas** de barre de navigation, donc son bouton « <- »
+        # est son seul geste de sortie. Le retirer de l'ensemble ne casse rien a l'affichage — la
+        # route continue de fonctionner —, mais deux barres se posent par-dessus l'ecran, et le
+        # defaut ne se voit qu'a l'execution, sur un Quiz ouvert depuis « Defier ».
+        "nom": "quiz : le Quiz n'est plus plein ecran",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/AppDestination.kt",
+        "avant": "    val fullScreen: Set<String> = setOf(READER, QUIZ, DAILY, RECITATIONS, REVIEW, ADMIN)",
+        "apres": "    val fullScreen: Set<String> = setOf(READER, DAILY, RECITATIONS, REVIEW, ADMIN)",
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["le Quiz reste plein ecran avec ses arguments"],
+    },
+    {
+        # Servir la route **nue** laisserait les deux arguments sans effet : la navigation
+        # ignorerait `?ami=…`, et « Defier cet ami » ouvrirait l'accueil du Quiz au lieu de la
+        # creation d'un defi. Aucune erreur, aucun ecran vide — juste une intention perdue.
+        "nom": "quiz : la coquille sert la route nue du Quiz",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/AppScaffold.kt",
+        "avant": "            route = AppRoutes.QUIZ_PATTERN,",
+        "apres": "            route = AppRoutes.QUIZ,",
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["la route du Quiz est servie par son motif"],
+    },
+    {
+        # L'argument de la route porte l'**ami**, et non le defi : les echanger ferait chercher un
+        # defi nomme comme un compte, et la creation s'ouvrirait sur personne.
+        "nom": "quiz : la route du Quiz perd son ami",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/AppDestination.kt",
+        "avant": "            if (friendId != null) add(\"$QUIZ_FRIEND=$friendId\")",
+        "apres": "            if (friendId != null) add(\"$QUIZ_CHALLENGE=$friendId\")",
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["la route du Quiz porte l'ami a defier"],
+    },
+    {
+        # Le Quiz cree un defi entre deux **joueurs** : le serveur attend l'identifiant du compte,
+        # et l'original cherche `links.find(...)?.other?.id` pour l'obtenir. Rendre l'identifiant du
+        # **lien** ferait naitre un defi contre personne — et l'ecran s'ouvrirait normalement.
+        "nom": "conversation : le destinataire du defi est le lien, et non le compte",
+        "fichier": "feature/social/src/main/kotlin/com/msoumaya/deepseekandroid/feature/social/ConversationRenderer.kt",
+        "avant": "            challengeFriendId = if (!adminContact && isLink) link?.other?.id else null,",
+        "apres": "            challengeFriendId = if (!adminContact && isLink) link?.id else null,",
+        "tache": ":feature:social:testDebugUnitTest",
+        "attendus": ["le destinataire d'un defi est le compte de l'ami, et non le lien"],
+    },
+    {
+        # `onChallenge` a une valeur par defaut vide : un bouton qui n'appelle rien compile,
+        # s'affiche, et ne fait rien. C'est le defaut que le controle de forme existe pour
+        # attraper, et il n'est visible ni a la compilation ni a l'execution.
+        "nom": "conversation : le bouton Defier n'agit plus",
+        "fichier": "feature/social/src/main/kotlin/com/msoumaya/deepseekandroid/feature/social/ConversationScreen.kt",
+        "avant": "            onClick = { onChallenge(friendId) },",
+        "apres": "            onClick = {},",
+        "tache": ":feature:social:testDebugUnitTest",
+        "attendus": ["le bouton Defier suit l'etat et ouvre le Quiz sur l'ami"],
+    },
+    {
+        # `done` et `available` ne disent pas la meme chose : `done` regarde les **reponses** au
+        # jour courant, `available` regarde la **question publiee** dans un instantane du jour. Les
+        # confondre ferait annoncer « terminee » sur toute question publiee, et la carte cesserait
+        # d'inviter a jouer.
+        "nom": "accueil : une question publiee passe pour terminee",
+        "fichier": "feature/home/src/main/kotlin/com/msoumaya/deepseekandroid/feature/home/HomeRenderer.kt",
+        "avant": "        val done = snapshot?.responses?.any { it.day == at } == true",
+        "apres": "        val done = snapshot?.daily != null",
+        "tache": ":feature:home:testDebugUnitTest",
+        "attendus": ["une question publiee sans reponse ne dit pas terminee"],
+    },
+    {
+        # Sans la borne du jour, un instantane de la veille annoncerait « disponible » sur une
+        # question que le joueur ne peut pas ouvrir : la carte menerait a une vue du jour vide.
+        "nom": "accueil : la question du jour est annoncee disponible meme la veille",
+        "fichier": "feature/home/src/main/kotlin/com/msoumaya/deepseekandroid/feature/home/HomeRenderer.kt",
+        "avant": "        val available = snapshot != null && snapshot.day == at && snapshot.daily != null",
+        "apres": "        val available = snapshot != null && snapshot.daily != null",
+        "tache": ":feature:home:testDebugUnitTest",
+        "attendus": ["un instantane d'hier n'annonce pas la question du jour disponible"],
+    },
+    {
+        # La pastille est le seul element qui ne soit pas du texte : elle signale une question
+        # **a faire**. La laisser allumee sur une question deja repondue rappellerait un travail
+        # fait — et le joueur ouvrirait le Quiz pour rien.
+        "nom": "accueil : la pastille s'allume sur une question deja repondue",
+        "fichier": "feature/home/src/main/kotlin/com/msoumaya/deepseekandroid/feature/home/HomeRenderer.kt",
+        "avant": "            quizAlert = available && !done,",
+        "apres": "            quizAlert = available,",
+        "tache": ":feature:home:testDebugUnitTest",
+        "attendus": ["une question repondue est annoncee terminee, pastille eteinte"],
+    },
+    {
+        # Les deux cartes ne menent pas au meme endroit : l'une ouvre le Quiz, l'autre va chercher
+        # un ami. Brancher la meme lambda sur les deux ferait de « Defie tes amis » un second
+        # bouton vers le Quiz, sans que rien ne le signale.
+        "nom": "accueil : les deux cartes de quiz partagent le meme geste",
+        "fichier": "feature/home/src/main/kotlin/com/msoumaya/deepseekandroid/feature/home/HomeScreen.kt",
+        "avant": "                        onQuiz = onOpenQuiz,",
+        "apres": "                        onQuiz = onOpenFriends,",
+        "tache": ":feature:home:testDebugUnitTest",
+        "attendus": ["chaque carte recoit son propre geste"],
+    },
+    {
+        # `render` accepte l'instantane **facultativement** : l'oublier compile, et les cartes
+        # annoncent alors « Question du jour » pour toujours — y compris apres une reponse.
+        "nom": "accueil : le ViewModel n'observe plus l'instantane du Quiz",
+        "fichier": "feature/home/src/main/kotlin/com/msoumaya/deepseekandroid/feature/home/HomeViewModel.kt",
+        "avant": "                    QuranState.Ready -> HomeRenderer.render(appState, today(), quiz.snapshot)",
+        "apres": "                    QuranState.Ready -> HomeRenderer.render(appState, today())",
+        "tache": ":feature:home:testDebugUnitTest",
+        "attendus": ["le renderer recoit l'instantane, et pas seulement l'etat applicatif"],
+    },
+    {
+        # « 0 bonne reponse / 0 » se lit « tu n'as jamais joue », ce qui est une affirmation sur la
+        # personne — et elle serait fausse pendant la seconde qui suit le demarrage. Tant que rien
+        # n'est lu, le bloc doit disparaitre.
+        "nom": "progres : le bloc de quiz affiche des zeros sans instantane",
+        "fichier": "feature/progress/src/main/kotlin/com/msoumaya/deepseekandroid/feature/progress/ProgressRenderer.kt",
+        "avant": "        if (snapshot == null) return null",
+        "apres": "        if (snapshot == null) return QuizSummary(\"\", \"\", \"\", \"\")",
+        "tache": ":feature:progress:testDebugUnitTest",
+        "attendus": ["sans instantane lu le bloc n'existe pas"],
+    },
+    {
+        # L'identifiant decide **de quel cote** d'un defi on se trouve : `Quiz.statistics` compte
+        # mes bonnes reponses et celles de l'autre. Le perdre inverserait victoires et egalites
+        # sans que rien ne le dise — le total, lui, resterait juste.
+        "nom": "progres : les defis sont comptes du mauvais cote",
+        "fichier": "feature/progress/src/main/kotlin/com/msoumaya/deepseekandroid/feature/progress/ProgressRenderer.kt",
+        "avant": "        val stats = Quiz.statistics(snapshot, userId.orEmpty())",
+        "apres": "        val stats = Quiz.statistics(snapshot, \"\")",
+        "tache": ":feature:progress:testDebugUnitTest",
+        "attendus": ["le compte decide de quel cote se lit le defi"],
+    },
+    {
+        # Le bloc de quiz est un **cumul**, et l'original le pose entre la carte d'objectif et les
+        # compteurs. Le retirer compile, l'ecran s'affiche normalement, et une fonctionnalite
+        # livree n'apparait simplement jamais.
+        "nom": "progres : le bloc de quiz n'est plus compose",
+        "fichier": "feature/progress/src/main/kotlin/com/msoumaya/deepseekandroid/feature/progress/ProgressScreen.kt",
+        "avant": "            state.quiz?.let { summary -> QuizStats(summary = summary) }",
+        "apres": "            state.quiz?.let { QuizStats(summary = it) }",
+        "tache": ":feature:progress:testDebugUnitTest",
+        "attendus": ["l'ecran compose le bloc de quiz quand l'etat le porte"],
+    },
+    {
+        # Meme piege que pour l'accueil : `render` accepte l'instantane facultativement, donc
+        # l'oublier compile et le bloc disparait pour toujours.
+        "nom": "progres : le ViewModel oublie l'instantane du Quiz",
+        "fichier": "feature/progress/src/main/kotlin/com/msoumaya/deepseekandroid/feature/progress/ProgressViewModel.kt",
+        "avant": "                        quiz = sources.quiz.snapshot,",
+        "apres": "                        quiz = null,",
+        "tache": ":feature:progress:testDebugUnitTest",
+        "attendus": ["le renderer recoit l'instantane et le compte"],
+    },
+    {
+        # Sans le compte, les defis se lisent tous a zero victoire : le bloc reste affiche, et il
+        # est faux — ce qui est pire qu'absent.
+        "nom": "progres : le ViewModel oublie le compte",
+        "fichier": "feature/progress/src/main/kotlin/com/msoumaya/deepseekandroid/feature/progress/ProgressViewModel.kt",
+        "avant": "                        userId = sources.quiz.ownerId,",
+        "apres": "                        userId = null,",
+        "tache": ":feature:progress:testDebugUnitTest",
+        "attendus": ["le renderer recoit l'instantane et le compte"],
     },
 ]
 
