@@ -43,3 +43,10 @@ secrets.properties
 Thumbs.db
 *.log
 .kotlin/
+
+# --- Outils Python ----------------------------------------------------------
+# `tools/` porte sept outils Python ; les lancer — ou seulement les importer —
+# laisse un cache `__pycache__/` a cote des sources. Il n'a rien a faire dans le
+# depot, et l'exclure ici evite d'avoir a s'en souvenir a chaque `git add`.
+__pycache__/
+*.pyc
