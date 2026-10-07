@@ -27,6 +27,19 @@ object Recitations {
      */
     const val SIGNED_URL_SECONDS: Int = 600
 
+    /**
+     * Combien de récitations la liste distante rapporte, au plus.
+     *
+     * L'original borne à **100** pour la personne, et à **200** pour l'administrateur. Seule la
+     * première est portée : les gestes d'administration restent sur le web, comme ceux du Quiz —
+     * les politiques de `supabase/recitations.sql` les réservent à `private.is_app_admin()`. La
+     * borne de 200 n'est donc pas une règle oubliée, c'est une règle d'un écran qui n'existe pas.
+     *
+     * Une borne existe parce que la table grandit : sans elle, la liste d'un compte ancien
+     * demanderait un jour des milliers de lignes pour n'en afficher qu'une poignée.
+     */
+    const val REMOTE_LIST_LIMIT: Int = 100
+
     const val EXTENSION_MP4: String = ".m4a"
     const val EXTENSION_3GP: String = ".3gp"
 

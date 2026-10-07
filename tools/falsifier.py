@@ -3836,6 +3836,61 @@ CAS: list[dict] = [
         "tache": ":core:domain:test",
         "attendus": ["une nature absente compte comme un passage du Coran"],
     },
+    {
+        # La colonne `recording_type` a ete ajoutee apres coup : une ligne ecrite avant n'en porte
+        # pas, et l'original la replie sur un passage du Coran. La replier sur une invocation
+        # ferait disparaitre ces lignes du filtre « Coran » - c'est-a-dire du seul filtre ou elles
+        # ont leur place - et leur titre annoncerait une invocation qu'elles ne sont pas.
+        "nom": "recitation : une nature absente ne se replie pas sur une invocation",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/remote/RecitationSource.kt",
+        "avant": "    @SerialName(\"recording_type\") val recordingType: RecitationKind = RecitationKind.QURAN,",
+        "apres": "    @SerialName(\"recording_type\") val recordingType: RecitationKind = RecitationKind.INVOCATION,",
+        "tache": ":core:data:testDebugUnitTest",
+        "attendus": ["une nature absente compte comme un passage du Coran"],
+    },
+    {
+        # Le nom de colonne est le contrat avec le serveur. Le client Postgrest est configure sans
+        # conversion de propriete : un `@SerialName` faux ne leve rien, il rend `null` - donc une
+        # ligne dont les bornes disparaissent, et un titre de recitation sans reference.
+        "nom": "recitation : le nom de colonne des bornes de debut est celui de la table",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/remote/RecitationSource.kt",
+        "avant": "    @SerialName(\"start_verse_id\") val startVerseId: Int? = null,",
+        "apres": "    @SerialName(\"start\") val startVerseId: Int? = null,",
+        "tache": ":core:data:testDebugUnitTest",
+        "attendus": ["une ligne complete se traduit champ par champ"],
+    },
+    {
+        # La nature de la ligne distante est celle que le serveur a ecrite, pas une constante. La
+        # figer ferait passer toute invocation pour un passage du Coran : son titre demanderait une
+        # reference de versets qu'elle n'a pas.
+        "nom": "recitation : la nature distante est celle du serveur",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/remote/RecitationSource.kt",
+        "avant": "        kind = recordingType,",
+        "apres": "        kind = RecitationKind.QURAN,",
+        "tache": ":core:data:testDebugUnitTest",
+        "attendus": ["une invocation se traduit avec sa nature et son invocation"],
+    },
+    {
+        # Le nom de colonne de l'instant de traitement, meme raison : un `@SerialName` faux rend
+        # `null`, et une correction traitee se lirait comme non traitee.
+        "nom": "recitation : le nom de colonne de l'instant de traitement est celui de la table",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/remote/RecitationSource.kt",
+        "avant": "    @SerialName(\"resolved_at\") val resolvedAt: String? = null,",
+        "apres": "    @SerialName(\"resolu\") val resolvedAt: String? = null,",
+        "tache": ":core:data:testDebugUnitTest",
+        "attendus": ["une correction se traduit champ par champ"],
+    },
+    {
+        # La borne de la liste distante. L'original borne a 100 pour la personne et a 200 pour
+        # l'administrateur ; porter 200 ferait demander a chaque ouverture de liste le double de ce
+        # qu'un ecran affiche.
+        "nom": "recitation : la liste distante reste bornee a cent",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Recitations.kt",
+        "avant": "    const val REMOTE_LIST_LIMIT: Int = 100",
+        "apres": "    const val REMOTE_LIST_LIMIT: Int = 200",
+        "tache": ":core:data:testDebugUnitTest",
+        "attendus": ["la liste distante est bornee a cent lignes"],
+    },
 ]
 
 
