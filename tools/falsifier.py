@@ -3224,6 +3224,147 @@ CAS: list[dict] = [
         "tache": ":core:playback:testDebugUnitTest",
         "attendus": ["le titre porte le passage, precede du nom de l'application"],
     },
+    {
+        # L'ordre des bornes n'est plus verifie : un passage inverse (5 -> 2) passe pour un
+        # passage valide, et la lecture part dans le vide sans que rien ne le dise.
+        "nom": "recitation : un passage inverse passe pour un passage valide",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Recitations.kt",
+        "avant": "    fun validRange(start: Int, end: Int): Boolean = start >= 1 && end <= VERSE_COUNT && start <= end",
+        "apres": "    fun validRange(start: Int, end: Int): Boolean = start >= 1 && end <= VERSE_COUNT",
+        "tache": ":core:domain:test",
+        "attendus": ["un intervalle inverse est refuse"],
+    },
+    {
+        # Le verset zero passe pour un verset reel : les identifiants du Coran commencent a 1,
+        # donc zero designe un verset que le referentiel ne peut pas rendre.
+        "nom": "recitation : le verset zero passe pour un verset reel",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Recitations.kt",
+        "avant": "    fun validRange(start: Int, end: Int): Boolean = start >= 1 && end <= VERSE_COUNT && start <= end",
+        "apres": "    fun validRange(start: Int, end: Int): Boolean = start >= 0 && end <= VERSE_COUNT && start <= end",
+        "tache": ":core:domain:test",
+        "attendus": ["le premier verset est valide et zero ne l'est pas"],
+    },
+    {
+        # Un verset de trop passe : 6237 n'existe pas, et la recitation annoncerait un passage
+        # que le referentiel ne contient pas.
+        "nom": "recitation : un verset de trop passe pour un verset reel",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Recitations.kt",
+        "avant": "    fun validRange(start: Int, end: Int): Boolean = start >= 1 && end <= VERSE_COUNT && start <= end",
+        "apres": "    fun validRange(start: Int, end: Int): Boolean = start >= 1 && end <= VERSE_COUNT + 1 && start <= end",
+        "tache": ":core:domain:test",
+        "attendus": ["le dernier verset est valide et le suivant ne l'est pas"],
+    },
+    {
+        # La casse n'est plus ignoree : une adresse qui porte `.3GP` est prise pour du m4a, et
+        # le fichier part avec un type de contenu qui ne correspond pas a son conteneur.
+        "nom": "recitation : l'extension en majuscules n'est plus reconnue",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Recitations.kt",
+        "avant": "        if (sourceUri.lowercase().contains(EXTENSION_3GP)) EXTENSION_3GP else EXTENSION_MP4",
+        "apres": "        if (sourceUri.contains(EXTENSION_3GP)) EXTENSION_3GP else EXTENSION_MP4",
+        "tache": ":core:domain:test",
+        "attendus": ["la casse de l'extension ne change rien"],
+    },
+    {
+        # Les deux types de contenu s'echangent : le depot annonce du 3gpp pour un m4a, et le
+        # fichier est refuse par le compartiment, ou servi avec un type que le lecteur rejette.
+        "nom": "recitation : le type de contenu ne suit plus l'extension",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Recitations.kt",
+        "avant": "        if (extension == EXTENSION_3GP) \"audio/3gpp\" else \"audio/mp4\"",
+        "apres": "        if (extension == EXTENSION_3GP) \"audio/mp4\" else \"audio/3gpp\"",
+        "tache": ":core:domain:test",
+        "attendus": ["le type de contenu suit l'extension"],
+    },
+    {
+        # Le fichier n'est plus range sous son proprietaire : les politiques du compartiment ne
+        # peuvent plus proteger quoi que ce soit, et deux comptes se marcheraient dessus.
+        "nom": "recitation : le fichier n'est plus range sous son proprietaire",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Recitations.kt",
+        "avant": "    fun storagePath(userId: String, id: String, extension: String): String = \"$userId/$id$extension\"",
+        "apres": "    fun storagePath(userId: String, id: String, extension: String): String = \"$id$extension\"",
+        "tache": ":core:domain:test",
+        "attendus": ["le chemin range le fichier sous son proprietaire"],
+    },
+    {
+        # Une invocation ecrit des bornes de versets : elle devient corrigeable verset par verset
+        # alors qu'elle n'en contient aucun, et une correction sur un verset qu'elle ne porte pas
+        # devient possible.
+        "nom": "recitation : une invocation se met a porter des bornes",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Recitations.kt",
+        "avant": "        if (kind == RecitationKind.INVOCATION) null to null else start to end",
+        "apres": "        if (kind == RecitationKind.INVOCATION) start to end else start to end",
+        "tache": ":core:domain:test",
+        "attendus": ["une invocation n'ecrit pas de bornes"],
+    },
+    {
+        # L'ordre des controles change : quand plusieurs manques coexistent, c'est un autre
+        # message qui est annonce. Le code reste juste par ailleurs — c'est le seul cas qui le voit.
+        "nom": "recitation : l'ordre des controles d'enregistrement change",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Recitations.kt",
+        "avant": "        if (kind == RecitationKind.QURAN && !validRange(start, end)) {\n            return RecitationSaveProblem.RANGE_INVALID\n        }\n        if (userId.isEmpty()) return RecitationSaveProblem.OWNER_MISSING",
+        "apres": "        if (userId.isEmpty()) return RecitationSaveProblem.OWNER_MISSING\n        if (kind == RecitationKind.QURAN && !validRange(start, end)) {\n            return RecitationSaveProblem.RANGE_INVALID\n        }",
+        "tache": ":core:domain:test",
+        "attendus": ["l'ordre des controles est celui du client d'origine"],
+    },
+    {
+        # Les bornes redeviennent exigees pour une invocation : enregistrer une invocation
+        # devient impossible, et le bouton reste la sans rien faire.
+        "nom": "recitation : une invocation exige des bornes de versets",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Recitations.kt",
+        "avant": "        if (kind == RecitationKind.QURAN && !validRange(start, end)) {",
+        "apres": "        if (!validRange(start, end)) {",
+        "tache": ":core:domain:test",
+        "attendus": ["une invocation est acceptee sans bornes de versets"],
+    },
+    {
+        # Les bornes de la correction deviennent exclusives : corriger le premier ou le dernier
+        # verset de la recitation devient impossible, alors que ce sont les plus faciles a viser.
+        "nom": "recitation : les bornes de la correction deviennent exclusives",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Recitations.kt",
+        "avant": "            if (verseId < startVerseId || verseId > endVerseId) return CorrectionProblem.VERSE_OUTSIDE",
+        "apres": "            if (verseId <= startVerseId || verseId > endVerseId) return CorrectionProblem.VERSE_OUTSIDE",
+        "tache": ":core:domain:test",
+        "attendus": ["les bornes elles-memes sont corrigibles"],
+    },
+    {
+        # Le commentaire n'est plus rogne : un retour fait d'espaces passe pour un vrai retour,
+        # et la personne qui le recoit ne lit rien.
+        "nom": "recitation : un retour fait d'espaces passe pour un vrai retour",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Recitations.kt",
+        "avant": "        comment.trim().isEmpty() && voicePath.isNullOrEmpty()",
+        "apres": "        comment.isEmpty() && voicePath.isNullOrEmpty()",
+        "tache": ":core:domain:test",
+        "attendus": ["un commentaire fait d'espaces ne dit rien"],
+    },
+    {
+        # L'adresse vocale est rognee comme le commentaire : c'est l'ecart assume avec le client
+        # d'origine qui disparait, et les deux clients ne s'accordent plus sur ce qui est acceptable.
+        "nom": "recitation : l'adresse vocale est rognee comme le commentaire",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Recitations.kt",
+        "avant": "        comment.trim().isEmpty() && voicePath.isNullOrEmpty()",
+        "apres": "        comment.trim().isEmpty() && voicePath.isNullOrBlank()",
+        "tache": ":core:domain:test",
+        "attendus": ["une adresse faite d'espaces compte comme presente"],
+    },
+    {
+        # N'importe qui peut supprimer n'importe quelle recitation : le fichier part du
+        # compartiment, et la ligne avec lui.
+        "nom": "recitation : n'importe qui peut supprimer une recitation",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Recitations.kt",
+        "avant": "    fun mayDelete(ownerId: String, userId: String): Boolean = ownerId == userId",
+        "apres": "    fun mayDelete(ownerId: String, userId: String): Boolean = true",
+        "tache": ":core:domain:test",
+        "attendus": ["un autre compte ne peut pas supprimer"],
+    },
+    {
+        # Seule une ligne jamais envoyee repart : une application tuee en pleine transmission
+        # laisse une ligne bloquee pour toujours, et la recitation ne quitte jamais l'appareil.
+        "nom": "recitation : une ligne bloquee en plein depot ne repart plus",
+        "fichier": "core/model/src/main/kotlin/com/msoumaya/deepseekandroid/core/model/Recitation.kt",
+        "avant": "    val awaitsUpload: Boolean get() = this != SYNCED",
+        "apres": "    val awaitsUpload: Boolean get() = this == PENDING",
+        "tache": ":core:domain:test",
+        "attendus": ["une ligne en cours de depot repart quand meme"],
+    },
 ]
 
 
