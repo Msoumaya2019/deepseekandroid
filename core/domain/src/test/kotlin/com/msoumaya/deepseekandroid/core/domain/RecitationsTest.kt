@@ -315,4 +315,56 @@ class RecitationsTest {
         assertEquals(3, aDeposer.size)
         assertFalse(aDeposer.contains(RecitationSyncStatus.SYNCED))
     }
+
+    // ------------------------------------------------------------------ depot tolere
+
+    @Test
+    fun `un fichier deja present ne fait pas echouer la synchronisation`() {
+        // Le cas reel : une synchronisation precedente a depose l'audio puis s'est arretee avant
+        // d'ecrire la ligne. Le renvoi du fichier est refuse, et ce refus ne doit pas laisser la
+        // recitation en echec pour toujours.
+        assertTrue(Recitations.uploadFailureIsBenign("The resource already exists"))
+    }
+
+    @Test
+    fun `un doublon annonce par le serveur est tolere`() {
+        assertTrue(Recitations.uploadFailureIsBenign("duplicate key value violates unique constraint"))
+    }
+
+    @Test
+    fun `la comparaison du message ignore la casse`() {
+        assertTrue(Recitations.uploadFailureIsBenign("ALREADY EXISTS"))
+        assertTrue(Recitations.uploadFailureIsBenign("Duplicate"))
+    }
+
+    @Test
+    fun `le mot est cherche au milieu du message`() {
+        // L'expression de l'original n'est pas ancree : le serveur compose le texte, et sa forme
+        // exacte n'est pas un contrat.
+        assertTrue(Recitations.uploadFailureIsBenign("erreur 409 : already exists (bucket recitations)"))
+    }
+
+    @Test
+    fun `un message absent ne passe pas pour benin`() {
+        // Sans texte, rien ne prouve que l'echec est benin. Le tenir pour tel ferait ecrire une
+        // ligne vers un fichier qui n'existe pas.
+        assertFalse(Recitations.uploadFailureIsBenign(null))
+        assertFalse(Recitations.uploadFailureIsBenign(""))
+    }
+
+    @Test
+    fun `un refus sans rapport n'est pas tolere`() {
+        // Le cas qui compte : une panne reseau, un refus de politique, un quota depasse. Les
+        // tolérer ferait passer pour deposee une recitation qui n'a jamais quitte l'appareil.
+        assertFalse(Recitations.uploadFailureIsBenign("Payload too large"))
+        assertFalse(Recitations.uploadFailureIsBenign("new row violates row-level security policy"))
+        assertFalse(Recitations.uploadFailureIsBenign("Unable to resolve host"))
+    }
+
+    @Test
+    fun `existe ne passe pas, alors que already exists passe`() {
+        // « exists » seul n'est pas le motif : un message qui dit qu'une chose n'existe PAS
+        // contiendrait le mot, et le tolérer serait exactement l'inverse de ce qu'il faut.
+        assertFalse(Recitations.uploadFailureIsBenign("the bucket does not exist"))
+    }
 }

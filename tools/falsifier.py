@@ -3365,6 +3365,147 @@ CAS: list[dict] = [
         "tache": ":core:domain:test",
         "attendus": ["une ligne en cours de depot repart quand meme"],
     },
+    {
+        # Le motif du doublon se met a tout accepter : une panne reseau passe pour un fichier
+        # deja depose, la ligne est ecrite, et la recitation est annoncee deposee alors que
+        # l'audio n'a jamais quitte l'appareil.
+        "nom": "recitation : le motif du doublon se met a tout accepter",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Recitations.kt",
+        "avant": "        return text.contains(\"already exists\") || text.contains(\"duplicate\")",
+        "apres": "        return true",
+        "tache": ":core:domain:test",
+        "attendus": ["un refus sans rapport n'est pas tolere"],
+    },
+    {
+        # Un message absent passe pour benin : le garde tombe, et un echec sans texte fait
+        # ecrire une ligne vers un fichier que personne ne pourra ecouter.
+        "nom": "recitation : un message absent passe pour benin",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Recitations.kt",
+        "avant": "        if (message.isNullOrEmpty()) return false",
+        "apres": "        if (message.isNullOrEmpty()) return true",
+        "tache": ":core:domain:test",
+        "attendus": ["un message absent ne passe pas pour benin"],
+    },
+    {
+        # Le fichier n'est plus copie : l'enregistreur ecrit dans un fichier temporaire que le
+        # systeme peut effacer, et une recitation non deposee disparait au redemarrage.
+        "nom": "recitation : le registre ne copie plus le fichier",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/local/RecitationStore.kt",
+        "avant": "            File(sourcePath).copyTo(target, overwrite = true)",
+        "apres": "            target.createNewFile()",
+        "tache": ":core:data:testDebugUnitTest",
+        "attendus": ["l'enregistrement copie le fichier dans le dossier de l'application"],
+    },
+    {
+        # La nature n'est plus deduite : une invocation est marquee « Coran », et le serveur la
+        # refuse ensuite sans que l'appareil ait pu le prevoir.
+        "nom": "recitation : la nature n'est plus deduite de l'invocation",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/local/RecitationStore.kt",
+        "avant": "        val kind = if (invocationId == null) RecitationKind.QURAN else RecitationKind.INVOCATION",
+        "apres": "        val kind = RecitationKind.QURAN",
+        "tache": ":core:data:testDebugUnitTest",
+        "attendus": ["une invocation se passe de bornes de versets"],
+    },
+    {
+        # La liste est rendue dans l'ordre d'insertion : l'ecran s'ouvre sur la plus vieille
+        # recitation, c'est-a-dire a l'oppose de ce qu'on vient voir.
+        "nom": "recitation : la liste est rendue dans l'ordre d'insertion",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/local/RecitationStore.kt",
+        "avant": "            .sortedByDescending { Dates.parseIsoMillis(it.createdAt) }",
+        "apres": "            .sortedBy { Dates.parseIsoMillis(it.createdAt) }",
+        "tache": ":core:data:testDebugUnitTest",
+        "attendus": ["la liste est rendue du plus recent au plus ancien"],
+    },
+    {
+        # Le registre n'est plus filtre : les recitations d'un autre compte s'affichent sous le
+        # sien, et un retrait pourrait partir sur l'audio de quelqu'un d'autre.
+        "nom": "recitation : le registre n'est plus filtre par compte",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/local/RecitationStore.kt",
+        "avant": "            .filter { it.userId == userId }",
+        "apres": "            .filter { true }",
+        "tache": ":core:data:testDebugUnitTest",
+        "attendus": ["la liste ne rend que les recitations du compte demande"],
+    },
+    {
+        # Le retrait n'efface plus le fichier : la recitation disparait de la liste, et ses
+        # megaoctets restent sur l'appareil sans que rien ne les reference.
+        "nom": "recitation : le retrait n'efface plus le fichier",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/local/RecitationStore.kt",
+        "avant": "        withContext(Dispatchers.IO) { File(item.uri).delete() }",
+        "apres": "        withContext(Dispatchers.IO) { Unit }",
+        "tache": ":core:data:testDebugUnitTest",
+        "attendus": ["le retrait efface le fichier et l'entree"],
+    },
+    {
+        # Le compte n'est plus verifie avant d'effacer : l'audio d'une entree est efface pendant
+        # que sa ligne survit — la recitation reste affichee, et ne se lit plus.
+        "nom": "recitation : le retrait ne verifie plus le compte avant d'effacer",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/local/RecitationStore.kt",
+        "avant": "        val connue = ledger.current().entries.any { it.id == item.id && it.userId == item.userId }",
+        "apres": "        val connue = true",
+        "tache": ":core:data:testDebugUnitTest",
+        "attendus": ["le retrait ne touche pas l'entree d'un autre compte"],
+    },
+    {
+        # Les octets ne sont plus deposes du tout : la ligne part, et le serveur l'accepte —
+        # rien ne lie la ligne au fichier, et la recitation n'est ecoutable par personne.
+        "nom": "recitation : les octets ne sont plus deposes du tout",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/RecitationRepository.kt",
+        "avant": "                api.upload(path, bytes, Recitations.contentType(extension))",
+        "apres": "                Unit",
+        "tache": ":core:data:testDebugUnitTest",
+        "attendus": ["le fichier est depose avant que la ligne ne soit ecrite"],
+    },
+    {
+        # Une recitation deja deposee est renvoyee : ses megaoctets repartent a chaque tentative,
+        # et une longue periode sans reseau les fait partir autant de fois qu'il y a d'echecs.
+        "nom": "recitation : la recitation deja deposee est renvoyee",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/RecitationRepository.kt",
+        "avant": "            val pending = store.list(owner).filter { it.syncStatus.awaitsUpload }",
+        "apres": "            val pending = store.list(owner)",
+        "tache": ":core:data:testDebugUnitTest",
+        "attendus": ["une recitation deja deposee n'est pas renvoyee"],
+    },
+    {
+        # La garde ne rend plus la main : un second depot concurrent demarre, les memes octets
+        # partent deux fois, et deux marquages de statut s'ecrasent l'un l'autre.
+        "nom": "recitation : la garde de concurrence ne rend plus la main",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/RecitationRepository.kt",
+        "avant": "        if (!guard.tryLock()) return false",
+        "apres": "        guard.tryLock()",
+        "tache": ":core:data:testDebugUnitTest",
+        "attendus": ["un second depot concurrent ne renvoie pas les memes octets"],
+    },
+    {
+        # Le fichier manquant n'est plus detecte : on depose zero octet et on ecrit la ligne,
+        # donc une recitation que personne ne pourra jamais ecouter.
+        "nom": "recitation : le fichier manquant n'est plus detecte",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/RecitationRepository.kt",
+        "avant": "                ?: throw IllegalStateException(RecitationText.LOCAL_FILE_MISSING)",
+        "apres": "                ?: ByteArray(0)",
+        "tache": ":core:data:testDebugUnitTest",
+        "attendus": ["un fichier disparu marque un echec sans rien deposer"],
+    },
+    {
+        # Les bornes d'une invocation sont envoyees : la contrainte `recitations_passage_type`
+        # exige qu'elles soient nulles, et le serveur refuse la ligne.
+        "nom": "recitation : les bornes d'une invocation sont envoyees",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/RecitationRepository.kt",
+        "avant": "        val (start, end) = Recitations.remoteBounds(item.kind, item.start, item.end)",
+        "apres": "        val (start, end) = item.start to item.end",
+        "tache": ":core:data:testDebugUnitTest",
+        "attendus": ["la ligne d'une invocation ne porte pas de bornes"],
+    },
+    {
+        # L'instantane d'invocation revient dans la ligne : le declencheur du serveur ecrase
+        # cette colonne a chaque insertion, et l'envoyer laisse croire que le client en decide.
+        "nom": "recitation : l'instantane d'invocation revient dans la ligne",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/remote/RecitationUpload.kt",
+        "avant": "    @SerialName(\"created_at\") val createdAt: String,",
+        "apres": "    @SerialName(\"created_at\") val createdAt: String,\n    @SerialName(\"invocation_snapshot\") val invocationSnapshot: String = \"{}\",",
+        "tache": ":core:data:testDebugUnitTest",
+        "attendus": ["la ligne envoyee ne porte ni instantane d'invocation ni champ nul"],
+    },
 ]
 
 

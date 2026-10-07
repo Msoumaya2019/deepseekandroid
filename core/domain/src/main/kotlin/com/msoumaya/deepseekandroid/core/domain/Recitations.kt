@@ -76,6 +76,31 @@ object Recitations {
         if (kind == RecitationKind.INVOCATION) null to null else start to end
 
     /**
+     * `true` si l'échec d'un dépôt de fichier ne doit pas arrêter la synchronisation.
+     *
+     * Le compartiment refuse d'écraser un fichier existant — le client d'origine dépose avec
+     * `upsert: false` —, et ce refus-là est **toléré** : il signifie que les octets sont déjà
+     * arrivés, donc que l'étape est faite. Le cas se produit réellement quand une synchronisation
+     * précédente a déposé l'audio puis s'est arrêtée avant d'écrire la ligne, ou avant
+     * d'enregistrer le statut : le fichier est là, la ligne manque, et le renvoi du fichier est
+     * refusé. Traiter ce refus comme une panne laisserait la récitation en échec **pour toujours**,
+     * en renvoyant à chaque tentative des octets que le serveur a déjà.
+     *
+     * La comparaison est **insensible à la casse** et cherche le mot **au milieu** du message,
+     * comme l'expression régulière du client d'origine (`/already exists|duplicate/i`) : le texte
+     * est composé par le serveur, et sa forme exacte n'est pas un contrat.
+     *
+     * Un message absent ne rend pas `true`. Sans texte, rien ne prouve que l'échec est bénin, et
+     * le tenir pour tel ferait passer pour déposée une récitation qui ne l'est pas — une ligne
+     * écrite vers un fichier qui n'existe pas.
+     */
+    fun uploadFailureIsBenign(message: String?): Boolean {
+        if (message.isNullOrEmpty()) return false
+        val text = message.lowercase()
+        return text.contains("already exists") || text.contains("duplicate")
+    }
+
+    /**
      * Ce qui empêche d'enregistrer une récitation locale, ou `null` si rien ne l'empêche.
      *
      * L'ordre des contrôles est **celui du client d'origine**, et il est conservé : quand
