@@ -21,6 +21,12 @@
 # diffère du blob est exactement ce qu'il sert à éviter.
 .gitattributes text eol=lf
 
+# Le fichier de convention jumeau, et pour la même raison. Mesuré : sans cette ligne,
+# `git add .gitignore` annonce « LF will be replaced by CRLF the next time Git touches it » —
+# la copie de travail et le blob divergent donc silencieusement, et un `.gitignore` dont la copie
+# locale diffère du blob est exactement ce que ce fichier-ci sert à éviter.
+.gitignore text eol=lf
+
 # Les scripts restent en LF, quoi qu'en dise la configuration locale.
 *.sh text eol=lf
 gradlew text eol=lf
