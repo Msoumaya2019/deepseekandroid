@@ -3977,8 +3977,8 @@ CAS: list[dict] = [
         # enregistree » a quelqu'un qui en a, sous un filtre qui les cache.
         "nom": "recitation : le vide de la liste se juge avant le filtre",
         "fichier": "feature/recitations/src/main/kotlin/com/msoumaya/deepseekandroid/feature/recitations/RecitationsRenderer.kt",
-        "avant": "            empty = toutes.isEmpty() && connecte && message == null,",
-        "apres": "            empty = lignes.isEmpty() && connecte && message == null,",
+        "avant": "            empty = toutes.isEmpty() && connecte && message == null && !state.loading,",
+        "apres": "            empty = lignes.isEmpty() && connecte && message == null && !state.loading,",
         "tache": ":feature:recitations:testDebugUnitTest",
         "attendus": ["un filtre qui ne laisse rien passer ne dit pas qu'il n'y a rien"],
     },
@@ -4051,6 +4051,61 @@ CAS: list[dict] = [
         "apres": "                        date = null,",
         "tache": ":feature:recitations:testDebugUnitTest",
         "attendus": ["les cartes de correction portent le verset, le repli et le jour"],
+    },
+    {
+        # Les corrections arrivent apres un aller-retour reseau. Sans l'etiquette, la reponse de la
+        # ligne qu'on vient de quitter s'afficherait sous celle qu'on vient d'ouvrir : le
+        # commentaire d'une recitation attribue a une autre, et rien ne le dirait.
+        "nom": "recitation : les details d'une autre ligne ne s'affichent pas",
+        "fichier": "feature/recitations/src/main/kotlin/com/msoumaya/deepseekandroid/feature/recitations/RecitationsRenderer.kt",
+        "avant": "    if (id != null && id == openId) this else RecitationsDetails()\n",
+        "apres": "    RecitationsDetails()\n",
+        "tache": ":feature:recitations:testDebugUnitTest",
+        "attendus": ["les details d'une autre ligne ne s'affichent pas"],
+    },
+    {
+        # Le registre local est publie avant la liste distante : entre les deux, la liste est vide
+        # parce qu'on attend. Annoncer « aucune recitation enregistree » est alors une affirmation
+        # fausse sur ce que la personne a fait, et elle tombe au pire moment — a l'ouverture.
+        "nom": "recitation : une lecture en vol ne dit pas que la liste est vide",
+        "fichier": "feature/recitations/src/main/kotlin/com/msoumaya/deepseekandroid/feature/recitations/RecitationsRenderer.kt",
+        "avant": "            empty = toutes.isEmpty() && connecte && message == null && !state.loading,\n",
+        "apres": "            empty = toutes.isEmpty() && connecte && message == null,\n",
+        "tache": ":feature:recitations:testDebugUnitTest",
+        "attendus": ["une lecture en vol ne dit pas que la liste est vide"],
+    },
+    {
+        # L'ecran est plein ecran : sans bouton de retour, il n'a plus aucune sortie. Le libelle
+        # est substitue, et non la ligne retiree, pour que la mutation compile : un ecran qui ne
+        # compile pas n'apprend rien sur le controle.
+        "nom": "recitation : l'ecran porte le bouton de retour",
+        "fichier": "feature/recitations/src/main/kotlin/com/msoumaya/deepseekandroid/feature/recitations/RecitationsScreen.kt",
+        "avant": "                text = RecitationText.LIST_BACK,\n",
+        "apres": "                text = RecitationText.LIST_TITLE,\n",
+        "tache": ":feature:recitations:testDebugUnitTest",
+        "attendus": ["l'ecran porte le bouton de retour et laisse le contenu a part"],
+    },
+    {
+        # La route est servie mais ne rend plus l'ecran : `composable(...) { }` compile, et la
+        # route reste « servie ». L'appui ouvrirait une page vide — c'est pourquoi le controle
+        # exige aussi que l'ecran soit rendu, et pas seulement la route declaree.
+        "nom": "recitation : la route sert bien l'ecran",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/AppScaffold.kt",
+        "avant": "            RecitationsScreen(onClose = { navController.popBackStack() })\n",
+        "apres": "            // mutation : la route ne rend plus l'ecran\n",
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["les recitations sont servies et branchees"],
+    },
+    {
+        # Le rappel du tableau de bord n'est plus branche : la route est servie, mais le bouton de
+        # la carte « Suivi » ne mene nulle part. Un rappel a sa valeur par defaut compile et
+        # s'affiche : rien d'autre ne le dirait.
+        "nom": "recitation : le tableau de bord ouvre les recitations",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/AppScaffold.kt",
+        "avant": "                onRecitations = { navController.navigate(AppRoutes.RECITATIONS) { launchSingleTop = true } },\n",
+        "apres": "                // mutation : le rappel n'est plus branche\n",
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["les recitations sont servies et branchees"],
     },
 ]
 

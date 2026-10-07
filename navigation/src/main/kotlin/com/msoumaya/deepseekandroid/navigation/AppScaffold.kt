@@ -31,6 +31,7 @@ import com.msoumaya.deepseekandroid.feature.program.ProgramScreen
 import com.msoumaya.deepseekandroid.feature.program.ReviewDashboardScreen
 import com.msoumaya.deepseekandroid.feature.progress.ProgressScreen
 import com.msoumaya.deepseekandroid.feature.quiz.QuizScreen
+import com.msoumaya.deepseekandroid.feature.recitations.RecitationsScreen
 import com.msoumaya.deepseekandroid.feature.social.SocialScreen
 
 // ---------------------------------------------------------------------------
@@ -142,10 +143,14 @@ fun AppScaffold(
  *
  * Les cinq onglets sont branchés sur leur écran, et les écrans plein écran construits le sont
  * aussi. Les routes **sans écran** ne sont pas déclarées ici : une route déclarée mais non servie
- * planterait à la première navigation. C'est pourquoi `DAILY`, `RECITATIONS` et `ADMIN` — déjà
- * nommées dans [AppRoutes] — n'apparaissent pas ci-dessous. Elles attendent leur écran, et les
- * rappels qui y mèneraient restent à leur valeur par défaut : un appui ferait planter
- * l'application, ce qui est pire qu'un bouton sans effet.
+ * planterait à la première navigation. C'est pourquoi `DAILY` et `ADMIN` — déjà nommées dans
+ * [AppRoutes] — n'apparaissent pas ci-dessous. Elles attendent leur écran, et les rappels qui y
+ * mèneraient restent à leur valeur par défaut : un appui ferait planter l'application, ce qui est
+ * pire qu'un bouton sans effet.
+ *
+ * `RECITATIONS` a quitté cette liste avec l'écran de la liste des récitations : la route est
+ * servie, et le rappel du tableau de bord la nomme. C'est le couple qui compte — servir la route
+ * **et** brancher le rappel —, et `AppScaffoldReviewEntryTest` tient les deux.
  */
 @Composable
 private fun AppNavHost(
@@ -273,12 +278,23 @@ private fun AppNavHost(
                 // barre basse, au lieu d'empiler un second exemplaire de l'onglet par-dessus le
                 // tableau de bord — ce qui laisserait le retour ramener sur un écran plein écran.
                 onStatistics = { navController.navigateToTab(AppDestination.PROGRESS) },
-                // `onRecitations` reste à sa valeur par défaut, et c'est **délibéré** : la route
-                // `RECITATIONS` est nommée, mais son écran n'existe pas encore (`SocialScreen`
-                // est un panneau de phase), et la déclarer ici ferait planter la première
-                // navigation — c'est la règle posée plus haut. Le rappel sera branché avec
-                // l'écran des récitations partagées, en phase D.
+                // Les récitations enregistrées : la route est servie **juste après**, et le rappel
+                // la nomme. C'est la règle de la coquille — un rappel ne mène qu'à une route
+                // servie —, et c'est ce qui rend le bouton de la carte « Suivi » vivant.
+                onRecitations = { navController.navigate(AppRoutes.RECITATIONS) { launchSingleTop = true } },
             )
+        }
+
+        // Les récitations enregistrées. Écran **plein écran**, comme le tableau de bord : ni
+        // onglet ni barre supérieure, donc il porte lui-même son bouton de retour, et c'est la
+        // coquille qui décide où l'on retourne — un écran qui appellerait `popBackStack` lui-même
+        // ne pourrait plus être ouvert autrement que depuis la pile.
+        //
+        // `launchSingleTop` : deux appuis sur le bouton du tableau de bord ne doivent pas empiler
+        // deux fois le même écran, sans quoi le retour ramènerait sur une copie de l'écran qu'on
+        // vient de quitter.
+        composable(AppRoutes.RECITATIONS) {
+            RecitationsScreen(onClose = { navController.popBackStack() })
         }
 
         // Le lecteur ne connaît pas la navigation : il demande à fermer, et c'est la coquille

@@ -44,6 +44,7 @@ dependencies {
     implementation(project(":feature:social"))
     implementation(project(":feature:quiz"))
     implementation(project(":feature:profile"))
+    implementation(project(":feature:recitations"))
 
     // `BackHandler` : la sortie du lecteur doit écrire la mémoire de lecture, et le retour
     // système est une sortie comme une autre. Sans lui, quitter au geste n'enregistrerait rien

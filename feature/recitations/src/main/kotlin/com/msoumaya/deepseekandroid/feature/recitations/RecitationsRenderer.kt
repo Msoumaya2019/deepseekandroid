@@ -58,6 +58,31 @@ internal data class RecitationsInputs(
     val positionMs: Long = 0,
 )
 
+/**
+ * Ce que le `ViewModel` a chargé **pour la ligne ouverte**, et pour elle seule.
+ *
+ * Le porteur est **étiqueté**, et ce n'est pas une coquetterie : les corrections et les retours
+ * généraux arrivent après un aller-retour réseau. Ouvrir une ligne, puis une autre, laisse la
+ * première réponse arriver **en retard** — et sans étiquette elle s'afficherait sous la seconde
+ * ligne, ce qui attribuerait à une récitation le commentaire d'une autre. Rien ne le signalerait :
+ * les cartes seraient simplement fausses, et personne ne saurait laquelle croire.
+ */
+@Immutable
+internal data class RecitationsDetails(
+    val id: String? = null,
+    val corrections: List<VerseCorrection> = emptyList(),
+    val feedback: List<GeneralFeedback> = emptyList(),
+)
+
+/**
+ * Les détails **de la ligne ouverte**, ou rien.
+ *
+ * Rend un porteur vide dès que l'étiquette ne correspond plus — c'est-à-dire dès que la personne a
+ * déplié autre chose, ou tout replié.
+ */
+internal fun RecitationsDetails.forOpen(openId: String?): RecitationsDetails =
+    if (id != null && id == openId) this else RecitationsDetails()
+
 /** Rendu de la liste : fusion, filtre, mise en forme, et ce qui reste à décider. */
 internal object RecitationsRenderer {
 
@@ -124,7 +149,11 @@ internal object RecitationsRenderer {
             // et regarde le filtre « Invocations » verrait sinon « aucune récitation
             // enregistrée », ce qui est faux sur ce qu'elle a fait. C'est ici que le portage
             // s'écarte de l'original, qui ne distingue pas les deux vides.
-            empty = toutes.isEmpty() && connecte && message == null,
+            //
+            // **Et pas pendant une lecture.** Le registre local est publié avant la liste
+            // distante : entre les deux, la liste est vide parce qu'on **attend**. La phrase
+            // serait fausse, et elle le serait au pire moment — à l'ouverture de l'écran.
+            empty = toutes.isEmpty() && connecte && message == null && !state.loading,
 
             openId = ouverte?.id,
             playing = inputs.playing,

@@ -36,8 +36,8 @@ class AppScaffoldReviewEntryTest {
     @Test
     fun `la route du tableau de bord est servie`() {
         // Une route nommée mais non servie ferait planter la première navigation. C'est
-        // exactement ce que la coquille s'interdit, et la raison pour laquelle `DAILY`,
-        // `RECITATIONS` et `ADMIN` n'y figurent pas.
+        // exactement ce que la coquille s'interdit, et la raison pour laquelle `DAILY` et `ADMIN`
+        // n'y figurent pas — `RECITATIONS` en est sortie avec son écran.
         assertTrue(
             sourceDeLaCoquille().contains("composable(AppRoutes.REVIEW) {"),
             "La route du tableau de bord n'est plus servie : la première navigation vers elle " +
@@ -83,15 +83,29 @@ class AppScaffoldReviewEntryTest {
     }
 
     @Test
-    fun `les recitations restent non branchees, et c'est delibere`() {
-        // La route `RECITATIONS` est nommée mais son écran n'existe pas encore : `SocialScreen`
-        // est un panneau de phase. La déclarer ferait planter la première navigation — c'est la
-        // règle que la coquille s'impose, et ce contrôle l'épingle pour qu'on ne la « corrige »
-        // pas en branchant un rappel qui planterait.
-        assertFalse(
-            tableauDeBordDeLaCoquille().contains("onRecitations ="),
-            "Les récitations sont branchées alors que leur route n'est pas servie : le premier " +
-                "appui ferait planter l'application.",
+    fun `les recitations sont servies et branchees`() {
+        // Ce contrôle épingleait l'**absence** : la route `RECITATIONS` était nommée sans écran, et
+        // le brancher aurait fait planter la première navigation. L'écran existe maintenant, et
+        // les deux moitiés doivent être là — la route **servie** et le rappel **nommé** : servir
+        // la route sans brancher le rappel laisserait le bouton de la carte « Suivi » mort, et
+        // brancher le rappel sans servir la route ferait planter l'appui.
+        val coquille = sourceDeLaCoquille()
+
+        assertTrue(
+            coquille.contains("composable(AppRoutes.RECITATIONS) {"),
+            "La route des récitations n'est plus servie : le premier appui sur le bouton de la " +
+                "carte « Suivi » ferait planter l'application.",
+        )
+        assertTrue(
+            tableauDeBordDeLaCoquille()
+                .contains("onRecitations = { navController.navigate(AppRoutes.RECITATIONS)"),
+            "Le tableau de bord n'ouvre plus les récitations : le bouton de la carte « Suivi » " +
+                "serait un bouton mort, et rien d'autre ne le dirait.",
+        )
+        assertTrue(
+            coquille.contains("RecitationsScreen(onClose = { navController.popBackStack() })"),
+            "La route des récitations est servie mais ne rend plus l'écran : l'appui ouvrirait " +
+                "une page vide, et « la route est servie » ne prouverait rien à lui seul.",
         )
     }
 

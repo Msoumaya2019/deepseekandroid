@@ -500,6 +500,44 @@ class RecitationsRendererTest {
         .ofPattern("dd/MM/yyyy", Locale.FRANCE)
         .format(Instant.parse(iso).atZone(ZoneId.systemDefault()))
 
+    @Test
+    fun `les details d'une autre ligne ne s'affichent pas`() {
+        // Les corrections arrivent apres un aller-retour reseau : ouvrir une ligne, puis une
+        // autre, laisse la premiere reponse arriver en retard. Sans etiquette, elle s'afficherait
+        // sous la seconde ligne, et rien ne le dirait.
+        val chargees = RecitationsDetails(
+            id = "rec-a",
+            corrections = listOf(correction("c-1", "rec-a")),
+            feedback = listOf(retour("f-1", "rec-a")),
+        )
+
+        assertTrue(
+            chargees.forOpen("rec-a") === chargees,
+            "les details de la ligne ouverte doivent rester",
+        )
+        assertTrue(
+            chargees.forOpen("rec-b").corrections.isEmpty(),
+            "les corrections d'une autre ligne ne doivent pas s'afficher sous celle-ci",
+        )
+        assertTrue(
+            chargees.forOpen(null).feedback.isEmpty(),
+            "tout replie, plus aucune carte",
+        )
+    }
+
+    @Test
+    fun `une lecture en vol ne dit pas que la liste est vide`() {
+        // Le registre local est publie avant la liste distante : entre les deux, l'ecran est vide
+        // parce qu'il **attend**. Annoncer alors « aucune recitation enregistree » serait une
+        // affirmation fausse sur ce que la personne a fait, et au pire moment — a l'ouverture.
+        val vue = rendre(etat(loading = true), RecitationsInputs())
+
+        assertFalse(
+            vue.empty,
+            "l'ecran ne doit pas affirmer que la personne n'a rien enregistre pendant qu'il lit",
+        )
+    }
+
     private companion object {
         const val MOI = "moi-0000"
         const val ISO = "2026-01-01T10:00:00Z"

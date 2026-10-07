@@ -63,14 +63,17 @@ data class RecitationsUiState(
     /**
      * Vrai si l'écran doit dire « aucune récitation enregistrée ».
      *
-     * **Ce n'est pas `rows.isEmpty()`.** Trois situations vident la liste, et une seule autorise
+     * **Ce n'est pas `rows.isEmpty()`.** Quatre situations vident la liste, et une seule autorise
      * la phrase :
      *
      *  - **la personne n'a rien enregistré** — le vide est *établi* : connecté, aucune panne,
      *    aucune récitation. La phrase est vraie, et elle est utile ;
      *  - **la lecture a échoué** — les fichiers sont peut-être sur l'appareil. [message] porte
      *    alors la panne, et la phrase serait un mensonge de plus ;
-     *  - **personne n'est connecté** — on n'a rien pu lire. [message] invite à se connecter.
+     *  - **personne n'est connecté** — on n'a rien pu lire. [message] invite à se connecter ;
+     *  - **une lecture est en vol** — le registre local est publié **avant** la liste distante,
+     *    donc entre les deux la liste est vide parce qu'on attend. La phrase serait fausse, et
+     *    elle le serait au pire moment : à l'ouverture de l'écran.
      *
      * **Le filtre ne compte pas.** Il se juge sur la liste **entière**, avant filtrage : une
      * personne qui a des passages du Coran et regarde le filtre « Invocations » n'a pas « rien

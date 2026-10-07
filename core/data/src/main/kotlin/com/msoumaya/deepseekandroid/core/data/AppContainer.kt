@@ -15,6 +15,7 @@ import com.msoumaya.deepseekandroid.core.data.local.QuizCacheStore
 import com.msoumaya.deepseekandroid.core.data.local.QuizOutbox
 import com.msoumaya.deepseekandroid.core.data.local.QuizOutboxStore
 import com.msoumaya.deepseekandroid.core.data.local.QuranArchiveInstaller
+import com.msoumaya.deepseekandroid.core.data.local.RecitationStore
 import com.msoumaya.deepseekandroid.core.data.remote.AuthGateway
 import com.msoumaya.deepseekandroid.core.data.remote.OwnerStore
 import com.msoumaya.deepseekandroid.core.data.remote.RemoteStateSource
@@ -23,6 +24,8 @@ import com.msoumaya.deepseekandroid.core.data.remote.SupabaseAuthGateway
 import com.msoumaya.deepseekandroid.core.data.remote.SupabaseConfig
 import com.msoumaya.deepseekandroid.core.data.remote.SupabaseProvider
 import com.msoumaya.deepseekandroid.core.data.remote.SupabaseQuizSource
+import com.msoumaya.deepseekandroid.core.data.remote.SupabaseRecitationSource
+import com.msoumaya.deepseekandroid.core.data.remote.SupabaseRecitationUploader
 import com.msoumaya.deepseekandroid.core.data.remote.SupabaseSocialSource
 import com.msoumaya.deepseekandroid.core.data.remote.SupabaseStateSource
 import com.msoumaya.deepseekandroid.core.data.remote.UnavailableAuthGateway
@@ -31,6 +34,7 @@ import com.msoumaya.deepseekandroid.core.data.repository.AudioSettingsRepository
 import com.msoumaya.deepseekandroid.core.data.repository.AuthRepository
 import com.msoumaya.deepseekandroid.core.data.repository.QuizRepository
 import com.msoumaya.deepseekandroid.core.data.repository.QuranArchiveStore
+import com.msoumaya.deepseekandroid.core.data.repository.RecitationRepository
 import com.msoumaya.deepseekandroid.core.data.repository.SocialRepository
 import com.msoumaya.deepseekandroid.core.data.repository.UserRepository
 import com.msoumaya.deepseekandroid.core.data.security.SecretVault
@@ -232,6 +236,28 @@ class AppContainer(
             ),
             nowIso = { Dates.nowIso() },
         ),
+        scope = scope,
+    )
+
+    /**
+     * Les récitations enregistrées : le registre local, sa file de dépôt, et la lecture du
+     * serveur.
+     *
+     * Construit **sans déposant ni lecteur** quand aucun projet n'est configuré : le dépôt sait
+     * alors répondre « connexion requise » sans qu'aucune requête ne parte — c'est la même règle
+     * que pour l'espace social et le Quiz, et elle évite d'annoncer une panne réseau là où il n'y
+     * a simplement pas de réseau à atteindre.
+     *
+     * Le registre, ses fichiers audio et sa file de dépôt vivent sous `root`, **hors** de tout
+     * dossier de compte : c'est le registre lui-même qui porte le `userId` de chaque ligne, et
+     * c'est ce qui permet à une récitation enregistrée par un compte de rester sur l'appareil
+     * quand un autre compte s'ouvre.
+     */
+    val recitations: RecitationRepository = RecitationRepository(
+        store = RecitationStore(root),
+        uploader = supabaseClient?.let { SupabaseRecitationUploader(it) },
+        source = supabaseClient?.let { SupabaseRecitationSource(it) },
+        session = session,
         scope = scope,
     )
 
