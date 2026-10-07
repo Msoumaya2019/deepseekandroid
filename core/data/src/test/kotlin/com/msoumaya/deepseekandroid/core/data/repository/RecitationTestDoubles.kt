@@ -1,7 +1,11 @@
 package com.msoumaya.deepseekandroid.core.data.repository
 
+import com.msoumaya.deepseekandroid.core.data.remote.RecitationSource
 import com.msoumaya.deepseekandroid.core.data.remote.RecitationUploadRow
 import com.msoumaya.deepseekandroid.core.data.remote.RecitationUploader
+import com.msoumaya.deepseekandroid.core.model.GeneralFeedback
+import com.msoumaya.deepseekandroid.core.model.RemoteRecitation
+import com.msoumaya.deepseekandroid.core.model.VerseCorrection
 import kotlinx.coroutines.CompletableDeferred
 
 // ---------------------------------------------------------------------------
@@ -60,5 +64,77 @@ internal class FakeRecitationUploader : RecitationUploader {
         calls += "ligne"
         refuseUpsert?.let { throw it }
         rows += row
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Doublure du lecteur distant
+// ---------------------------------------------------------------------------
+// **Pourquoi elle arrive maintenant, et pas avec `RecitationSource`.** Une doublure n'existe que
+// pour un consommateur : tant que rien n'appelait la lecture distante, elle n'aurait éprouvé
+// qu'elle-même. Elle arrive avec le dépôt qui la consomme — comme la doublure du déposant est
+// arrivée avec la file, et non avec le déposant.
+//
+// **Ce qu'elle retient.** L'**ordre** des appels, comme l'autre : une suppression qui lirait la
+// liste après avoir supprimé, ou une lecture distante qui partirait avant la lecture locale,
+// seraient deux défauts que des valeurs rendues ne montreraient pas.
+//
+// **Le refus est réglable séparément** pour la lecture et pour la suppression : la panne qu'on
+// veut éprouver est celle d'**une** opération, et un refus global ne dirait pas laquelle a été
+// absorbée.
+// ---------------------------------------------------------------------------
+
+/** Doublure en mémoire du lecteur distant. */
+internal class FakeRecitationSource : RecitationSource {
+
+    /** Les appels, dans leur ordre, sous une forme lisible par un test. */
+    val calls = mutableListOf<String>()
+
+    /** Ce que la lecture de la liste rend, par compte. Suspendue : un test peut y changer de compte. */
+    var byOwner: suspend (String) -> List<RemoteRecitation> = { emptyList() }
+
+    /** Ce que la lecture des corrections rend, par récitation. */
+    var correctionsBy: (String) -> List<VerseCorrection> = { emptyList() }
+
+    /** Ce que la lecture des retours généraux rend, par récitation. */
+    var feedbackBy: (String) -> List<GeneralFeedback> = { emptyList() }
+
+    /** Refus de la lecture de la liste, ou `null`. */
+    var refuseList: Throwable? = null
+
+    /** Refus de la suppression, ou `null`. */
+    var refuseDelete: Throwable? = null
+
+    /** Les récitations supprimées, dans leur ordre. */
+    val deleted = mutableListOf<RemoteRecitation>()
+
+    /** Ce que rend l'adresse signée d'un chemin. */
+    var signedUrl: (String) -> String = { "https://exemple.test/$it" }
+
+    override suspend fun listMine(userId: String): List<RemoteRecitation> {
+        calls += "liste"
+        refuseList?.let { throw it }
+        return byOwner(userId)
+    }
+
+    override suspend fun corrections(recitationId: String): List<VerseCorrection> {
+        calls += "corrections"
+        return correctionsBy(recitationId)
+    }
+
+    override suspend fun generalFeedback(recitationId: String): List<GeneralFeedback> {
+        calls += "retours"
+        return feedbackBy(recitationId)
+    }
+
+    override suspend fun signedAudioUrl(path: String): String {
+        calls += "adresse"
+        return signedUrl(path)
+    }
+
+    override suspend fun deleteRemote(recitation: RemoteRecitation) {
+        calls += "suppression"
+        refuseDelete?.let { throw it }
+        deleted += recitation
     }
 }

@@ -2,13 +2,17 @@ package com.msoumaya.deepseekandroid.core.data.repository
 
 import com.msoumaya.deepseekandroid.core.data.local.RecitationStore
 import com.msoumaya.deepseekandroid.core.data.remote.OwnerStore
+import com.msoumaya.deepseekandroid.core.data.remote.RecitationSource
 import com.msoumaya.deepseekandroid.core.data.remote.RecitationUploadRow
 import com.msoumaya.deepseekandroid.core.data.remote.RecitationUploader
 import com.msoumaya.deepseekandroid.core.domain.RecitationText
 import com.msoumaya.deepseekandroid.core.model.AppJson
+import com.msoumaya.deepseekandroid.core.model.GeneralFeedback
 import com.msoumaya.deepseekandroid.core.model.LocalRecitation
 import com.msoumaya.deepseekandroid.core.model.RecitationKind
 import com.msoumaya.deepseekandroid.core.model.RecitationSyncStatus
+import com.msoumaya.deepseekandroid.core.model.RemoteRecitation
+import com.msoumaya.deepseekandroid.core.model.VerseCorrection
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
@@ -109,9 +113,11 @@ class RecitationRepositoryTest {
     private fun TestScope.recitations(
         owners: OwnerStore,
         uploader: RecitationUploader?,
+        lecteur: RecitationSource? = null,
     ): RecitationRepository = RecitationRepository(
         store = store,
         uploader = uploader,
+        source = lecteur,
         session = owners,
         scope = backgroundScope,
     )
@@ -591,6 +597,267 @@ class RecitationRepositoryTest {
         assertTrue(repository.state.value.items.isEmpty())
         assertTrue(store.all().isEmpty())
     }
+
+    // ------------------------------------------------------------------
+    // Lire le serveur
+    // ------------------------------------------------------------------
+
+    /** Une récitation distante, réduite à ce que ces tests regardent. */
+    private fun distante(
+        id: String,
+        owner: String = moi,
+        createdAt: String = "2026-01-01T10:00:00Z",
+        durationMs: Long = 5_000L,
+    ) = RemoteRecitation(
+        id = id,
+        userId = owner,
+        durationMs = durationMs,
+        storagePath = "$owner/$id.m4a",
+        createdAt = createdAt,
+    )
+
+    @Test
+    fun `la lecture distante publie ce que le serveur porte`() = runTest {
+        val lecteur = FakeRecitationSource()
+        lecteur.byOwner = { listOf(distante("rec-a"), distante("rec-b")) }
+        val repository = recitations(FakeOwners(moi), FakeRecitationUploader(), lecteur)
+        settle(repository)
+
+        assertEquals(listOf("rec-a", "rec-b"), repository.state.value.remote.map { it.id })
+    }
+
+    @Test
+    fun `la lecture distante est demandee pour le compte ouvert`() = runTest {
+        val lecteur = FakeRecitationSource()
+        var demande: String? = null
+        lecteur.byOwner = { owner ->
+            demande = owner
+            emptyList()
+        }
+        val repository = recitations(FakeOwners(moi), FakeRecitationUploader(), lecteur)
+        settle(repository)
+
+        assertEquals(moi, demande, "la liste distante est demandee pour le compte, et pas pour tous")
+    }
+
+    @Test
+    fun `le registre local est publie avant que la liste distante ne soit demandee`() = runTest {
+        // L'ordre n'est pas cosmetique : si le distant etait publie avant le local, une panne du
+        // serveur laisserait l'ecran sur une liste **vide** alors que les fichiers sont sur
+        // l'appareil — et ce sont precisement ceux qu'on ne peut pas re-telecharger.
+        enregistrer()
+        lateinit var repository: RecitationRepository
+        var itemsVus: Int? = null
+        val lecteur = FakeRecitationSource()
+        lecteur.byOwner = {
+            itemsVus = repository.state.value.items.size
+            emptyList()
+        }
+        repository = recitations(FakeOwners(moi), FakeRecitationUploader(), lecteur)
+        settle(repository)
+
+        assertEquals(1, itemsVus, "la liste locale est deja publiee quand le serveur est interroge")
+    }
+
+    @Test
+    fun `une panne de la lecture distante laisse les fichiers locaux en place`() = runTest {
+        enregistrer()
+        val lecteur = FakeRecitationSource()
+        lecteur.refuseList = IOException("reseau absent")
+        val repository = recitations(FakeOwners(moi), FakeRecitationUploader(), lecteur)
+        settle(repository)
+
+        assertEquals(1, repository.state.value.items.size, "les fichiers de l'appareil restent la")
+        assertTrue(repository.state.value.remote.isEmpty())
+        assertEquals(
+            RecitationText.listLocalOnly("reseau absent"),
+            repository.state.value.notice,
+            "la phrase est celle de l'original",
+        )
+    }
+
+    @Test
+    fun `une panne de la lecture distante sans message ne finit pas sur une espace`() = runTest {
+        val lecteur = FakeRecitationSource()
+        // Une exception sans texte : `restMessage()` rend `null`.
+        lecteur.refuseList = RuntimeException()
+        val repository = recitations(FakeOwners(moi), FakeRecitationUploader(), lecteur)
+        settle(repository)
+
+        assertEquals(RecitationText.LOCAL_ONLY, repository.state.value.notice)
+    }
+
+    @Test
+    fun `sans lecteur, aucune liste distante n'est demandee`() = runTest {
+        val repository = recitations(FakeOwners(moi), FakeRecitationUploader(), lecteur = null)
+        settle(repository)
+
+        assertTrue(repository.state.value.remote.isEmpty())
+        assertNull(repository.state.value.notice, "l'absence de compte n'est pas une panne")
+    }
+
+    @Test
+    fun `la liste distante d'un compte change en vol n'est pas publiee`() = runTest {
+        // La lecture est suspendue : le compte peut changer pendant qu'elle l'est. Publier alors
+        // la liste de l'ancien compte sous le nouveau serait pire qu'un echec.
+        //
+        // La relecture du nouveau compte **échoue**, et c'est délibéré : un échec ne touche pas à
+        // la liste distante, donc ce que l'état porte encore à la fin est exactement ce que la
+        // première lecture a publié. Sans cela, la relecture republierait sa propre liste vide et
+        // l'assertion passerait même sans la revérification — c'est ce qui est arrivé, deux fois :
+        // le cas de falsification a rendu FAUX tant que la relecture rendait une liste vide.
+        val owners = FakeOwners(moi)
+        val lecteur = FakeRecitationSource()
+        lecteur.byOwner = { owner ->
+            if (owner == moi) {
+                owners.setOwner(autre)
+                listOf(distante("rec-a", owner = moi))
+            } else {
+                throw IOException("le serveur ne repond pas")
+            }
+        }
+        val repository = recitations(owners, FakeRecitationUploader(), lecteur)
+        settle(repository)
+
+        assertTrue(
+            repository.state.value.remote.isEmpty(),
+            "la liste de l'ancien compte ne doit pas se publier sous le nouveau",
+        )
+        assertEquals(
+            RecitationText.listLocalOnly("le serveur ne repond pas"),
+            repository.state.value.notice,
+            "le nouveau compte a bien ete relu : sans cela, l'assertion precedente ne prouve rien",
+        )
+    }
+
+    // ------------------------------------------------------------------
+    // Retirer du serveur
+    // ------------------------------------------------------------------
+
+    @Test
+    fun `le retrait distant efface le fichier, la ligne et la copie locale`() = runTest {
+        val item = enregistrer()
+        val lecteur = FakeRecitationSource()
+        val repository = recitations(FakeOwners(moi), FakeRecitationUploader(), lecteur)
+        settle(repository)
+        assertEquals(1, repository.state.value.items.size)
+
+        assertTrue(repository.deleteRemote(distante(item.id)))
+
+        assertEquals(listOf(item.id), lecteur.deleted.map { it.id }, "le serveur est sollicite")
+        assertTrue(repository.state.value.items.isEmpty(), "la copie locale part avec la ligne")
+        assertTrue(store.all().isEmpty(), "le fichier ne revient pas au prochain depot")
+    }
+
+    @Test
+    fun `le retrait distant ne part pas pour la recitation d'un autre`() = runTest {
+        val lecteur = FakeRecitationSource()
+        val repository = recitations(FakeOwners(moi), FakeRecitationUploader(), lecteur)
+        settle(repository)
+
+        assertFalse(repository.deleteRemote(distante("rec-a", owner = autre)))
+
+        assertTrue(lecteur.deleted.isEmpty(), "aucun appel ne doit partir")
+        assertEquals(RecitationText.NOT_MINE, repository.state.value.notice)
+    }
+
+    @Test
+    fun `le retrait distant sans lecteur le dit`() = runTest {
+        val repository = recitations(FakeOwners(moi), FakeRecitationUploader(), lecteur = null)
+        settle(repository)
+
+        assertFalse(repository.deleteRemote(distante("rec-a")))
+
+        assertEquals(RecitationText.CONNECTION_REQUIRED, repository.state.value.notice)
+    }
+
+    @Test
+    fun `un echec du retrait distant laisse la liste en place`() = runTest {
+        val item = enregistrer()
+        val lecteur = FakeRecitationSource()
+        lecteur.refuseDelete = IOException("refus du serveur")
+        val repository = recitations(FakeOwners(moi), FakeRecitationUploader(), lecteur)
+        settle(repository)
+
+        assertFalse(repository.deleteRemote(distante(item.id)))
+
+        assertEquals(1, repository.state.value.items.size, "rien n'est retire quand le serveur refuse")
+        assertEquals("refus du serveur", repository.state.value.notice)
+    }
+
+    @Test
+    fun `un echec du retrait sans message ne laisse pas un mot vide`() = runTest {
+        // Un `notice` nul serait un echec **muet** : la personne aurait appuye, rien ne serait
+        // arrive, et rien ne le dirait.
+        val lecteur = FakeRecitationSource()
+        lecteur.refuseDelete = RuntimeException()
+        val repository = recitations(FakeOwners(moi), FakeRecitationUploader(), lecteur)
+        settle(repository)
+
+        assertFalse(repository.deleteRemote(distante("rec-a")))
+
+        val notice = repository.state.value.notice
+        assertTrue(!notice.isNullOrBlank(), "un echec muet ne dit rien a personne : $notice")
+    }
+
+    // ------------------------------------------------------------------
+    // Ecouter et lire les corrections
+    // ------------------------------------------------------------------
+
+    @Test
+    fun `l'adresse signee vient du lecteur`() = runTest {
+        val lecteur = FakeRecitationSource()
+        lecteur.signedUrl = { "https://signe.test/$it" }
+        val repository = recitations(FakeOwners(moi), FakeRecitationUploader(), lecteur)
+        settle(repository)
+
+        assertEquals("https://signe.test/$moi/rec-a.m4a", repository.signedUrl("$moi/rec-a.m4a"))
+        assertTrue("adresse" in lecteur.calls)
+    }
+
+    @Test
+    fun `l'adresse signee sans lecteur le dit`() = runTest {
+        val repository = recitations(FakeOwners(moi), FakeRecitationUploader(), lecteur = null)
+        settle(repository)
+
+        val erreur = runCatching { repository.signedUrl("chemin") }.exceptionOrNull()
+
+        assertEquals(RecitationText.AUDIO_UNAVAILABLE, erreur?.message)
+    }
+
+    @Test
+    fun `les corrections et les retours viennent du lecteur`() = runTest {
+        val lecteur = FakeRecitationSource()
+        lecteur.correctionsBy = { listOf(correction("c-1", it)) }
+        lecteur.feedbackBy = { listOf(retour("f-1", it)) }
+        val repository = recitations(FakeOwners(moi), FakeRecitationUploader(), lecteur)
+        settle(repository)
+
+        assertEquals(listOf("c-1"), repository.corrections("rec-a").map { it.id })
+        assertEquals(listOf("f-1"), repository.generalFeedback("rec-a").map { it.id })
+    }
+
+    @Test
+    fun `sans lecteur, aucune correction n'est rendue`() = runTest {
+        val repository = recitations(FakeOwners(moi), FakeRecitationUploader(), lecteur = null)
+        settle(repository)
+
+        assertTrue(repository.corrections("rec-a").isEmpty())
+        assertTrue(repository.generalFeedback("rec-a").isEmpty())
+    }
+
+    private fun correction(id: String, recitationId: String) = VerseCorrection(
+        id = id,
+        recitationId = recitationId,
+        verseId = 3,
+        createdAt = "2026-01-01T10:00:00Z",
+    )
+
+    private fun retour(id: String, recitationId: String) = GeneralFeedback(
+        id = id,
+        recitationId = recitationId,
+        createdAt = "2026-01-01T10:00:00Z",
+    )
 
     private companion object {
         /**

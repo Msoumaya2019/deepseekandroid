@@ -1,5 +1,9 @@
 package com.msoumaya.deepseekandroid.core.domain
 
+import java.time.Instant
+import java.time.format.DateTimeFormatter
+import java.util.Locale
+
 /**
  * Les mots de la récitation.
  *
@@ -217,6 +221,16 @@ object RecitationText {
     /** Il faut un compte pour garder un enregistrement, et il n'y en a pas. */
     const val CONNECTION_REQUIRED: String = "Connexion requise."
 
+    /**
+     * On ne retire que ce qui est à soi.
+     *
+     * La règle est **aussi** tenue par le serveur — la politique du compartiment et celle de la
+     * table comparent toutes deux `auth.uid()` —, mais la garde est posée ici, **avant tout
+     * appel**, comme dans l'original. Sans elle, un identifiant d'autrui coûterait deux
+     * allers-retours réseau pour se faire refuser au bout.
+     */
+    const val NOT_MINE: String = "Cette récitation ne t’appartient pas."
+
     /** Un enregistrement mis de côté pour aperçu vient d'être gardé. */
     const val DRAFT_SAVED: String =
         "Sauvegardé. Consulte Mes récitations pour le statut de synchronisation."
@@ -298,7 +312,18 @@ object RecitationText {
      * C'est la phrase la plus importante de l'écran : elle dit que l'échec ne coûte **rien** de ce
      * qui est déjà enregistré. La cause est ajoutée telle quelle, comme l'original.
      */
-    fun listLocalOnly(error: String): String = "Les fichiers locaux restent disponibles. $error"
+    fun listLocalOnly(error: String?): String =
+        if (error.isNullOrBlank()) LOCAL_ONLY else "Les fichiers locaux restent disponibles. $error"
+
+    /**
+     * Ce qu'on dit quand la lecture distante a échoué **sans laisser de message**.
+     *
+     * Le cas existe : une `RestException` dont le serveur n'a pas rempli le texte rend un message
+     * nul, et la phrase se terminerait alors sur une espace. Elle se termine ici sur elle-même.
+     * C'est l'idiome de `Quiz.errorText` et de `Social.errorText`, qui retombent tous deux sur une
+     * phrase générique quand il n'y a rien à dire.
+     */
+    const val LOCAL_ONLY: String = "Les fichiers locaux restent disponibles."
 
     /** Le lecteur n'a pas pu démarrer. */
     fun playImpossible(error: String): String = "Lecture impossible : $error"
@@ -456,4 +481,49 @@ object RecitationText {
 
     /** Le geste qui confirme la suppression. */
     const val DELETE_CONFIRM: String = "Supprimer"
+
+    // -----------------------------------------------------------------------
+    // Les dates
+    // -----------------------------------------------------------------------
+
+    /**
+     * Instant d'une récitation, tel qu'il s'écrit sous son titre.
+     *
+     * Le motif est celui de l'original — `new Date(...).toLocaleString('fr-FR')` —, **mesuré** et
+     * non supposé : « 01/01/2026 11:00:00 ». La locale est forcée à [FR], comme pour l'espace
+     * social : un téléphone réglé en anglais écrirait « 1/1/2026, 11:00:00 AM », et les deux
+     * clients montreraient alors la même récitation de deux façons différentes.
+     *
+     * **`null` plutôt qu'une chaîne vide ou un texte d'erreur.** Le client d'origine écrit
+     * « Invalid Date » pour un instant illisible, ce qui n'apprend rien à personne. Ici, un
+     * instant illisible est traité comme **absent**, et l'appelant n'écrit rien.
+     */
+    fun dateStamp(iso: String): String? = date(iso, STAMP)
+
+    /**
+     * Jour d'une correction, **sans l'heure**.
+     *
+     * L'original écrit `toLocaleDateString('fr-FR')`, soit « 01/01/2026 ». Une correction se date
+     * au jour : l'heure d'un commentaire n'aide personne, et l'original ne la montre pas.
+     */
+    fun dateOnly(iso: String): String? = date(iso, DAY)
+
+    private fun date(iso: String, motif: DateTimeFormatter): String? =
+        runCatching { Instant.parse(iso) }
+            .getOrNull()
+            ?.atZone(Dates.zone())
+            ?.format(motif)
+
+    /**
+     * La locale des dates. Voir [dateStamp].
+     *
+     * Elle est déclarée **avant** les motifs, et ce n'est pas cosmétique : un `object` initialise
+     * ses propriétés dans l'ordre du fichier, et les deux motifs la lisent. L'inverse ne compile
+     * pas — « Variable 'FR' must be initialized ».
+     */
+    private val FR = Locale.FRANCE
+
+    private val STAMP: DateTimeFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss", FR)
+
+    private val DAY: DateTimeFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy", FR)
 }

@@ -2,13 +2,17 @@ package com.msoumaya.deepseekandroid.core.data.repository
 
 import com.msoumaya.deepseekandroid.core.data.local.RecitationStore
 import com.msoumaya.deepseekandroid.core.data.remote.OwnerStore
+import com.msoumaya.deepseekandroid.core.data.remote.RecitationSource
 import com.msoumaya.deepseekandroid.core.data.remote.RecitationUploadRow
 import com.msoumaya.deepseekandroid.core.data.remote.RecitationUploader
 import com.msoumaya.deepseekandroid.core.data.remote.restMessage
 import com.msoumaya.deepseekandroid.core.domain.RecitationText
 import com.msoumaya.deepseekandroid.core.domain.Recitations
+import com.msoumaya.deepseekandroid.core.model.GeneralFeedback
 import com.msoumaya.deepseekandroid.core.model.LocalRecitation
 import com.msoumaya.deepseekandroid.core.model.RecitationSyncStatus
+import com.msoumaya.deepseekandroid.core.model.RemoteRecitation
+import com.msoumaya.deepseekandroid.core.model.VerseCorrection
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -22,13 +26,13 @@ import kotlinx.coroutines.sync.Mutex
 // ---------------------------------------------------------------------------
 // Dépôt « Récitations »
 // ---------------------------------------------------------------------------
-// Portage de la partie locale de `src/services/recitations.ts` : enregistrer, retirer, et
-// **déposer ce qui ne l'est pas encore**.
+// Portage de `src/services/recitations.ts` : enregistrer, retirer, **déposer** ce qui ne l'est
+// pas encore — et **lire** ce que le serveur porte.
 //
 // **Ce fichier ne décide d'aucune règle.** Les bornes, l'extension, le type MIME, l'adresse dans
-// le compartiment, les bornes distantes et la tolérance d'un fichier déjà déposé sont dans
-// `core:domain/Recitations.kt` ; ici il n'y a que l'ordonnancement, le sort des erreurs et le
-// passage hors ligne.
+// le compartiment, les bornes distantes, la tolérance d'un fichier déjà déposé et la borne de la
+// liste distante sont dans `core:domain/Recitations.kt` ; ici il n'y a que l'ordonnancement, le
+// sort des erreurs et le passage hors ligne.
 //
 // ## Ce que la file garantit, et ce qu'elle ne garantit pas
 //
@@ -55,6 +59,19 @@ import kotlinx.coroutines.sync.Mutex
 // envoi de plusieurs mégaoctets payé deux fois sur un forfait mobile. Ici la garde est prise
 // **avant** toute attente : la protection devient réelle au lieu d'être seulement apparente.
 // C'est une divergence assumée, et elle se mesure — le résultat observable, lui, est identique.
+//
+// ## La lecture, et pourquoi elle est ici plutôt que dans l'écran
+//
+// L'écran des récitations affiche **deux** listes en une : ce que l'appareil porte, et ce que le
+// serveur porte. Les deux sont lues au même endroit — [refresh] —, et l'écran n'en voit qu'une,
+// fusionnée par `RecitationsList.merge`. C'est le dépôt qui sait, parce que c'est lui qui détient
+// déjà le registre local et le déposant : un écran qui lirait le serveur lui-même aurait sa
+// propre vue de la même vérité, et les deux finiraient par diverger.
+//
+// **Une panne du serveur n'efface pas ce que l'appareil porte.** C'est la règle de l'original,
+// dont le `load` garde la liste locale et se contente d'un message quand la lecture distante
+// échoue. L'inverse — vider la liste — ferait disparaître des enregistrements qui sont toujours
+// là, et qui sont précisément ceux qu'on ne peut pas re-télécharger.
 // ---------------------------------------------------------------------------
 
 /**
@@ -82,15 +99,32 @@ data class RecitationState(
 
     /** Les récitations du compte, de la plus récente à la plus ancienne. */
     val items: List<LocalRecitation> = emptyList(),
+
+    /**
+     * Les récitations du compte **telles que le serveur les porte**, de la plus récente à la plus
+     * ancienne.
+     *
+     * Vide a deux sens, et le dépôt ne les distingue pas : « aucune récitation distante », et
+     * « on n'a pas pu demander ». La distinction est portée par [notice] — une lecture qui a
+     * échoué y laisse un message — et par [ownerId], qui dit s'il y a seulement un compte à
+     * interroger. Un booléen de plus ici serait une seconde façon de dire la même chose.
+     */
+    val remote: List<RemoteRecitation> = emptyList(),
 )
 
 /**
- * Enregistre les récitations de l'appareil et dépose celles qui ne le sont pas.
+ * Enregistre les récitations de l'appareil, dépose celles qui ne le sont pas, et lit celles du
+ * serveur.
  *
  * @param store registre local et fichiers.
- * @param uploader accès au serveur, ou `null` si aucun projet Supabase n'est configuré. Le `null`
- *   n'est pas une panne : c'est le mode hors ligne, et il doit se lire comme « pas de compte »,
- *   jamais comme une erreur réseau.
+ * @param uploader accès au serveur **en écriture**, ou `null` si aucun projet Supabase n'est
+ *   configuré. Le `null` n'est pas une panne : c'est le mode hors ligne, et il doit se lire comme
+ *   « pas de compte », jamais comme une erreur réseau.
+ * @param source accès au serveur **en lecture**, ou `null` pour la même raison. Les deux sont
+ *   séparés parce qu'ils ne servent pas les mêmes gestes : le déposant écrit une récitation, la
+ *   source lit celles qui existent, les corrections qu'on y a faites et le droit de les écouter.
+ *   Un seul objet porterait les deux, mais alors une doublure de test devrait implémenter les
+ *   gestes d'écriture pour éprouver la lecture.
  * @param session propriétaire courant. Observé : c'est lui qui déclenche la lecture, et c'est lui
  *   qui **vide** la liste à la déconnexion — sans quoi les récitations du compte précédent
  *   resteraient affichées sous le compte suivant.
@@ -99,6 +133,7 @@ data class RecitationState(
 class RecitationRepository(
     private val store: RecitationStore,
     private val uploader: RecitationUploader?,
+    private val source: RecitationSource? = null,
     private val session: OwnerStore,
     private val scope: CoroutineScope,
 ) {
@@ -182,14 +217,18 @@ class RecitationRepository(
     }
 
     /**
-     * Relit le registre local du compte ouvert.
+     * Relit le registre local du compte ouvert, **puis** la liste distante.
      *
-     * Il n'y a **rien à demander au serveur** pour afficher cette liste : elle vient du disque,
-     * donc elle s'affiche sans réseau, statuts compris.
+     * L'ordre compte, et il est celui de l'original : le local d'abord, sans quoi une panne du
+     * serveur laisserait l'écran vide alors que les fichiers sont là.
      *
      * @return vrai si un compte était ouvert.
      */
-    suspend fun refresh(): Boolean = compte { lireRegistre() }
+    suspend fun refresh(): Boolean = compte {
+        val ouvert = lireRegistre()
+        if (ouvert) lireDistant()
+        ouvert
+    }
 
     /** Corps de [refresh], compté comme travail en vol. */
     private suspend fun lireRegistre(): Boolean {
@@ -200,6 +239,33 @@ class RecitationRepository(
             items = store.list(owner),
         )
         return true
+    }
+
+    /**
+     * Lit la liste distante, et **ne touche pas** à la liste locale.
+     *
+     * Un échec n'est pas une panne de l'écran : il publie un message qui dit que les fichiers de
+     * l'appareil restent disponibles, et la liste locale est laissée telle quelle. C'est le
+     * `catch` de l'original, dont la phrase est reprise mot pour mot.
+     *
+     * **Le compte est revérifié après l'attente**, comme dans [passeDeDepot] : la lecture est
+     * suspendue, et le compte peut changer pendant qu'elle l'est. Publier alors la liste de
+     * l'ancien compte sous le nouveau serait pire qu'un échec.
+     */
+    private suspend fun lireDistant() {
+        val api = source ?: return
+        val owner = session.currentOwner() ?: return
+        try {
+            val rows = api.listMine(owner)
+            if (session.currentOwner() != owner) return
+            _state.value = _state.value.copy(remote = rows, notice = null)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            _state.value = _state.value.copy(
+                notice = RecitationText.listLocalOnly(error.restMessage()),
+            )
+        }
     }
 
     /**
@@ -265,6 +331,90 @@ class RecitationRepository(
             _state.value = _state.value.copy(busy = false)
             false
         }
+    }
+
+    /**
+     * Retire une récitation **du serveur** : son fichier, sa ligne, et la copie locale.
+     *
+     * L'ordre est celui de l'original, et il n'est pas indifférent : le fichier d'abord, la ligne
+     * ensuite. Une ligne sans fichier est une récitation qu'on ne peut pas écouter et qui reste
+     * listée — c'est le pire des deux états ; un fichier sans ligne est seulement des octets que
+     * plus rien ne nomme.
+     *
+     * **La copie locale part avec la ligne distante**, et c'est ce que fait l'original : sa
+     * suppression distante cherche la même récitation dans le registre de l'appareil et la retire.
+     * Sans cela, la liste continuerait de montrer une récitation dont le statut ne veut plus rien
+     * dire, et le prochain dépôt la renverrait au serveur — annulant la suppression.
+     *
+     * **On ne retire que ce qui est à soi.** La règle est aussi tenue par le serveur, mais la
+     * garde est posée avant tout appel : un identifiant d'autrui ne doit pas coûter un
+     * aller-retour pour se faire refuser.
+     */
+    suspend fun deleteRemote(item: RemoteRecitation): Boolean {
+        val api = source
+        if (api == null) {
+            _state.value = _state.value.copy(notice = RecitationText.CONNECTION_REQUIRED)
+            return false
+        }
+        val owner = session.currentOwner() ?: return false
+        if (item.userId != owner) {
+            _state.value = _state.value.copy(notice = RecitationText.NOT_MINE)
+            return false
+        }
+        if (_state.value.busy) return false
+        _state.value = _state.value.copy(busy = true, notice = null)
+
+        return try {
+            api.deleteRemote(item)
+            store.list(owner).firstOrNull { it.id == item.id }?.let { store.remove(it) }
+            _state.value = _state.value.copy(
+                busy = false,
+                items = store.list(owner),
+                // La ligne a disparu du serveur : la garder à l'écran ferait clignoter une
+                // récitation supprimée jusqu'à la prochaine relecture.
+                remote = _state.value.remote.filterNot { it.id == item.id },
+            )
+            true
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            // `restMessage()` peut rendre `null` — une `RestException` dont le serveur n'a pas
+            // rempli le texte —, et un `notice` nul serait un **échec muet** : la personne aurait
+            // appuyé, rien ne serait arrivé, et rien ne le dirait. Le repli est le texte de
+            // l'exception, qui est exactement ce que `String(error)` affichait dans l'original.
+            _state.value = _state.value.copy(
+                busy = false,
+                notice = error.restMessage() ?: error.toString(),
+            )
+            false
+        }
+    }
+
+    /**
+     * Les corrections verset par verset d'une récitation.
+     *
+     * **Rend une liste vide quand aucun projet n'est configuré**, et c'est la règle de l'original
+     * — mais **lève** quand l'appel échoue. La différence est voulue : « il n'y a pas de compte »
+     * et « on n'a pas pu demander » ne se lisent pas de la même façon, et rendre vide dans les
+     * deux cas ferait dire « aucune correction » là où l'on ne sait rien.
+     */
+    suspend fun corrections(recitationId: String): List<VerseCorrection> =
+        source?.corrections(recitationId).orEmpty()
+
+    /** Les retours généraux d'une récitation. Mêmes règles que [corrections]. */
+    suspend fun generalFeedback(recitationId: String): List<GeneralFeedback> =
+        source?.generalFeedback(recitationId).orEmpty()
+
+    /**
+     * L'adresse signée d'un fichier audio, valable [Recitations.SIGNED_URL_SECONDS] secondes.
+     *
+     * **Elle lève quand aucun projet n'est configuré.** Une adresse signée ne se fabrique pas
+     * hors ligne : la rendre `null` obligerait chaque appelant à traiter un cas qui n'en est pas
+     * un, et l'écran, lui, n'a rien à montrer d'autre que l'impossibilité de lire.
+     */
+    suspend fun signedUrl(path: String): String {
+        val api = source ?: throw IllegalStateException(RecitationText.AUDIO_UNAVAILABLE)
+        return api.signedAudioUrl(path)
     }
 
     /**

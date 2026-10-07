@@ -3891,6 +3891,167 @@ CAS: list[dict] = [
         "tache": ":core:data:testDebugUnitTest",
         "attendus": ["la liste distante est bornee a cent lignes"],
     },
+    {
+        # La lecture distante publie ce que le serveur a rendu. Rendre une liste vide ferait
+        # disparaitre de l'ecran des recitations qui existent, et le depot a deja lu la liste.
+        "nom": "recitation : la lecture distante publie ce que le serveur porte",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/RecitationRepository.kt",
+        "avant": "            _state.value = _state.value.copy(remote = rows, notice = null)",
+        "apres": "            _state.value = _state.value.copy(remote = emptyList(), notice = null)",
+        "tache": ":core:data:testDebugUnitTest",
+        "attendus": ["la lecture distante publie ce que le serveur porte"],
+    },
+    {
+        # L'ordre local puis distant. Le distant seul laisserait l'ecran vide sur une panne du
+        # serveur, alors que les fichiers sont sur l'appareil — et ceux-la ne se retelechargent pas.
+        "nom": "recitation : le registre local est publie avant la liste distante",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/RecitationRepository.kt",
+        "avant": "        val ouvert = lireRegistre()\n        if (ouvert) lireDistant()\n        ouvert",
+        "apres": "        lireDistant()\n        val ouvert = lireRegistre()\n        ouvert",
+        "tache": ":core:data:testDebugUnitTest",
+        "attendus": ["le registre local est publie avant que la liste distante ne soit demandee"],
+    },
+    {
+        # Le compte est reverifie apres l'attente. Sans ce controle, la liste d'un compte se
+        # publie sous le compte suivant : la personne voit les recitations de quelqu'un d'autre.
+        "nom": "recitation : la liste distante d'un compte change en vol n'est pas publiee",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/RecitationRepository.kt",
+        "avant": "            if (session.currentOwner() != owner) return\n",
+        "apres": "            // mutation : le compte n'est plus reverifie\n",
+        "tache": ":core:data:testDebugUnitTest",
+        "attendus": ["la liste distante d'un compte change en vol n'est pas publiee"],
+    },
+    {
+        # Le retrait distant emporte la copie locale. Sans cela, la recitation reste listee, et le
+        # prochain depot la renvoie au serveur — annulant la suppression que la personne a demandee.
+        "nom": "recitation : le retrait distant efface la copie locale",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/RecitationRepository.kt",
+        "avant": "            store.list(owner).firstOrNull { it.id == item.id }?.let { store.remove(it) }\n",
+        "apres": "            // mutation : la copie locale n'est pas retiree\n",
+        "tache": ":core:data:testDebugUnitTest",
+        "attendus": ["le retrait distant efface le fichier, la ligne et la copie locale"],
+    },
+    {
+        # On ne retire que ce qui est a soi. Sans la garde, un identifiant d'autrui coute deux
+        # allers-retours reseau pour se faire refuser au bout.
+        "nom": "recitation : le retrait distant ne part pas pour la recitation d'un autre",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/RecitationRepository.kt",
+        "avant": "        if (item.userId != owner) {",
+        "apres": "        if (false) {",
+        "tache": ":core:data:testDebugUnitTest",
+        "attendus": ["le retrait distant ne part pas pour la recitation d'un autre"],
+    },
+    {
+        # Un retrait sans lecteur le dit. Rendre faux en silence ferait croire a un geste sans
+        # effet plutot qu'a une impossibilite.
+        "nom": "recitation : le retrait distant sans lecteur le dit",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/RecitationRepository.kt",
+        "avant": "            _state.value = _state.value.copy(notice = RecitationText.CONNECTION_REQUIRED)",
+        "apres": "            _state.value = _state.value.copy(notice = null)",
+        "tache": ":core:data:testDebugUnitTest",
+        "attendus": ["le retrait distant sans lecteur le dit"],
+    },
+    {
+        # Un echec sans message reste lisible. `restMessage()` peut rendre `null`, et un `notice`
+        # nul serait un echec **muet** : la personne aurait appuye, rien ne serait arrive, et rien
+        # ne le dirait.
+        "nom": "recitation : un echec du retrait sans message ne laisse pas un mot vide",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/RecitationRepository.kt",
+        "avant": "                notice = error.restMessage() ?: error.toString(),",
+        "apres": "                notice = error.restMessage(),",
+        "tache": ":core:data:testDebugUnitTest",
+        "attendus": ["un echec du retrait sans message ne laisse pas un mot vide"],
+    },
+    {
+        # Une adresse signee ne se fabrique pas hors ligne. La rendre vide ferait jouer un fichier
+        # dont l'adresse ne mene nulle part, au lieu de dire que la lecture est impossible.
+        "nom": "recitation : l'adresse signee sans lecteur le dit",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/RecitationRepository.kt",
+        "avant": "        val api = source ?: throw IllegalStateException(RecitationText.AUDIO_UNAVAILABLE)",
+        "apres": "        val api = source ?: return \"\"",
+        "tache": ":core:data:testDebugUnitTest",
+        "attendus": ["l'adresse signee sans lecteur le dit"],
+    },
+    {
+        # Le vide se juge AVANT le filtre. Juger apres ferait dire « aucune recitation
+        # enregistree » a quelqu'un qui en a, sous un filtre qui les cache.
+        "nom": "recitation : le vide de la liste se juge avant le filtre",
+        "fichier": "feature/recitations/src/main/kotlin/com/msoumaya/deepseekandroid/feature/recitations/RecitationsRenderer.kt",
+        "avant": "            empty = toutes.isEmpty() && connecte && message == null,",
+        "apres": "            empty = lignes.isEmpty() && connecte && message == null,",
+        "tache": ":feature:recitations:testDebugUnitTest",
+        "attendus": ["un filtre qui ne laisse rien passer ne dit pas qu'il n'y a rien"],
+    },
+    {
+        # Sans compte mais avec un projet configure, on renvoie au profil : c'est la que la
+        # connexion se fait. L'autre phrase laisserait la personne sans piste.
+        "nom": "recitation : le message sans compte renvoie au profil",
+        "fichier": "feature/recitations/src/main/kotlin/com/msoumaya/deepseekandroid/feature/recitations/RecitationsRenderer.kt",
+        "avant": "                RecitationText.LIST_SIGNED_OUT_PROFILE",
+        "apres": "                RecitationText.LIST_SIGNED_OUT",
+        "tache": ":feature:recitations:testDebugUnitTest",
+        "attendus": ["sans compte, le message renvoie au profil"],
+    },
+    {
+        # Sans projet configure, il n'y a pas d'ecran de connexion a ouvrir : y renvoyer serait
+        # une impasse, et la phrase le dit autrement.
+        "nom": "recitation : sans projet configure, le message n'envoie pas au profil",
+        "fichier": "feature/recitations/src/main/kotlin/com/msoumaya/deepseekandroid/feature/recitations/RecitationsRenderer.kt",
+        "avant": "            !connecte -> if (configured) {",
+        "apres": "            !connecte -> if (true) {",
+        "tache": ":feature:recitations:testDebugUnitTest",
+        "attendus": ["sans projet configure, le message n'envoie pas au profil"],
+    },
+    {
+        # Le statut du sous-titre est celui de la copie LOCALE : c'est elle qui porte l'etat du
+        # depot. Le figer a `null` ferait lire « Synchronise » sur une recitation en attente.
+        "nom": "recitation : le statut du sous-titre est celui de la copie locale",
+        "fichier": "feature/recitations/src/main/kotlin/com/msoumaya/deepseekandroid/feature/recitations/RecitationsRenderer.kt",
+        "avant": "            subtitle = sousTitre(item, locale?.syncStatus),",
+        "apres": "            subtitle = sousTitre(item, null),",
+        "tache": ":feature:recitations:testDebugUnitTest",
+        "attendus": ["une copie locale en attente se lit En attente"],
+    },
+    {
+        # Une recitation que le serveur ne porte pas se supprime par l'appareil. Repondre faux
+        # ferait appeler le serveur pour une ligne qu'il n'a pas, et le fichier resterait.
+        "nom": "recitation : une recitation absente du serveur est locale seule",
+        "fichier": "feature/recitations/src/main/kotlin/com/msoumaya/deepseekandroid/feature/recitations/RecitationsRenderer.kt",
+        "avant": "            localOnly = state.remote.none { it.id == item.id },",
+        "apres": "            localOnly = false,",
+        "tache": ":feature:recitations:testDebugUnitTest",
+        "attendus": ["une recitation que le serveur ne porte pas se supprime par l'appareil"],
+    },
+    {
+        # Les cartes ne s'affichent que sous la ligne ouverte : les publier quand rien n'est
+        # ouvert ferait porter a l'ecran des corrections que personne n'a demandees.
+        "nom": "recitation : les cartes ne s'affichent que sous la ligne ouverte",
+        "fichier": "feature/recitations/src/main/kotlin/com/msoumaya/deepseekandroid/feature/recitations/RecitationsRenderer.kt",
+        "avant": "            feedback = if (ouverte == null) {",
+        "apres": "            feedback = if (false) {",
+        "tache": ":feature:recitations:testDebugUnitTest",
+        "attendus": ["les cartes ne s'affichent pas quand rien n'est ouvert"],
+    },
+    {
+        # Le bouton dit ce que le geste fera : « Pause » pendant la lecture, « Reecouter »
+        # sinon. Les inverser ferait appuyer sur « Reecouter » pour arreter.
+        "nom": "recitation : le bouton de lecture suit l'etat de lecture",
+        "fichier": "feature/recitations/src/main/kotlin/com/msoumaya/deepseekandroid/feature/recitations/RecitationsRenderer.kt",
+        "avant": "            playLabel = if (inputs.playing) RecitationText.LIST_PAUSE else RecitationText.LIST_PLAY,",
+        "apres": "            playLabel = if (inputs.playing) RecitationText.LIST_PLAY else RecitationText.LIST_PAUSE,",
+        "tache": ":feature:recitations:testDebugUnitTest",
+        "attendus": ["le bouton de lecture suit l'etat de lecture"],
+    },
+    {
+        # Une correction se date au JOUR : l'heure d'un commentaire n'aide personne, et
+        # l'original ne la montre pas.
+        "nom": "recitation : la carte de correction se date au jour",
+        "fichier": "feature/recitations/src/main/kotlin/com/msoumaya/deepseekandroid/feature/recitations/RecitationsRenderer.kt",
+        "avant": "                        date = RecitationText.dateOnly(correction.createdAt),",
+        "apres": "                        date = null,",
+        "tache": ":feature:recitations:testDebugUnitTest",
+        "attendus": ["les cartes de correction portent le verset, le repli et le jour"],
+    },
 ]
 
 
