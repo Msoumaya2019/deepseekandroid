@@ -7,12 +7,17 @@ et celui d'`ARCHITECTURE.md` — et rien ne les tenait ensemble. Le fait est mes
   * le tableau du `README` annoncait **1443** tests quand le banc en comptait **1564** (121
     d'ecart), et il ignorait le module `feature:quiz` ;
   * celui d'`ARCHITECTURE.md` annoncait **1471** (93 d'ecart) ;
-  * un troisieme endroit, la phrase « 245 cas » du falsifier, etait reste a **272**.
+  * un troisieme endroit, la phrase qui annonce le nombre de cas du falsifier, est reste en
+    arriere **deux fois de plus** : a **272** alors que le banc en portait davantage, puis a
+    **282** alors qu'il en portait **283**.
 
-Un compteur recopie derive, et il est **cru**. Ce script relit les deux tableaux, les compare au
-rapport du coureur — par `compter-tests.py`, qui sait ne compter qu'une variante par classe — et
-**refuse** en nommant la ligne fautive. Il verifie aussi que la **somme** des lignes retombe sur
-le total annonce : c'est la seule preuve qu'aucun module n'a ete oublie.
+Un compteur recopie derive, et il est **cru**. Ce script relit les **deux** tableaux, les compare
+au rapport du coureur — par `compter-tests.py`, qui sait ne compter qu'une variante par classe —
+et **refuse** en nommant la ligne fautive. Il verifie aussi que la **somme** des lignes retombe
+sur le total annonce : c'est la seule preuve qu'aucun module n'a ete oublie.
+
+Le **troisieme** endroit est tenu par `verifier_compte_des_cas` : il compare la phrase du `README`
+au nombre de cas que `falsifier.py` porte reellement, au lieu de le croire.
 
 Usage :
     python tools/verifier-compteurs-documents.py          # depuis la racine du depot
@@ -52,6 +57,71 @@ def lancer_compter_tests() -> dict:
     return json.loads(sortie.stdout)
 
 
+# La phrase du `README` qui annonce le nombre de cas du falsifier. Elle est ecrite a la main, dans
+# une phrase : rien ne la relie a la liste des cas — c'est le troisieme endroit de la docstring.
+MOTIF_CAS_FALSIFIER = re.compile(r"\*\*(?P<cas>\d+)\*\* cas sont encore jouables")
+
+
+def compter_cas_du_banc() -> int:
+    """Le nombre de cas que `falsifier.py` porte reellement.
+
+    Lu par l'interface du falsificateur — `--verifier` — et non en comptant des motifs dans son
+    source : un `grep` sur `"nom":` compterait aussi les cas commentes, et ne dirait rien de ce
+    que le banc joue. `--verifier` ne lance pas Gradle, donc le controle reste court.
+
+    Le compte rendu est le nombre **total** de cas, et le script s'arrete si les deux nombres
+    different : annoncer combien de cas porte une liste dont une partie n'est pas jouable n'aurait
+    pas de sens, et c'est le genre de desaccord qu'il vaut mieux voir que traverser.
+    """
+    sortie = subprocess.run(
+        [sys.executable, os.path.join("tools", "falsifier.py"), "--verifier"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    trouve = re.search(r"VERDICT : (\d+)/(\d+) cas jouable", sortie.stdout)
+    if not trouve:
+        sys.exit(
+            "falsifier.py --verifier n'a pas rendu son verdict.\n"
+            f"--- sortie ---\n{sortie.stdout[-2000:]}\n--- erreur ---\n{sortie.stderr}"
+        )
+    jouables, total = int(trouve.group(1)), int(trouve.group(2))
+    if jouables != total:
+        sys.exit(
+            f"falsifier.py : {jouables} cas jouables sur {total}. Le compte des cas n'a pas de "
+            "sens tant que la liste n'est pas saine."
+        )
+    return total
+
+
+def verifier_compte_des_cas(soucis: list[str]) -> None:
+    """Le troisieme endroit : le nombre de cas annonce dans le `README`.
+
+    La docstring de ce script decrit ce trou depuis le debut, et **rien** ne le verifiait. Mesure :
+    le nombre est passe de 272 a 282, puis de 282 a 283, chaque fois sans que rien ne le dise.
+    """
+    reel = compter_cas_du_banc()
+    with open("README.md", encoding="utf-8", newline="") as flux:
+        contenu = flux.read()
+
+    print("=== compte des cas du falsificateur ===")
+    trouve = MOTIF_CAS_FALSIFIER.search(contenu)
+    if not trouve:
+        soucis.append(
+            "README.md : la phrase annoncant le nombre de cas du falsificateur est introuvable"
+        )
+        print("  PHRASE INTROUVABLE")
+        return
+
+    annonce = int(trouve.group("cas"))
+    if annonce != reel:
+        soucis.append(f"README.md : annonce {annonce} cas au falsificateur, le banc en porte {reel}")
+        print(f"  NON annonce {annonce}, banc {reel}")
+        return
+
+    print(f"  ok  {annonce} cas")
+
+
 def main() -> int:
     rapport = lancer_compter_tests()
     modules_banc: dict[str, int] = {
@@ -66,6 +136,8 @@ def main() -> int:
     print()
 
     soucis: list[str] = []
+
+    verifier_compte_des_cas(soucis)
 
     for document, motif_phrase in DOCUMENTS.items():
         with open(document, encoding="utf-8", newline="") as flux:
