@@ -76,6 +76,26 @@ object Recitations {
         if (kind == RecitationKind.INVOCATION) null to null else start to end
 
     /**
+     * Les bornes à écrire dans la ligne **locale**, pour la nature donnée.
+     *
+     * Le miroir de [remoteBounds], et il ne dit **pas** la même chose : une invocation part au
+     * serveur avec des bornes **nulles** (`null`), et se range sur l'appareil avec des bornes à
+     * **zéro**. L'original écrit exactement cela (`draft.invocation ? 0 : range.start`), et l'écart
+     * n'est pas une inattention : la table distante accepte `null` parce que sa contrainte
+     * distingue les deux natures, alors que le modèle local porte deux `Int` que le reste du code
+     * additionne et compare sans se demander s'ils existent.
+     *
+     * Les confondre écrirait `null` dans un champ qui n'en veut pas, ou ferait passer une
+     * invocation pour un passage couvrant le premier verset du Coran.
+     *
+     * C'est la règle qu'applique `RecitationStore.add` : elle est appliquée là où la ligne se
+     * forme, pour que le registre ne puisse pas contenir une invocation portant les bornes d'un
+     * passage.
+     */
+    fun localBounds(kind: RecitationKind, start: Int, end: Int): Pair<Int, Int> =
+        if (kind == RecitationKind.INVOCATION) 0 to 0 else start to end
+
+    /**
      * `true` si l'échec d'un dépôt de fichier ne doit pas arrêter la synchronisation.
      *
      * Le compartiment refuse d'écraser un fichier existant — le client d'origine dépose avec

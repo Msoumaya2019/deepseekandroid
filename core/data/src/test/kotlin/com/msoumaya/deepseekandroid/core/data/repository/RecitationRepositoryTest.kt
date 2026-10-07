@@ -58,13 +58,22 @@ import kotlin.test.assertTrue
  * qui **est** mesuré ici, c'est ce que le dépôt demande : le chemin, le type MIME, les octets et
  * la forme de la ligne, qui sont les seules choses dont il décide.
  *
- * ## Pourquoi [settle] attend sur une condition, et non sur une horloge
+ * ## Pourquoi [settle] attend le dépôt, et non une accalmie de l'état
  *
  * Le dépôt lit et écrit par `Dispatchers.IO` (`BlobFile`, et la copie du fichier) : le travail
  * quitte le répartiteur de test et y revient par un **vrai fil**, que l'horloge virtuelle
- * n'attend pas. On attend donc que l'état publié **cesse de bouger**, avec un délai de garde qui
- * échoue en le disant — plutôt qu'un `Thread.sleep` fixe, qui rendrait le harnais instable au lieu
- * de le rendre juste.
+ * n'attend pas. Il faut donc **sonder**, et non se suspendre : c'est la seule façon d'avancer.
+ *
+ * Mais sonder quoi ? La première version de cette attente guettait trois lectures stables de
+ * l'état publié. Elle passait ici et tombait en intégration continue, et c'est la leçon de ce
+ * fichier : **une accalmie de l'état n'est pas une fin de travail.** L'envoi des octets ne change
+ * rien d'autre que `syncing`, qui reste vrai du début à la fin de la passe ; « l'état ne bouge
+ * plus » se produit donc aussi **pendant** le dépôt. Deux tests lisaient un statut `uploading` en
+ * croyant lire un statut final.
+ *
+ * On sonde maintenant ce que le dépôt sait de lui-même : [RecitationRepository.enTravail]. Le
+ * sommeil n'est plus l'attente, il n'en est que le pas d'échantillonnage, et le délai de garde
+ * échoue en le disant plutôt que de rendre la main sur une lecture du milieu.
  */
 class RecitationRepositoryTest {
 
@@ -108,29 +117,25 @@ class RecitationRepositoryTest {
     )
 
     /**
-     * Laisse le travail de fond aboutir, en attendant que l'état publié cesse de bouger.
+     * Laisse le travail de fond aboutir, en attendant que le dépôt n'ait plus rien en vol.
      *
-     * Trois lectures stables, et non une : entre deux étapes du dépôt — le marquage `uploading`,
-     * l'envoi des octets, l'écriture de la ligne, le marquage `synced` — l'état ne bouge pas
-     * pendant l'aller-retour réseau, et s'arrêter à la première accalmie reviendrait à lire l'état
-     * du milieu.
+     * Deux tours sans rien en vol, et non un seul : une opération en lance une autre — la lecture
+     * du registre précède la passe de dépôt, et l'enregistrement lance une passe —, donc un tour
+     * calme peut être un tour **entre** deux travaux. Le premier tour ne prouve rien ; le second
+     * non plus, mais deux d'affilée, oui.
      */
     private fun TestScope.settle(repository: RecitationRepository, millis: Long = 1_000) {
         advanceTimeBy(millis)
-        runCurrent()
 
         val limite = System.nanoTime() + DELAI_DE_GARDE_NANOS
-        var vue: RecitationState? = null
-        var stables = 0
-        while (stables < 3 && System.nanoTime() < limite) {
+        var tours = 0
+        while (tours < 2 && System.nanoTime() < limite) {
             runCurrent()
-            val courante = repository.state.value
-            stables = if (courante == vue) stables + 1 else 0
-            vue = courante
+            tours = if (repository.enTravail) 0 else tours + 1
             Thread.sleep(2)
         }
 
-        if (stables < 3) {
+        if (tours < 2) {
             error(
                 "le travail de fond n'a pas abouti dans le delai : le harnais ne peut pas dire " +
                     "si le depot est fautif ou si l'attente est trop courte",

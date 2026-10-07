@@ -3506,6 +3506,233 @@ CAS: list[dict] = [
         "tache": ":core:data:testDebugUnitTest",
         "attendus": ["la ligne envoyee ne porte ni instantane d'invocation ni champ nul"],
     },
+    {
+        # Un 3gp annonce partirait au compartiment avec le type MIME du mp4.
+        "nom": "recitation : le format produit devient du 3gp",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/RecitationRecorder.kt",
+        "avant": "    val RECORDED_EXTENSION: String get() = Recitations.EXTENSION_MP4",
+        "apres": "    val RECORDED_EXTENSION: String get() = Recitations.EXTENSION_3GP",
+        "tache": ":core:domain:test",
+        "attendus": ["le format annonce est celui que le depot saura nommer"],
+    },
+    {
+        # Le debit de l'original est 64 kbit/s : le doubler paie des octets pour rien.
+        "nom": "recitation : le debit de l'enregistrement double",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/RecitationRecorder.kt",
+        "avant": "    const val BIT_RATE: Int = 64_000",
+        "apres": "    const val BIT_RATE: Int = 128_000",
+        "tache": ":core:domain:test",
+        "attendus": ["le debit et les canaux sont ceux que l'original demandait"],
+    },
+    {
+        # L'original informe avant de reclamer l'acces au micro, et non l'inverse.
+        "nom": "recitation : le microphone passe avant la notice",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/RecitationRecorder.kt",
+        "avant": "        if (!noticeAccepted) return RecitationStartProblem.NOTICE_PENDING\n        if (!microphoneGranted) return RecitationStartProblem.MICROPHONE_DENIED",
+        "apres": "        if (!microphoneGranted) return RecitationStartProblem.MICROPHONE_DENIED\n        if (!noticeAccepted) return RecitationStartProblem.NOTICE_PENDING",
+        "tache": ":core:domain:test",
+        "attendus": ["la notice passe avant le microphone"],
+    },
+    {
+        # La veracite de l'original (`!userId`) refuse une chaine vide, comme ici.
+        "nom": "recitation : un compte vide passe pour un compte",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/RecitationRecorder.kt",
+        "avant": "        if (userId.isNullOrEmpty()) return RecitationStartProblem.OWNER_MISSING",
+        "apres": "        if (userId == null) return RecitationStartProblem.OWNER_MISSING",
+        "tache": ":core:domain:test",
+        "attendus": ["un compte vide vaut une absence de compte"],
+    },
+    {
+        # Terminer au repos tenterait d'arreter un enregistreur deja arrete.
+        "nom": "recitation : terminer agit aussi hors capture",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/RecitationRecorder.kt",
+        "avant": "    fun canFinish(phase: RecitationPhase): Boolean =\n        phase == RecitationPhase.RECORDING || phase == RecitationPhase.PAUSED",
+        "apres": "    fun canFinish(phase: RecitationPhase): Boolean =\n        phase != RecitationPhase.PREVIEW && phase != RecitationPhase.SAVED",
+        "tache": ":core:domain:test",
+        "attendus": ["terminer n'a d'effet que pendant la capture"],
+    },
+    {
+        # Un passage en pleine page n'a pas d'apercu : sa reference est deja affichee.
+        "nom": "recitation : le Coran passe aussi par l'apercu",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/RecitationRecorder.kt",
+        "avant": "        if (isInvocation || compact) RecitationPhase.PREVIEW else RecitationPhase.SAVED",
+        "apres": "        if (isInvocation || compact || !isInvocation) RecitationPhase.PREVIEW else RecitationPhase.SAVED",
+        "tache": ":core:domain:test",
+        "attendus": ["un passage du Coran en pleine page va droit a l'enregistre"],
+    },
+    {
+        # Une barre d'actions est une suite : permuter deux boutons change le geste.
+        "nom": "recitation : les gestes de la capture changent d'ordre",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/RecitationRecorder.kt",
+        "avant": "        RecitationPhase.RECORDING -> listOf(\n            RecitationAction.PAUSE,\n            RecitationAction.FINISH,\n            RecitationAction.CANCEL,\n        )",
+        "apres": "        RecitationPhase.RECORDING -> listOf(\n            RecitationAction.FINISH,\n            RecitationAction.PAUSE,\n            RecitationAction.CANCEL,\n        )",
+        "tache": ":core:domain:test",
+        "attendus": ["pendant la capture on suspend, on termine ou on annule, dans cet ordre"],
+    },
+    {
+        # Un bouton Partager qui ne partage rien vaut moins qu'un bouton absent.
+        "nom": "recitation : le partage apparait sans destinataire",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/RecitationRecorder.kt",
+        "avant": "        RecitationPhase.SAVED -> if (canShare) {",
+        "apres": "        RecitationPhase.SAVED -> if (canShare || true) {",
+        "tache": ":core:domain:test",
+        "attendus": ["le partage s'ajoute en dernier, et seulement s'il y a de quoi et qui"],
+    },
+    {
+        # Une fois la recitation gardee, il n'y a plus rien a achever.
+        "nom": "recitation : une recitation gardee met un geste en avant",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/RecitationRecorder.kt",
+        "avant": "            listOf(RecitationAction.LISTEN, RecitationAction.RESTART)",
+        "apres": "            listOf(RecitationAction.LISTEN, RecitationAction.SAVE)",
+        "tache": ":core:domain:test",
+        "attendus": ["une recitation gardee ne met rien en avant"],
+    },
+    {
+        # Un compteur qui repart a zero ferait croire a un redemarrage.
+        "nom": "recitation : les minutes sont repliees a soixante",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/RecitationRecorder.kt",
+        "avant": "        val minutes = Math.floorDiv(durationMs, 60_000L)",
+        "apres": "        val minutes = Math.floorMod(Math.floorDiv(durationMs, 60_000L), 60L)",
+        "tache": ":core:domain:test",
+        "attendus": ["les minutes ne sont pas repliees a soixante"],
+    },
+    {
+        # L'original tronque : arrondir ferait afficher une seconde qui n'est pas finie.
+        "nom": "recitation : les secondes sont arrondies au lieu d'etre tronquees",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/RecitationRecorder.kt",
+        "avant": "        val seconds = Math.floorMod(Math.floorDiv(durationMs, 1_000L), 60L)",
+        "apres": "        val seconds = Math.floorMod(Math.round(durationMs / 1_000.0), 60L)",
+        "tache": ":core:domain:test",
+        "attendus": ["les millisecondes sont tronquees et non arrondies"],
+    },
+    {
+        # Le titre dit ce qu'on enregistre, pas la forme du panneau.
+        "nom": "recitation : le titre suit la mise en page et non la nature",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/RecitationRecorder.kt",
+        "avant": "        if (isInvocation) RecitationText.RECORDER_TITLE_INVOCATION else RecitationText.RECORDER_TITLE_QURAN",
+        "apres": "        if (!isInvocation) RecitationText.RECORDER_TITLE_INVOCATION else RecitationText.RECORDER_TITLE_QURAN",
+        "tache": ":core:domain:test",
+        "attendus": ["le titre suit ce qu'on enregistre"],
+    },
+    {
+        # Le `??` de l'original ne replie que sur null : une chaine vide est un choix.
+        "nom": "recitation : un titre vide devient le mot invocation",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/RecitationRecorder.kt",
+        "avant": "        isInvocation -> invocationTitle ?: RecitationText.INVOCATION_FALLBACK",
+        "apres": "        isInvocation -> invocationTitle?.takeIf { it.isNotEmpty() } ?: RecitationText.INVOCATION_FALLBACK",
+        "tache": ":core:domain:test",
+        "attendus": ["un titre vide reste vide, il ne devient pas invocation"],
+    },
+    {
+        # Une invocation porte une plage : c'est la nature qui doit decider de la ligne.
+        "nom": "recitation : la plage passe avant la nature",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/RecitationRecorder.kt",
+        "avant": "        isInvocation -> invocationTitle ?: RecitationText.INVOCATION_FALLBACK\n        range != null -> Quran.reference(range)",
+        "apres": "        range != null -> Quran.reference(range)\n        isInvocation -> invocationTitle ?: RecitationText.INVOCATION_FALLBACK",
+        "tache": ":core:domain:test",
+        "attendus": ["la nature decide de la ligne, pas la presence d'un titre"],
+    },
+    {
+        # La pleine page porte le symbole de pause, la barre reduite non.
+        "nom": "recitation : les deux mises en page disent la meme chose en pause",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/RecitationRecorder.kt",
+        "avant": "        RecitationPhase.PAUSED -> RecitationText.PAUSED_FULL",
+        "apres": "        RecitationPhase.PAUSED -> RecitationText.PAUSED_COMPACT",
+        "tache": ":core:domain:test",
+        "attendus": ["les deux mises en page ne disent pas la meme chose en pause"],
+    },
+    {
+        # La pleine page n'affiche la duree que pendant la capture.
+        "nom": "recitation : la pleine page lit le compteur vivant hors capture",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/RecitationRecorder.kt",
+        "avant": "        if (phase == RecitationPhase.RECORDING || phase == RecitationPhase.PAUSED) liveMs else null",
+        "apres": "        if (phase == RecitationPhase.RECORDING && phase == RecitationPhase.PAUSED) liveMs else null",
+        "tache": ":core:domain:test",
+        "attendus": ["la pleine page ne lit que le compteur vivant"],
+    },
+    {
+        # Un 00:00 fige se lirait comme un enregistrement vide.
+        "nom": "recitation : la barre reduite montre une duree au repos",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/RecitationRecorder.kt",
+        "avant": "    ): Long? = if (phase == RecitationPhase.IDLE) null else draftMs ?: itemMs ?: liveMs",
+        "apres": "    ): Long? = draftMs ?: itemMs ?: liveMs",
+        "tache": ":core:domain:test",
+        "attendus": ["la barre reduite ne montre aucune duree au repos"],
+    },
+    {
+        # Une invocation rangee avec des bornes passerait pour le premier verset.
+        "nom": "recitation : les bornes locales d'une invocation deviennent celles du passage",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Recitations.kt",
+        "avant": "        if (kind == RecitationKind.INVOCATION) 0 to 0 else start to end",
+        "apres": "        start to end",
+        "tache": ":core:domain:test",
+        "attendus": ["une invocation se range avec des bornes a zero"],
+    },
+    {
+        # Tout autre mot vaut « pas encore acceptee » : le doute protege la personne.
+        "nom": "recitation : la notice accepte n'importe quoi",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/RecitationRecorder.kt",
+        "avant": "    fun noticeAccepted(stored: String?): Boolean = stored == NOTICE_ACCEPTED",
+        "apres": "    fun noticeAccepted(stored: String?): Boolean = true",
+        "tache": ":core:domain:test",
+        "attendus": ["seul le mot attendu vaut acceptation"],
+    },
+    {
+        # Le temps suspendu compte : la duree ecrite dans la ligne serait fausse.
+        "nom": "recitation : la pause ne retire plus le temps suspendu",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/RecordingStopwatch.kt",
+        "avant": "        accumulatedMs += nowMs() - from",
+        "apres": "        accumulatedMs += 0",
+        "tache": ":core:domain:test",
+        "attendus": ["une pause exclut le temps suspendu"],
+    },
+    {
+        # Recommencer ne reconstruit pas le chronometre : le cumul repart de zero.
+        "nom": "recitation : un nouveau depart garde le cumul",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/RecordingStopwatch.kt",
+        "avant": "        accumulatedMs = 0\n        startedAt = nowMs()",
+        "apres": "        accumulatedMs = accumulatedMs\n        startedAt = nowMs()",
+        "tache": ":core:domain:test",
+        "attendus": ["un nouveau depart repart de zero"],
+    },
+    {
+        # La duree est lue avant l'arret, et elle ne doit plus bouger ensuite.
+        "nom": "recitation : l'arret ne fige plus la duree",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/RecordingStopwatch.kt",
+        "avant": "        pause()\n        stopped = true\n        return accumulatedMs",
+        "apres": "        stopped = true\n        return elapsedMs()",
+        "tache": ":core:domain:test",
+        "attendus": ["l'arret fige la duree"],
+    },
+    {
+        # Un arret est un arret : reprendre ensuite relancerait une mesure terminee.
+        "nom": "recitation : reprendre apres l'arret relance le chronometre",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/RecordingStopwatch.kt",
+        "avant": "        if (startedAt != null || stopped) return",
+        "apres": "        if (startedAt != null) return",
+        "tache": ":core:domain:test",
+        "attendus": ["reprendre apres l'arret ne relance rien"],
+    },
+    {
+        # Deux appuis rapproches ne doivent pas fabriquer un second segment de temps.
+        "nom": "recitation : pauser deux fois compte deux fois",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/RecordingStopwatch.kt",
+        "avant": "        val from = startedAt ?: return",
+        "apres": "        val from = startedAt ?: 0L",
+        "tache": ":core:domain:test",
+        "attendus": ["pauser deux fois ne compte qu'une fois"],
+    },
+    {
+        # Une invocation se range a zero. Ecrire les bornes recues ferait porter a la ligne locale
+        # les versets d'un passage, et le modele local - deux `Int` que le reste du code additionne
+        # - la ferait passer pour un passage du Coran.
+        "nom": "recitation : les bornes d'une invocation se rangent telles quelles",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/local/RecitationStore.kt",
+        "avant": "        val (localStart, localEnd) = Recitations.localBounds(kind, start, end)",
+        "apres": "        val (localStart, localEnd) = start to end",
+        "tache": ":core:data:testDebugUnitTest",
+        "attendus": ["les bornes d'une invocation sont ramenees a zero, quoi qu'on donne"],
+    },
 ]
 
 

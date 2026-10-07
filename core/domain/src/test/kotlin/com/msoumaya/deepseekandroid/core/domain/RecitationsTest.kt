@@ -5,6 +5,7 @@ import com.msoumaya.deepseekandroid.core.model.RecitationSyncStatus
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -111,6 +112,49 @@ class RecitationsTest {
         // Ni zero, ni un intervalle vide : `null`. Une invocation n'est pas un passage du Coran,
         // et ecrire un intervalle qui ne veut rien dire rendrait les corrections possibles.
         assertEquals(null to null, Recitations.remoteBounds(RecitationKind.INVOCATION, 3, 7))
+    }
+
+    // --- localBounds -------------------------------------------------------
+
+
+    @Test
+    fun `une invocation se range avec des bornes a zero`() {
+        assertEquals(
+            0 to 0,
+            Recitations.localBounds(RecitationKind.INVOCATION, start = 5, end = 10),
+        )
+    }
+
+    @Test
+    fun `un passage du Coran se range avec ses bornes`() {
+        assertEquals(
+            5 to 10,
+            Recitations.localBounds(RecitationKind.QURAN, start = 5, end = 10),
+        )
+    }
+
+    /**
+     * Les deux encodages d'une invocation, côte à côte — et ils **diffèrent**.
+     *
+     * C'est le point de cette paire : la ligne locale porte `0`, la ligne distante porte `null`.
+     * Les confondre écrirait `null` dans un champ qui n'en veut pas, ou ferait passer une
+     * invocation pour un passage couvrant le premier verset du Coran.
+     */
+    @Test
+    fun `les bornes locales d'une invocation ne sont pas ses bornes distantes`() {
+        val local = Recitations.localBounds(RecitationKind.INVOCATION, 5, 10)
+        val distant = Recitations.remoteBounds(RecitationKind.INVOCATION, 5, 10)
+        assertEquals(0 to 0, local)
+        assertEquals(null to null, distant)
+        assertNotEquals(local.first as Int?, distant.first)
+    }
+
+    @Test
+    fun `pour un passage les deux encodages s'accordent`() {
+        val local = Recitations.localBounds(RecitationKind.QURAN, 5, 10)
+        val distant = Recitations.remoteBounds(RecitationKind.QURAN, 5, 10)
+        assertEquals(5 to 10, local)
+        assertEquals(Pair<Int?, Int?>(5, 10), distant)
     }
 
     // --- saveProblem -------------------------------------------------------

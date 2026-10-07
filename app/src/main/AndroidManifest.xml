@@ -30,6 +30,19 @@
          le type `mediaPlayback`. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <!-- Enregistrement d'une recitation. Declaree ici, elle n'est **pas** demandee au demarrage :
+         l'application s'ouvre sur le lecteur, et une demande de microphone sans rapport avec ce
+         que la personne fait est le meilleur moyen de la voir refusee pour toujours. La demande
+         part au premier appui sur « Enregistrer ma voix », apres la notice qui dit ce que
+         deviennent les enregistrements. Depuis Android 11, le systeme peut n'accorder l'acces que
+         pour une seule fois ; l'application doit donc traiter un refus comme un etat normal, et
+         non comme une panne — c'est ce que fait RecitationStartProblem.MICROPHONE_DENIED. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- La fonctionnalite disparait proprement sur un appareil sans microphone, au lieu de
+         proposer un bouton qui echouera. -->
+    <uses-feature
+        android:name="android.hardware.microphone"
+        android:required="false" />
 
     <application
         android:name=".DeepSeekApplication"

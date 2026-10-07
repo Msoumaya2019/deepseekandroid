@@ -106,8 +106,9 @@ class RecitationStore(
      * ouvert la porte à une invocation marquée `quran`, que le serveur refuserait ensuite sans
      * que l'appareil puisse le prévoir.
      *
-     * @param start premier verset. Ignoré pour une invocation, dont les bornes sont nulles.
-     * @param end dernier verset. Ignoré pour une invocation.
+     * @param start premier verset. **Ramené à zéro** pour une invocation, dont les bornes
+     *   locales sont nulles : la règle est celle du domaine, [Recitations.localBounds].
+     * @param end dernier verset. Ramené à zéro pour une invocation.
      * @param invocationId invocation enregistrée, ou `null` pour un passage du Coran.
      * @return la récitation inscrite, statut `pending`.
      * @throws IllegalArgumentException si [Recitations.saveProblem] refuse — l'appelant doit avoir
@@ -134,11 +135,17 @@ class RecitationStore(
             File(sourcePath).copyTo(target, overwrite = true)
         }
 
+        // Les bornes écrites sont celles de la **nature**, et non celles reçues : une invocation
+        // se range à zéro, un passage garde ses versets. La règle est celle du domaine
+        // ([Recitations.localBounds]), et elle est appliquée ici plutôt que chez l'appelant —
+        // comme la nature, qui se déduit d'`invocationId` au lieu d'être reçue : le registre ne
+        // peut alors pas contenir une invocation portant les bornes d'un passage.
+        val (localStart, localEnd) = Recitations.localBounds(kind, start, end)
         val item = LocalRecitation(
             id = id,
             userId = userId,
-            start = start,
-            end = end,
+            start = localStart,
+            end = localEnd,
             durationMs = durationMs,
             uri = target.absolutePath,
             createdAt = nowIso(),

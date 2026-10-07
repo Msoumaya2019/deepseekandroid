@@ -9,6 +9,7 @@ import com.msoumaya.deepseekandroid.core.domain.RecitationText
 import com.msoumaya.deepseekandroid.core.domain.Recitations
 import com.msoumaya.deepseekandroid.core.model.LocalRecitation
 import com.msoumaya.deepseekandroid.core.model.RecitationSyncStatus
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -111,6 +112,54 @@ class RecitationRepository(
      */
     private val guard = Mutex()
 
+    /**
+     * Nombre d'opérations du dépôt **en vol** : lecture du registre et passe de dépôt.
+     *
+     * Ce compteur existe à cause d'un échec d'intégration continue qu'il a fallu expliquer, et non
+     * contourner. **L'état publié ne dit pas qu'un travail est en cours.** `syncing` passe à vrai
+     * et à faux autour d'une passe, mais il reste vrai pendant toute sa durée, et les étapes d'une
+     * passe — marquage `uploading`, envoi des octets, écriture de la ligne, marquage `synced` — ne
+     * changent rien d'autre. « L'état ne bouge plus » ne veut donc pas dire « la passe est finie » :
+     * une attente fondée là-dessus rend la main au milieu du dépôt, et le test qui suit lit un
+     * statut `uploading` en croyant lire un statut final.
+     *
+     * Ce que ça coûtait, mesuré : en ralentissant la doublure de 200 ms sur un vrai répartiteur —
+     * ce que fait un appel réseau —, deux tests tombaient, et ils passaient sur une machine rapide.
+     *
+     * Le compte est incrémenté **avant la première suspension** de l'opération et décrémenté après
+     * la dernière, dans la coroutine appelante : il ne peut donc pas valoir zéro pendant qu'un
+     * travail vit encore, sur quelque fil que ce soit. C'est ce qui le rend sûr là où une lecture
+     * d'état ne l'était pas.
+     *
+     * Un compteur atomique et non un `Int` : deux opérations peuvent se chevaucher — le retour au
+     * premier plan et la fin d'un enregistrement — et une incrémentation non atomique en perdrait
+     * une. Un compteur faussé rendrait [enTravail] menteur, donc l'attente menteuse.
+     */
+    private val enVol = AtomicInteger()
+
+    /**
+     * Vrai si une opération du dépôt est en cours.
+     *
+     * Publique parce que l'attente d'un test ne peut pas se fonder sur l'état publié (voir [enVol]),
+     * et parce qu'un écran a le droit de savoir qu'un travail tourne sans lire la liste.
+     */
+    val enTravail: Boolean get() = enVol.get() > 0
+
+    /**
+     * Compte une opération du dépôt, de sa première à sa dernière suspension.
+     *
+     * Le bloc est exécuté **dans la coroutine appelante** : le compteur suit donc le travail, y
+     * compris à travers un `withContext(Dispatchers.IO)`, sans rien changer à son ordonnancement.
+     */
+    private suspend fun <T> compte(bloc: suspend () -> T): T {
+        enVol.incrementAndGet()
+        try {
+            return bloc()
+        } finally {
+            enVol.decrementAndGet()
+        }
+    }
+
     private val _state = MutableStateFlow(RecitationState())
 
     /** État affichable. */
@@ -140,7 +189,10 @@ class RecitationRepository(
      *
      * @return vrai si un compte était ouvert.
      */
-    suspend fun refresh(): Boolean {
+    suspend fun refresh(): Boolean = compte { lireRegistre() }
+
+    /** Corps de [refresh], compté comme travail en vol. */
+    private suspend fun lireRegistre(): Boolean {
         val owner = session.currentOwner() ?: return false
         _state.value = _state.value.copy(
             ownerId = owner,
@@ -227,7 +279,10 @@ class RecitationRepository(
      * @return vrai si un dépôt a été mené, faux si aucun déposant n'existe ou si un autre dépôt
      *   tenait déjà la garde.
      */
-    suspend fun syncPending(): Boolean {
+    suspend fun syncPending(): Boolean = compte { passeDeDepot() }
+
+    /** Corps de [syncPending], compté comme travail en vol. */
+    private suspend fun passeDeDepot(): Boolean {
         val api = uploader ?: return false
         if (!guard.tryLock()) return false
         try {

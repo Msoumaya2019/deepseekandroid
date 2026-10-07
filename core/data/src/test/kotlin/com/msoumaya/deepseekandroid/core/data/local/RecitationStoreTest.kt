@@ -171,6 +171,20 @@ class RecitationStoreTest {
     }
 
     @Test
+    fun `les bornes d'une invocation sont ramenees a zero, quoi qu'on donne`() = runTest {
+        // L'original ecrit `draft.invocation ? 0 : range.start` : une invocation se range avec des
+        // bornes a zero, quel que soit l'intervalle que l'ecran avait sous la main. Sans cette
+        // regle, la ligne locale porterait les versets d'une invocation, et le modele local — deux
+        // `Int` que le reste du code additionne — ferait passer une invocation pour un passage.
+        val item = nouveauRegistre()
+            .add(source.absolutePath, 5, 9, 5_000L, moi, invocationId = "inv-1")
+
+        assertEquals(0, item.start)
+        assertEquals(0, item.end)
+        assertEquals(RecitationKind.INVOCATION, item.kind)
+    }
+
+    @Test
     fun `un passage du Coran se declare par l'absence d'invocation`() = runTest {
         val item = nouveauRegistre().add(source.absolutePath, 1, 7, 5_000L, moi)
 
