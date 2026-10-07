@@ -127,17 +127,58 @@ modifiées :
 
 | Élément | État | Remarque |
 |---|---|---|
-| `user_state` (lecture, écriture, fusion) | **fait et éprouvé** | 213 tests sur la couche de données |
+| `user_state` (lecture, écriture, fusion) | **fait et éprouvé** | 219 tests sur la couche de données |
 | Authentification (connexion, inscription, déconnexion) | **code écrit**, éprouvé contre le serveur pour l'inscription | la clé `publisable` est en place ; reste à exercer une **connexion** avec un compte réel |
 | Réinitialisation du mot de passe par courriel | **code écrit** | `resetPasswordForEmail`, sans `redirectUrl` tant que le lien profond n'existe pas. Le message affiché reste neutre : le serveur répond « succès » même pour une adresse inconnue, pour empêcher l'énumération des comptes |
 | Renvoi du courriel de confirmation | **code écrit** | `resendEmail(OtpType.Email.SIGNUP, …)`, même réserve sur la redirection |
 | Lien profond de confirmation | **à faire** | schéma d'URL à définir et à faire vérifier par le domaine. En attendant, le lien reçu ouvre la page du projet Supabase et non l'application |
-| Notifications (FCM, `push_devices`) | **à faire** | phase D |
+| Notifications — décision | **fait et éprouvé** | `Notifications.kt` porte la porte de présentation, la destination d'un toucher, l'identité et le dédoublement, les quatre canaux, la correspondance des préférences, le rappel de 19 h et la notification de test — **47 tests**, sans appareil. La couche de **transport** n'est pas livrée, et ce n'est pas un oubli : la chaîne d'envoi du projet partagé est écrite pour **Expo**, à trois niveaux. Voir « La chaîne d'envoi est propre à Expo » ci-dessous |
+| Notifications — transport (FCM, `push_devices`) | **à faire, et il demande une décision** | la colonne `expo_push_token` refuse un jeton FCM par contrainte `check`, et le serveur poste vers `exp.host` : livrer les notifications demande une modification du **projet partagé**, et le `google-services.json` de la tâche #96 |
 | Amis — profils, liens, invitations, cercles | **code écrit** | `SocialSource`, `SupabaseSocialSource` et `SocialRepository`, éprouvés contre une **source factice** (24 tests) : la lecture du profil, `friend_inbox()`, les six RPC de lien, la création de cercle et l'ouverture du contact administrateur. **Rien n'a encore été exercé contre le serveur** — ni `ensureProfile`, ni `friend_inbox` : le vérifier demande un **second compte réel**, et c'est le prochain pas |
 | Conversation — messages, membres, objectifs partagés, rendez-vous | **code écrit, écran porté** | la même paire `SocialSource` / `SupabaseSocialSource` porte les **vingt-trois opérations de la conversation** — mesuré : les 23 `suspend fun` de la section « conversation » de l'interface —, dont le **partage d'une récitation**, et `SocialRepository` porte ses règles d'ordonnancement. Éprouvées contre la **source factice** (26 tests : `SocialRepositoryTest` 24, `SocialSourceShapeTest` 2) et tenues par un **contrôle de forme** : quelle page se lit à l'ouverture d'une pièce, le curseur de la page ancienne, les deux transitions d'historique, la remise à zéro d'une pièce ouverte, les compléments qui n'effacent pas les messages déjà affichés, et le compteur de la liste remis à zéro après lecture. Le **partage d'une récitation** y ajoute une opération et une colonne : un message de type `recitation` écrit dans `friend_messages` avec sa colonne `recitation_id`, **jamais dans un cercle** et **jamais pour une invocation** — le déclencheur `private.validate_recitation_message()` l'exige, et il vérifie aussi que la récitation appartient à l'expéditeur —, et que le serveur n'ouvre qu'à un lien **accepté** (`private.can_play_shared_recitation()`). **Rien n'a encore été exercé contre le serveur** : les tables `friend_messages`, `friend_message_hidden`, `friend_message_reads`, `friend_group_members`, `friend_shared_goals` et `friend_review_appointments` ne sont lues que par la doublure. L'**écran** est porté : `ConversationScreen.kt` dispose, `ConversationRenderer` calcule **sans appareil**, et les **trois portes** de la liste y mènent — l'appui sur la ligne, le bouton « Message », le bouton « Ouvrir » d'un cercle |
 | Quiz — question du jour, défis, notifications | **code écrit** | `QuizSource` / `SupabaseQuizSource` portent les **cinq** fonctions du client (`quiz_snapshot`, `quiz_answer_daily`, `quiz_create_challenge`, `quiz_answer_challenge`, `quiz_set_notifications`), et `QuizRepository` ses règles d'ordonnancement : l'instantané du disque publié avant le réseau, la file vidée avant la lecture, la réponse faite hors ligne rangée puis renvoyée, la fusion qui ne l'efface pas, l'isolement des comptes et la déconnexion — éprouvées contre une **source factice** (18 tests). L'**écran** est porté **et** atteignable : la coquille sert sa route paramétrée, et ses **48** tests (40 pour de vrai, 8 contrôles de forme) vivent dans `feature:quiz`. **Rien n'a encore été exercé contre le serveur** : les six tables `quiz_*` ne sont lues que par la doublure, et la migration `quiz.sql` n'est **peut-être pas déployée** sur le projet partagé. Le client le dit alors en toutes lettres — le code `PGRST202` est traduit en « Le service Quiz doit être activé sur le serveur. » au lieu d'afficher le texte brut de PostgREST. Les six fonctions d'administration restent **hors périmètre** |
 | Récitations — dépôt, liste et écoute | **code écrit, écran porté** | `RecitationUploader` / `SupabaseRecitationUploader` portent le dépôt du fichier et l'écriture de la ligne, `RecitationSource` / `SupabaseRecitationSource` la lecture de la liste, des corrections et de l'adresse signée, et `RecitationRepository` ses règles d'ordonnancement : le fichier **avant** la ligne, un élément en échec qui ne bloque pas les suivants, une récitation restée en plein dépôt qui **repart**, un second dépôt concurrent qui rend la main au lieu de renvoyer les mêmes octets, et — à la lecture — le registre local publié **avant** que la liste distante ne soit demandée. Éprouvées contre une **source factice** (41 tests). L'**écran** est porté : la liste, le filtre, le dépliage, les cartes du professeur, le retrait, l'**écoute**, et le **partage** à un ami **accepté** — qui s'écrit dans la conversation, jamais dans un cercle. **Rien n'a encore été exercé contre le serveur** : le compartiment et la table `recitations` ne sont lus que par la doublure. L'**enregistreur natif** est écrit (`MediaAudioRecorder`) et ses règles sont éprouvées ; il a **son écran** : le panneau « Ma récitation », ouvert par la barre du lecteur comme par « Ma voix » dans une révision. **Rien n'a encore été exercé contre le serveur** : le compartiment et la table ne sont lus que par la doublure. |
 | Contenus du jour | **à faire** | phase C |
+
+### La chaîne d'envoi est propre à Expo, et c'est mesuré
+
+La couche de **décision** des notifications est portée : `core/domain/…/Notifications.kt`, 47 tests,
+sans appareil. La couche de **transport** ne l'est pas, et ce n'est pas une omission — elle est
+écrite pour **Expo**, à trois niveaux, et les trois sont dans le dépôt source :
+
+| Niveau | Ce qui l'établit | Ce qu'un client Android natif ne peut pas satisfaire |
+|---|---|---|
+| Le **jeton** | `supabase/notifications.sql` ligne 12 — `expo_push_token text not null unique check (expo_push_token like 'ExpoPushToken[%]' or expo_push_token like 'ExponentPushToken[%]')` — et la **même** garde dans `register_push_device` (`push-device-registration.sql`, lignes 16 et 17), qui lève « Jeton Expo invalide » **avant** l'écriture | un jeton FCM (`fMs…`) n'a pas cette forme. La contrainte le refuse à l'écriture, et la fonction le refuse avant — il n'y a donc pas de chemin, même en contournant la fonction |
+| L'**envoi** | les **quatre** fonctions qui envoient postent vers `https://exp.host/--/api/v2/push/send` : `private.notify_private_message` (`notifications.sql` ligne 59), `private.quiz_push` (`quiz-notifications.sql` ligne 14, par `private.send_expo_push`), le déclencheur de correction (`notification-corrections.sql` ligne 21) et `public.send_admin_notification` (`admin-notifications.sql` ligne 79) | `exp.host` est le service d'Expo, et il attend un jeton Expo en face. FCM demande HTTP v1, un compte de service et une clé privée que le projet n'a pas |
+| Le **canal** | le corps envoyé porte `'channelId','messages'` — ou `'corrections'`, ou `'admin'` selon l'expéditeur | `channelId` est une clé du service Expo, qui la transmet ensuite. FCM attend `android.notification.channel_id`, dans un objet `android.notification` |
+
+**Les deux chemins possibles, et ils demandent une décision du propriétaire :**
+
+1. **Le serveur accepte un jeton FCM** — élargir la contrainte `check` de `push_devices` (ou ajouter
+   une colonne `fcm_token` et une colonne `provider`), écrire un second expéditeur en HTTP v1 avec
+   la clé du compte de service Firebase, et router selon le `provider`. C'est une modification du
+   **projet partagé** : elle touche un schéma que le client React Native lit aussi, et elle n'est
+   donc pas faite ici.
+2. **L'application Android obtient un jeton Expo** — impossible : `expo-notifications` est une
+   bibliothèque React Native, et le brief interdit React Native.
+
+Tant que ce choix n'est pas fait, **ce qui est livré est tout ce qui ne dépend pas de lui** : les
+décisions. Ce qui reste est l'enregistrement du jeton, la réception et l'affichage. La première
+ligne de `Notifications.kt` le dit, pour qu'on ne prenne pas le portage pour une livraison.
+
+**Deux colonnes que le client n'écrit pas, et ce n'est pas un trou.** `notification_preferences`
+porte **neuf** colonnes ; `saveNotificationPreferences` en écrit **sept**. Les deux autres —
+`quiz_enabled` et `quiz_timezone` — passent par `quiz_set_notifications`, la fonction du Quiz, qui
+est portée (`QuizSource.setNotifications`). Le partage est donc complet ; il passe par deux
+chemins, et c'est ce qui fait qu'un inventaire des colonnes écrites par le seul fichier des
+notifications en trouverait deux de moins.
+
+**Une préférence que l'interrupteur ne commande pas.** L'écran des réglages offre huit
+interrupteurs ; le client en écrit sept, et `revision` est écrit **`false` en dur** (`App.tsx`,
+ligne 177) alors que la colonne `revision_reminders_enabled` existe. « Rappels de révision » change
+donc l'état **local** sans jamais atteindre le serveur. Le portage reproduit ce comportement plutôt
+que de le corriger — c'est une divergence du client d'origine, et elle est figée par un test pour
+qu'un futur correcteur sache ce qu'il change.
 
 ### Deux règles qui protègent le compte existant
 

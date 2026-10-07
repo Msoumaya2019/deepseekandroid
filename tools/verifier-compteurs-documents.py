@@ -38,8 +38,16 @@ LIGNE_MODULE = re.compile(
 LIGNE_TOTAL = re.compile(r"^\|\s*\*\*total\*\*\s*\|\s*\*\*(?P<total>\d+)\*\*\s*\|\s*(?P<classes>\d+)")
 
 # Les documents qui portent un tableau de tests, et la ligne de phrase qui annonce le total.
+#
+# **Le motif du `README` est ancre sur sa phrase, et non sur la forme `**N tests**`.** Il a
+# d'abord ete ecrit ainsi, parce que c'etait la forme du total — et une tranche a montre que ce
+# n'etait pas une ancre mais un **motif generique** : la ligne de la phase D annonce desormais
+# « **47 tests** sans appareil », elle vient **avant** la phrase du total, et le garde-fou lisait
+# donc 47 comme le total du banc. Il annonçait un ecart la ou il n'y en avait pas — et, plus
+# grave, il aurait pu **valider** un total faux ecrit dans la meme forme plus haut dans le fichier.
+# Le motif nomme maintenant la phrase qui annonce, ce qui est le contrat de ce troisieme endroit.
 DOCUMENTS = {
-    "README.md": re.compile(r"\*\*(?P<total>\d+) tests\*\*"),
+    "README.md": re.compile(r"aujourd'hui — \*\*(?P<total>\d+) tests\*\*"),
     "ARCHITECTURE.md": None,
 }
 

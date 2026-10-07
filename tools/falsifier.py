@@ -4658,6 +4658,221 @@ CAS: list[dict] = [
         "tache": ":navigation:testDebugUnitTest",
         "attendus": ["la capacite est composee une seule fois"],
     },
+
+    # -----------------------------------------------------------------------
+    # Les notifications — la porte, la destination, et les deux textes du client
+    # -----------------------------------------------------------------------
+    # Le controle est `NotificationsTest`, dans `core:domain`. Aucune autre suite ne lit
+    # `Notifications.kt` : tout ce qui suit tomberait donc en silence. Une notification supprimee
+    # a tort n'affiche rien et ne casse rien, et un `kind` renomme ne fait echouer aucune
+    # compilation — le serveur, lui, ne se plaint pas d'un client qui ne comprend pas.
+    #
+    # La tache est restreinte a la classe, et c'est mesure : `:core:domain:test` joue 988 tests,
+    # dont aucun autre ne lit ce fichier. Nommer la classe garde la campagne utilisable sans
+    # affaiblir le verdict — tous les attendus sont dans cette classe.
+    {
+        # `isChat` couvre `private-message` **et** `friend-progress`. Reduire la regle au seul
+        # message afficherait un bandeau pour une progression qu'on est en train de regarder.
+        "nom": "notifications : la progression ne compte plus comme une discussion",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Notifications.kt",
+        "avant": "        val isChat = kind == PRIVATE_MESSAGE || kind == FRIEND_PROGRESS",
+        "apres": "        val isChat = kind == PRIVATE_MESSAGE",
+        "tache": ":core:domain:test --tests *NotificationsTest*",
+        "attendus": ["la progression compte comme une discussion"],
+    },
+    {
+        # Le piege que cette fonction existe pour ne pas retomber dans : en JavaScript
+        # `undefined === null` est **faux**, en Kotlin `null == null` est **vrai**. Sans les deux
+        # gardes, une notification sans lien serait supprimee des qu'aucune discussion n'est
+        # ouverte — et l'utilisateur ne verrait jamais ce qu'on lui a envoye.
+        "nom": "notifications : la porte confond deux absences",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Notifications.kt",
+        "avant": "        val memeDiscussion = isChat &&\n            linkId != null &&\n            context.activeLinkId != null &&\n            linkId == context.activeLinkId &&\n            auPremierPlan",
+        "apres": "        val memeDiscussion = isChat && linkId == context.activeLinkId && auPremierPlan",
+        "tache": ":core:domain:test --tests *NotificationsTest*",
+        # **Un seul attendu, et c'est une mesure.** La campagne a d'abord annonce les deux, et
+        # `sans discussion ouverte rien n'est tu` n'est pas tombe — a juste titre : dans ce cas
+        # `linkId` vaut `"lien-3"` et `activeLinkId` vaut `null`, donc `"lien-3" == null` est deja
+        # faux **avant** la mutation. Ce test protege une autre erreur — retirer la garde sur
+        # `activeLinkId`, ou oublier `auPremierPlan` —, pas celle-ci. Le seul cas qui exerce le
+        # piege est celui ou les **deux** cotes sont absents, puisque `null == null` y est vrai.
+        "attendus": ["une charge utile sans lien ne fait rien taire"],
+    },
+    {
+        # Le premier plan fait partie des **deux** conditions « meme endroit ». Sans lui, revenir
+        # sur l'application ferait disparaitre la notification de la discussion qu'on a laissee.
+        "nom": "notifications : une discussion ouverte en arriere-plan fait taire",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Notifications.kt",
+        "avant": "            linkId == context.activeLinkId &&\n            auPremierPlan",
+        "apres": "            linkId == context.activeLinkId",
+        "tache": ":core:domain:test --tests *NotificationsTest*",
+        "attendus": ["une discussion ouverte en arriere-plan ne fait rien taire"],
+    },
+    {
+        # La meme regle, du cote des recitations, et elle est ecrite **separement** dans la source :
+        # une correction qui arrive pendant qu'on regarde ses recitations est deja sous les yeux.
+        "nom": "notifications : l'ecran des recitations en arriere-plan fait taire",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Notifications.kt",
+        "avant": "        val memeRecitations = kind == RECITATION_CORRECTED &&\n            context.recitationsVisible &&\n            auPremierPlan",
+        "apres": "        val memeRecitations = kind == RECITATION_CORRECTED && context.recitationsVisible",
+        "tache": ":core:domain:test --tests *NotificationsTest*",
+        "attendus": ["l'ecran des recitations en arriere-plan ne fait rien taire"],
+    },
+    {
+        # Les quatre gardes de preference sont nommees une par une. En retirant le test de `kind`
+        # sur les corrections, eteindre les corrections tairait **tout** — y compris un quiz, que
+        # le serveur seul retient. Un portage plus strict que sa source, et muet.
+        "nom": "notifications : la garde des corrections s'applique a tout",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Notifications.kt",
+        "avant": "            (kind == RECITATION_CORRECTED && !context.correctionsEnabled) ||",
+        "apres": "            (!context.correctionsEnabled) ||",
+        "tache": ":core:domain:test --tests *NotificationsTest*",
+        "attendus": ["le kind du quiz ignore la garde des corrections"],
+    },
+    {
+        # L'identifiant est retenu **avant** de savoir si l'on affiche : `if(uniqueId){add}` est
+        # inconditionnel. Le retenir seulement quand on affiche rejouerait une notification deja
+        # vue des que la preference est rallumee.
+        "nom": "notifications : une notification taise n'est plus retenue",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Notifications.kt",
+        "avant": "        if (identifiant != null) {\n            dejaVues.add(identifiant)",
+        "apres": "        if (identifiant != null && show) {\n            dejaVues.add(identifiant)",
+        "tache": ":core:domain:test --tests *NotificationsTest*",
+        "attendus": ["une notification taise est tout de meme retenue"],
+    },
+    {
+        # Le plafond **vide**, il n'evince pas : `if(size>200)clear()`. Le remplacer par une
+        # eviction garderait la memoire bornee — donc le defaut ne se verrait nulle part, sauf ici.
+        "nom": "notifications : le plafond evince au lieu de vider",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Notifications.kt",
+        "avant": "            if (dejaVues.size > DISPLAYED_CAP) dejaVues.clear()",
+        "apres": "            if (dejaVues.size > DISPLAYED_CAP) dejaVues.remove(dejaVues.first())",
+        "tache": ":core:domain:test --tests *NotificationsTest*",
+        "attendus": ["le plafond vide la memoire au lieu d'evincer"],
+    },
+    {
+        # `>` et non `>=` : au plafond **exactement**, la memoire tient encore. Un cran plus tot,
+        # elle se viderait a 200 identifiants — et rien d'autre ne le dirait.
+        "nom": "notifications : le plafond se declenche un cran trop tot",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Notifications.kt",
+        "avant": "            if (dejaVues.size > DISPLAYED_CAP) dejaVues.clear()",
+        "apres": "            if (dejaVues.size >= DISPLAYED_CAP) dejaVues.clear()",
+        "tache": ":core:domain:test --tests *NotificationsTest*",
+        "attendus": ["le plafond vide la memoire au lieu d'evincer"],
+    },
+    {
+        # La question du jour n'a pas de `challengeId` : l'original ecrit `undefined`, et l'ecran
+        # ouvre alors sa question du jour. Rendre une chaine vide au lieu de l'absence ferait
+        # chercher un defi qui n'existe pas.
+        "nom": "notifications : la question du jour ouvre un defi vide",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Notifications.kt",
+        "avant": "            QUIZ_DAILY, QUIZ_CHALLENGE, QUIZ_RESULT -> Destination.Quiz(donnees[\"challengeId\"])",
+        "apres": "            QUIZ_DAILY -> Destination.Quiz(\"\")\n            QUIZ_CHALLENGE, QUIZ_RESULT -> Destination.Quiz(donnees[\"challengeId\"])",
+        "tache": ":core:domain:test --tests *NotificationsTest*",
+        "attendus": ["la question du jour n'ouvre aucun defi"],
+    },
+    {
+        # Un message sans lien ne mene nulle part — et c'est le comportement de la **source**, non
+        # un oubli. Fabriquer une destination vide ouvrirait une discussion qui n'existe pas, sur
+        # un identifiant que le serveur n'a pas envoye.
+        "nom": "notifications : un message sans lien mene quand meme a la conversation",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Notifications.kt",
+        "avant": "                donnees[\"linkId\"]?.let { Destination.Conversation(it) }",
+        "apres": "                Destination.Conversation(donnees[\"linkId\"] ?: \"\")",
+        "tache": ":core:domain:test --tests *NotificationsTest*",
+        "attendus": ["un message sans lien ne mene nulle part"],
+    },
+    {
+        # L'original teste `typeof … === 'string'`, et la chaine **vide** satisfait ce test.
+        # Ecarter les chaines vides ferait diverger la fonction de sa source sans que rien ne le
+        # dise — c'est le consommateur, et lui seul, qui refuse ensuite cette valeur.
+        "nom": "notifications : un lien vide est ecarte",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Notifications.kt",
+        "avant": "                donnees[\"linkId\"]?.let { Destination.Conversation(it) }",
+        "apres": "                donnees[\"linkId\"]?.takeIf { it.isNotEmpty() }?.let { Destination.Conversation(it) }",
+        "tache": ":core:domain:test --tests *NotificationsTest*",
+        "attendus": ["un lien vide est rendu tel quel"],
+    },
+    {
+        # `reviewsEnabled = enabled !== false` : l'absence de reglage vaut **ouverture**. Ouvrir
+        # toujours ferait apparaitre un rappel de revision chez un eleve qui a eteint l'espace.
+        "nom": "notifications : un espace de revisions eteint s'ouvre quand meme",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Notifications.kt",
+        "avant": "    fun revisionsOpen(enabled: Boolean?): Boolean = enabled != false",
+        "apres": "    fun revisionsOpen(enabled: Boolean?): Boolean = true",
+        "tache": ":core:domain:test --tests *NotificationsTest*",
+        "attendus": ["un rappel de revision n'ouvre pas un espace eteint"],
+    },
+    {
+        # Un litteral de charge utile est ce que le **serveur** ecrit. Le renommer ici ferait
+        # disparaitre une notification, et le serveur ne se plaint pas d'un client qui ne comprend
+        # pas : seule la liste gelee le dit.
+        "nom": "notifications : un litteral de la charge utile a change",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Notifications.kt",
+        "avant": "    const val PRIVATE_MESSAGE: String = \"private-message\"",
+        "apres": "    const val PRIVATE_MESSAGE: String = \"private_message\"",
+        "tache": ":core:domain:test --tests *NotificationsTest*",
+        "attendus": ["les douze litteraux de la charge utile sont ceux du serveur"],
+    },
+    {
+        # Les defauts ne se ressemblent pas : trois sont **ouverts** (`!== false`), un est
+        # **ferme** (`=== true`). Confondre les deux formes activerait la progression partagee
+        # pour tout le monde — c'est-a-dire previendrait les amis d'un eleve qui n'a rien demande.
+        "nom": "notifications : la progression partagee s'ouvre par defaut",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Notifications.kt",
+        "avant": "        sharedProgress = sharedProgress == true,",
+        "apres": "        sharedProgress = sharedProgress != false,",
+        "tache": ":core:domain:test --tests *NotificationsTest*",
+        # **Un seul attendu, et c'est une mesure.** La campagne avait annonce aussi
+        # `la progression partagee s'ouvre sur un accord explicite`, et ce test n'est pas tombe —
+        # a juste titre : il ne passe que des valeurs **explicites**, et sous les deux formes
+        # `true != false` vaut vrai et `false != false` vaut faux. Les deux formes ne divergent que
+        # sur l'**absence** de valeur, et c'est le cas des defauts qui l'exerce.
+        "attendus": ["trois preferences sont ouvertes par defaut et une est fermee"],
+    },
+    {
+        # Divergence de l'original, **reproduite et non corrigee** : `App.tsx` ecrit
+        # `revision: false` en dur, alors que l'interrupteur existe a l'ecran et que la colonne
+        # existe en base. L'ecrire vrai ferait diverger le portage du client d'origine en silence.
+        "nom": "notifications : le rappel de revision est ecrit vrai",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Notifications.kt",
+        "avant": "        revision = false,",
+        "apres": "        revision = true,",
+        "tache": ":core:domain:test --tests *NotificationsTest*",
+        "attendus": ["le rappel de revision n'est jamais ecrit vrai"],
+    },
+    {
+        # L'apostrophe de « Rappels d’apprentissage » est **typographique**. Un caractere droit
+        # casserait l'affichage sans qu'aucune compilation ne s'en plaigne — meme piege que le
+        # `Juz’` de `feature:profile`, qui a son propre cas.
+        "nom": "notifications : l'apostrophe des canaux devient droite",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Notifications.kt",
+        "avant": "        Channel(\"learning\", \"Rappels d\u2019apprentissage\", highImportance = true),",
+        "apres": "        Channel(\"learning\", \"Rappels d'apprentissage\", highImportance = true),",
+        "tache": ":core:domain:test --tests *NotificationsTest*",
+        "attendus": ["l'apostrophe des canaux est typographique"],
+    },
+    {
+        # L'heure est celle de l'original : 19 h 00, dans le fuseau de l'appareil. La deplacer
+        # ferait sonner le rappel au mauvais moment pour tout le monde, et rien ne le dirait.
+        "nom": "notifications : le rappel du soir change d'heure",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Notifications.kt",
+        "avant": "        hour = 19,",
+        "apres": "        hour = 18,",
+        "tache": ":core:domain:test --tests *NotificationsTest*",
+        "attendus": ["le rappel du soir est a dix-neuf heures sur le canal learning"],
+    },
+    {
+        # Le rappel s'annule **toujours**, et ne se planifie que si le reglage est actif **et** la
+        # permission accordee. Planifier sans permission ferait echouer la planification en
+        # silence — ou sonnerait chez quelqu'un qui l'a refusee.
+        "nom": "notifications : le rappel se planifie sans permission",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Notifications.kt",
+        "avant": "        enabled && granted",
+        "apres": "        enabled",
+        "tache": ":core:domain:test --tests *NotificationsTest*",
+        "attendus": ["le rappel s'annule toujours et ne se planifie que si active et autorise"],
+    },
 ]
 
 
