@@ -3733,6 +3733,109 @@ CAS: list[dict] = [
         "tache": ":core:data:testDebugUnitTest",
         "attendus": ["les bornes d'une invocation sont ramenees a zero, quoi qu'on donne"],
     },
+    {
+        # Les minutes du temps ecoule de la liste ne sont PAS remplies. Le format de
+        # l'enregistreur, lui, les remplit : deux formateurs coexistent dans le client d'origine
+        # (`RecitationsScreen.tsx` ligne 13 contre `RecitationRecorder.tsx` ligne 15). Remplir
+        # ici ferait dire « 01:00 » a un ecran qui dit « 1:00 ».
+        "nom": "recitation : le temps de la liste ne remplit pas les minutes",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/RecitationsList.kt",
+        "avant": "        return \"$minutes:${seconds.toString().padStart(2, '0')}\"",
+        "apres": "        return \"${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}\"",
+        "tache": ":core:domain:test",
+        "attendus": [
+            "le format de la liste differe de celui de l'enregistreur",
+            "soixante secondes se lisent une minute, sans zero de tete",
+        ],
+    },
+    {
+        # Une recitation sans copie locale est une recitation venue du serveur : c'est la preuve
+        # la plus forte que le depot a abouti, puisque le depot CREE cette copie. La lire « En
+        # attente » annoncerait un depot a faire sur une recitation qui est deja partie.
+        "nom": "recitation : une recitation sans copie locale se lit Synchronise",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/RecitationsList.kt",
+        "avant": "        null, RecitationSyncStatus.SYNCED -> RecitationText.SYNC_SYNCED",
+        "apres": "        null, RecitationSyncStatus.SYNCED -> RecitationText.SYNC_PENDING",
+        "tache": ":core:domain:test",
+        "attendus": ["une recitation sans copie locale se lit Synchronise"],
+    },
+    {
+        # Un retour GENERAL compte autant qu'une correction de verset : les deux sont des retours
+        # du relecteur. N'en compter qu'un ferait lire « En attente de correction » sous une
+        # recitation que quelqu'un a deja commentee.
+        "nom": "recitation : un retour general seul suffit a lire Corrigee",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/RecitationsList.kt",
+        "avant": "        correctionCount > 0 || feedbackCount > 0 -> RecitationText.STATUS_CORRECTED",
+        "apres": "        correctionCount > 0 -> RecitationText.STATUS_CORRECTED",
+        "tache": ":core:domain:test",
+        "attendus": ["un retour general seul suffit a lire Corrigee"],
+    },
+    {
+        # Le plus recent d'abord. L'inverse mettrait en tete la recitation la plus ancienne, donc
+        # celle que la personne a le moins de raisons de rouvrir.
+        "nom": "recitation : la liste se range de la plus recente a la plus ancienne",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/RecitationsList.kt",
+        "avant": "        return toutes.sortedByDescending { it.createdAt }",
+        "apres": "        return toutes.sortedBy { it.createdAt }",
+        "tache": ":core:domain:test",
+        "attendus": ["les lignes se rangent de la plus recente a la plus ancienne"],
+    },
+    {
+        # Une ligne presente des deux cotes est prise du DISTANT : c'est lui qui porte ce que le
+        # local ignore - l'ecoute par un relecteur. Ajouter la copie locale en double ferait
+        # apparaitre deux fois la meme recitation, dont une sans son etat d'ecoute.
+        "nom": "recitation : le distant l'emporte sur le local qui double la meme recitation",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/RecitationsList.kt",
+        "avant": "            if (toutes.none { it.id == item.id }) toutes.add(asRemote(item))",
+        "apres": "            toutes.add(asRemote(item))",
+        "tache": ":core:domain:test",
+        "attendus": ["le distant l'emporte sur le local qui double la meme recitation"],
+    },
+    {
+        # La barre ne deborde pas : une position au-dela de la duree - le lecteur peut en rendre
+        # une en fin de piste - est ramenee a cent pour cent.
+        "nom": "recitation : la barre de progression est plafonnee a cent",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/RecitationsList.kt",
+        "avant": "        return minOf(100f, positionMs.toFloat() / durationMs.toFloat() * 100f)",
+        "apres": "        return positionMs.toFloat() / durationMs.toFloat() * 100f",
+        "tache": ":core:domain:test",
+        "attendus": ["une position au-dela de la duree est plafonnee"],
+    },
+    {
+        # Reculer depuis le debut reste au debut : sans plancher, la position deviendrait
+        # negative, et le lecteur recevrait une adresse invalide.
+        "nom": "recitation : reculer ne passe pas avant le debut",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/RecitationsList.kt",
+        "avant": "        maxOf(0L, positionMs - stepMs)",
+        "apres": "        positionMs - stepMs",
+        "tache": ":core:domain:test",
+        "attendus": ["reculer depuis le debut reste au debut"],
+    },
+    {
+        # Le repli d'une invocation sans titre vaut « Ma prononciation » dans la LISTE, et
+        # « Invocation » dans l'enregistreur. C'est l'original : les deux ecrans parlent de deux
+        # moments differents, celui ou l'on enregistre et celui ou l'on relit.
+        "nom": "recitation : le repli de la liste n'est pas celui de l'enregistreur",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/RecitationsList.kt",
+        "avant": "            (invocationTitle ?: RecitationText.LIST_INVOCATION_FALLBACK)",
+        "apres": "            (invocationTitle ?: RecitationText.INVOCATION_FALLBACK)",
+        "tache": ":core:domain:test",
+        "attendus": [
+            "une invocation sans titre se replie sur Ma prononciation",
+            "le repli de la liste differe de celui de l'enregistreur",
+        ],
+    },
+    {
+        # Une nature ABSENTE compte comme un passage du Coran : l'original ecrit
+        # `item.recording_type ?? 'quran'`. La ranger parmi les invocations la ferait disparaitre
+        # du filtre « Coran », c'est-a-dire du seul filtre ou elle a sa place.
+        "nom": "recitation : une nature absente compte comme un passage",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/RecitationsList.kt",
+        "avant": "        Filter.QURAN -> kind != RecitationKind.INVOCATION",
+        "apres": "        Filter.QURAN -> kind == RecitationKind.QURAN",
+        "tache": ":core:domain:test",
+        "attendus": ["une nature absente compte comme un passage du Coran"],
+    },
 ]
 
 

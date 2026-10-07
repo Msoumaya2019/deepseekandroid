@@ -4,16 +4,17 @@ package com.msoumaya.deepseekandroid.core.domain
  * Les mots de la récitation.
  *
  * Toutes ces phrases sont **recopiées du client d'origine** — `src/services/recitations.ts` pour
- * la file de dépôt, `src/RecitationRecorder.tsx` pour l'enregistreur —, et aucune n'est inventée
- * ici : une phrase réécrite serait un écart d'interface invisible au portage, et deux clients qui
- * disent la même chose de deux façons finissent par ne plus dire la même chose.
+ * la file de dépôt, `src/RecitationRecorder.tsx` pour l'enregistreur, `src/RecitationsScreen.tsx`
+ * pour la liste —, et aucune n'est inventée ici : une phrase réécrite serait un écart d'interface
+ * invisible au portage, et deux clients qui disent la même chose de deux façons finissent par ne
+ * plus dire la même chose.
  *
  * Les apostrophes sont **typographiques** (`’`) partout où l'original en porte une, et droites
  * (`'`) nulle part. La distinction n'est pas cosmétique : c'est le caractère que l'original
  * affiche, et le remplacer changerait le texte rendu.
  *
- * Le fichier a grandi avec ses tranches : d'abord la file de dépôt, puis l'enregistreur. Les mots
- * de la liste et des écrans de récitation viendront s'y ajouter avec eux.
+ * Le fichier a grandi avec ses tranches : d'abord la file de dépôt, puis l'enregistreur, puis la
+ * liste. Les mots des écrans qui restent viendront s'y ajouter avec eux.
  */
 object RecitationText {
 
@@ -243,4 +244,216 @@ object RecitationText {
 
     /** Le bouton qui accepte la notice **et** lance l'enregistrement. */
     const val NOTICE_ACCEPT: String = "Compris, enregistrer"
+
+    // -----------------------------------------------------------------------
+    // La liste des récitations — l'ossature
+    // -----------------------------------------------------------------------
+
+    /**
+     * Le retour, avec le chevron de l'original.
+     *
+     * Le chevron est un `‹` **U+2039** (guillemet simple à chevron), et non un `<` : les deux ne
+     * se ressemblent pas à l'écran, l'un étant un signe typographique et l'autre un opérateur.
+     */
+    const val LIST_BACK: String = "‹ Retour"
+
+    /** Le titre de l'écran. */
+    const val LIST_TITLE: String = "Mes récitations"
+
+    /** Ce que l'écran promet sous son titre. */
+    const val LIST_SUBTITLE: String =
+        "Enregistrements sauvegardés sur ce téléphone et synchronisés avec ton compte."
+
+    /** Le geste qui relance la synchronisation et la lecture du registre. */
+    const val LIST_REFRESH: String = "Actualiser et synchroniser"
+
+    /** Le filtre qui montre tout. */
+    const val FILTER_ALL: String = "Toutes"
+
+    /** Le filtre des passages du Coran. */
+    const val FILTER_QURAN: String = "Coran"
+
+    /** Le filtre des invocations. */
+    const val FILTER_INVOCATION: String = "Invocations"
+
+    /** La liste vide. La phrase dit quoi faire pour la remplir, comme l'original. */
+    const val LIST_EMPTY: String =
+        "Aucune récitation enregistrée. Ouvre un passage du Coran pour enregistrer ta voix."
+
+    /** Aucun compte ouvert : la phrase dit pourquoi la liste sera vide. */
+    const val LIST_SIGNED_OUT: String = "Connecte-toi pour retrouver tes récitations."
+
+    /**
+     * Aucun compte ouvert, alors que le client sait se connecter.
+     *
+     * Elle est plus longue que [LIST_SIGNED_OUT] et dit **où** aller : c'est l'original, qui
+     * distingue le cas où le service est absent de celui où la personne ne s'est pas connectée.
+     */
+    const val LIST_SIGNED_OUT_PROFILE: String =
+        "Connecte-toi dans Profil pour retrouver tes récitations."
+
+    /**
+     * Le réseau a échoué, mais les fichiers de l'appareil restent.
+     *
+     * C'est la phrase la plus importante de l'écran : elle dit que l'échec ne coûte **rien** de ce
+     * qui est déjà enregistré. La cause est ajoutée telle quelle, comme l'original.
+     */
+    fun listLocalOnly(error: String): String = "Les fichiers locaux restent disponibles. $error"
+
+    /** Le lecteur n'a pas pu démarrer. */
+    fun playImpossible(error: String): String = "Lecture impossible : $error"
+
+    // -----------------------------------------------------------------------
+    // La liste des récitations — ce que la ligne annonce
+    // -----------------------------------------------------------------------
+
+    /** Le dépôt a abouti, ou il n'y a pas de copie locale à déposer. */
+    const val SYNC_SYNCED: String = "Synchronisé"
+
+    /**
+     * Le dépôt est en cours.
+     *
+     * L'apostrophe est **typographique** (`’`), comme celle de l'original : c'est le caractère
+     * rendu, et le remplacer changerait le texte affiché.
+     */
+    const val SYNC_UPLOADING: String = "En cours d’envoi"
+
+    /** Le dépôt a échoué. La synchronisation retentera. */
+    const val SYNC_FAILED: String = "Échec de synchronisation"
+
+    /** Le dépôt n'a pas encore été tenté. */
+    const val SYNC_PENDING: String = "En attente"
+
+    /** Le préfixe d'un passage du Coran, dans le titre d'une ligne. */
+    const val TITLE_PREFIX_QURAN: String = "CORAN"
+
+    /** Le préfixe d'une invocation, dans le titre d'une ligne. */
+    const val TITLE_PREFIX_INVOCATION: String = "INVOCATION"
+
+    /**
+     * Le repli d'une invocation sans titre, **dans la liste**.
+     *
+     * Il diffère de [INVOCATION_FALLBACK] (« Invocation »), qui est celui de l'enregistreur :
+     * c'est l'original, et les deux écrans parlent de deux moments différents — celui où l'on
+     * enregistre, et celui où l'on relit.
+     */
+    const val LIST_INVOCATION_FALLBACK: String = "Ma prononciation"
+
+    /** Un relecteur a écouté la récitation. */
+    const val STATUS_LISTENED: String = "Écoutée"
+
+    /** Personne n'a encore écouté l'invocation. */
+    const val STATUS_TO_LISTEN: String = "À écouter"
+
+    /** Un relecteur a déposé une correction de verset ou un retour général. */
+    const val STATUS_CORRECTED: String = "Corrigée"
+
+    /** Un passage du Coran que personne n'a encore corrigé ni écouté. */
+    const val STATUS_AWAITING_CORRECTION: String = "En attente de correction"
+
+    /** Le mot qui nomme un verset dans une carte de correction. */
+    const val VERSE_WORD: String = "verset"
+
+    /**
+     * La position d'écoute, sous la barre de progression.
+     *
+     * Le séparateur est un point médian **U+00B7**, et non un trait d'union ni un point : c'est
+     * celui de l'original, dans les deux séparations de la phrase.
+     */
+    fun positionLabel(position: String, duration: String, status: String): String =
+        "Position : $position / $duration · $status"
+
+    // -----------------------------------------------------------------------
+    // La liste des récitations — les gestes et les cartes
+    // -----------------------------------------------------------------------
+
+    /** Relancer l'écoute. Le triangle est **U+25B6**, celui de l'original. */
+    const val LIST_PLAY: String = "▶ Réécouter"
+
+    /**
+     * Suspendre l'écoute.
+     *
+     * Le **même mot** que la pause de l'enregistreur ([PAUSE]) : c'est l'original, et deux mots
+     * pour le même geste feraient douter de ce qu'il fait.
+     */
+    const val LIST_PAUSE: String = "Pause"
+
+    /**
+     * Reculer de dix secondes.
+     *
+     * Le signe est un **moins U+2212**, et non un trait d'union : c'est celui de l'original, et
+     * les deux n'ont ni la même largeur ni la même hauteur à l'écran.
+     */
+    const val SEEK_BACK: String = "− 10 s"
+
+    /** Avancer de dix secondes. */
+    const val SEEK_FORWARD: String = "+ 10 s"
+
+    /** Le titre d'un retour général. */
+    const val FEEDBACK_TITLE: String = "Observation générale"
+
+    /** Ce qu'un retour général sans commentaire laisse entendre : une voix a été déposée. */
+    const val FEEDBACK_FALLBACK: String = "Commentaire vocal du professeur"
+
+    /** Écouter la voix du relecteur sur un retour général. */
+    const val LISTEN_TEACHER: String = "▶ Écouter le professeur"
+
+    /** Ce qu'une correction de verset sans commentaire annonce. */
+    const val CORRECTION_FALLBACK: String = "À retravailler"
+
+    /** Écouter la voix du relecteur sur une correction de verset. */
+    const val LISTEN_CORRECTION: String = "▶ Écouter la correction"
+
+    /** Aller voir l'invocation dont la récitation est la prononciation. */
+    const val VIEW_INVOCATION: String = "Voir l’invocation"
+
+    // -----------------------------------------------------------------------
+    // La liste des récitations — le partage et la suppression
+    // -----------------------------------------------------------------------
+
+    /** Ouvrir le choix d'un destinataire. */
+    const val SHARE_FRIEND: String = "Partager avec un ami"
+
+    /** Ce que le partage demande, et ce qu'il promet : rien ne part sans confirmation. */
+    const val SHARE_HINT: String = "Choisis un ami. L’envoi sera confirmé avant le partage."
+
+    /** Le titre de la confirmation de partage. */
+    const val SHARE_TITLE: String = "Partager cette récitation ?"
+
+    /**
+     * Ce que la confirmation de partage annonce : qui pourra écouter, et pendant combien de temps.
+     *
+     * La durée n'est pas une politesse : l'accès s'arrête avec l'amitié, et le dire évite de
+     * croire qu'un partage est définitif.
+     */
+    fun shareBody(name: String, label: String): String =
+        "Seul $name pourra écouter $label tant que vous restez amis."
+
+    /** Le geste qui confirme le partage. */
+    const val SHARE_CONFIRM: String = "Partager"
+
+    /** Le partage est fait. */
+    const val SHARE_DONE: String = "Récitation partagée dans votre conversation."
+
+    /** Aucun destinataire possible. */
+    const val SHARE_NO_FRIEND: String = "Aucun ami accepté pour le moment."
+
+    /** Le nom d'un destinataire qui n'en a pas. */
+    const val FRIEND_FALLBACK: String = "Ami"
+
+    /** Le titre de la confirmation de suppression. */
+    const val DELETE_TITLE: String = "Supprimer cette récitation ?"
+
+    /**
+     * Ce que la suppression emporte.
+     *
+     * La phrase nomme les trois pertes — le fichier, ses corrections, les accès partagés — et dit
+     * que l'action est définitive : c'est l'original, et c'est ce qui permet de consentir.
+     */
+    const val DELETE_BODY: String =
+        "Le fichier, ses corrections et les accès partagés seront supprimés. " +
+            "Cette action est définitive."
+
+    /** Le geste qui confirme la suppression. */
+    const val DELETE_CONFIRM: String = "Supprimer"
 }
