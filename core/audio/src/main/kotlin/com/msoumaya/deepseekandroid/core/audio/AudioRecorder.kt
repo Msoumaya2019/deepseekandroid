@@ -29,6 +29,28 @@ interface AudioRecorder {
     val isRecording: Boolean
 
     /**
+     * Le temps capté, en millisecondes, **pauses exclues**.
+     *
+     * ## Pourquoi il est sur le port, et non compté par l'écran
+     *
+     * C'est le **même** compteur que celui qui donne la durée du fichier rendu par [stop]. L'écran
+     * affiche donc exactement ce qu'il enregistrera, et non une estimation tenue de son côté.
+     *
+     * Un compteur d'écran démarré au moment du geste et celui de l'enregistreur ne partent pas
+     * ensemble : la permission, la préparation du matériel et le premier octet réellement capté
+     * s'intercalent. Les deux durées divergeraient de ce délai-là — quelques dixièmes de seconde,
+     * invisibles à l'œil, et suffisants pour qu'un affichage ne corresponde plus au fichier.
+     *
+     * Il est **lu**, et non poussé : l'appelant l'interroge à son rythme. Un flux obligerait le
+     * port à choisir une cadence, et le seul endroit qui sache à quelle fréquence rafraîchir une
+     * ligne d'état est l'écran qui la dessine.
+     *
+     * Vaut `0` avant le premier [start], et conserve la dernière valeur captée après un arrêt —
+     * un écran qui affiche encore la durée d'un enregistrement terminé lit donc la bonne.
+     */
+    val elapsedMs: Long
+
+    /**
      * Demande le microphone et commence à capter.
      *
      * @return `false` si le matériel refuse — permission absente, micro déjà pris par un appel,

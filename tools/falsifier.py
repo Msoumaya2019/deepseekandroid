@@ -4386,6 +4386,278 @@ CAS: list[dict] = [
         "tache": ":feature:recitations:testDebugUnitTest",
         "attendus": ["l'ecran branche le partage, du bouton a la confirmation"],
     },
+
+    # -----------------------------------------------------------------------
+    # La barre d'enregistrement reduite
+    # -----------------------------------------------------------------------
+    # Ce que ces cas visent n'est pas une regle metier — celles-la vivent dans
+    # `core:domain/RecitationRecorder.kt` et sont falsifiees plus haut —, mais la **transcription**
+    # que fait le rendu : quel mot il pose, dans quel ordre, avec quelle mise en avant, et ce qu'il
+    # efface. Un rendu juste par accident passerait tous ses tests ; ces mutations verifient que
+    # chaque decision du rendu a bien un test qui la tient.
+    {
+        # Le point median est ce qui distingue `' · '` de `' - '` : trois caracteres de part et
+        # d'autre, et un seul octet d'ecart. Le test le fixe par son point de code (U+00B7), et ce
+        # cas verifie que ce test tombe bien quand le caractere change.
+        "nom": "enregistreur : le separateur perd son point median",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/RecitationRecorderRenderer.kt",
+        "avant": r'internal const val STATUS_SEPARATOR: String = " \u00B7 "',
+        "apres": 'internal const val STATUS_SEPARATOR: String = " - "',
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": ["le separateur est un point median"],
+    },
+    {
+        # La duree est demandee au domaine, et la ligne ne l'affiche que lorsqu'il en rend une. La
+        # mutation est faite **dans le domaine** — c'est la seule facon de faire apparaitre une
+        # duree au repos —, et le cas nomme donc les deux modules : celui qui porte la regle et
+        # celui qui l'affiche. Le rendu ne doit pas seulement suivre le domaine, il doit cesser de
+        # montrer une duree quand le domaine cesse d'en produire.
+        "nom": "enregistreur : la duree s'affiche aussi au repos",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/RecitationRecorder.kt",
+        "avant": "): Long? = if (phase == RecitationPhase.IDLE) null else draftMs ?: itemMs ?: liveMs",
+        "apres": "): Long? = draftMs ?: itemMs ?: liveMs",
+        "tache": ":core:domain:test :feature:reader:testDebugUnitTest",
+        "attendus": [
+            "la barre reduite ne montre aucune duree au repos",
+            "la phase de repos ne porte aucune duree",
+        ],
+    },
+    {
+        # L'ordre des gestes vient du domaine, et le rendu ne doit pas le retoucher : c'est une
+        # barre d'actions, et permuter deux boutons change le geste que fait le pouce.
+        "nom": "enregistreur : les gestes sont rendus dans l'ordre inverse",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/RecitationRecorderRenderer.kt",
+        "avant": "actions = RecitationRecorder.actionsFor(phase, canShare).map { action ->",
+        "apres": "actions = RecitationRecorder.actionsFor(phase, canShare).reversed().map { action ->",
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": ["les gestes de chaque phase sont ceux de l'original, dans l'ordre"],
+    },
+    {
+        # Un seul geste est mis en avant par phase, et aucun une fois la recitation gardee. Ce cas
+        # les met tous en avant : les deux tests qui portent la regle doivent tomber, et pas
+        # seulement l'un des deux.
+        "nom": "enregistreur : tous les gestes sont mis en avant",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/RecitationRecorderRenderer.kt",
+        "avant": "primary = RecitationRecorder.isPrimary(action),",
+        "apres": "primary = true,",
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": [
+            "un seul geste est mis en avant",
+            "le geste mis en avant est celui du domaine",
+        ],
+    },
+    {
+        # Le partage n'existe qu'une fois la recitation gardee, et seulement si l'ecran sait quoi en
+        # faire. En forcant la capacite a `true`, le geste apparait la ou il ne doit pas.
+        "nom": "enregistreur : le partage s'offre meme sans capacite",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/RecitationRecorderRenderer.kt",
+        "avant": "RecitationRecorder.actionsFor(phase, canShare)",
+        "apres": "RecitationRecorder.actionsFor(phase, true)",
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": ["le partage n'apparait qu'une fois la recitation gardee"],
+    },
+    {
+        # `{!!message && ...}` de l'original : une chaine vide ne se dessine pas. Sans le
+        # `ifEmpty`, le message vide se dessine — et le test qui l'affirme doit tomber.
+        "nom": "enregistreur : un message vide se dessine quand meme",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/RecitationRecorderRenderer.kt",
+        "avant": "message = message?.ifEmpty { null },",
+        "apres": "message = message,",
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": ["un message vide ne se dessine pas"],
+    },
+    {
+        # Le meme ancrage, mais vers l'**autre** ecart : `ifBlank` ecarterait une phrase faite
+        # d'espaces, que l'original affiche (sa veracite est la **longueur** de la chaine, pas son
+        # contenu). C'est le genre de divergence qui ne se voit pas a l'oeil.
+        "nom": "enregistreur : une phrase d'espaces passe pour une absence",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/RecitationRecorderRenderer.kt",
+        "avant": "message = message?.ifEmpty { null },",
+        "apres": "message = message?.ifBlank { null },",
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": ["un message vide ne se dessine pas"],
+    },
+    {
+        # La couleur d'alerte ne va qu'a la capture. En l'etendant a tout ce qui n'est pas le repos,
+        # la pause et l'apercu se mettent a clignoter rouge alors que rien ne capte.
+        "nom": "enregistreur : la pause prend la couleur de la capture",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/RecitationRecorderRenderer.kt",
+        "avant": "capturing = phase == RecitationPhase.RECORDING,",
+        "apres": "capturing = phase != RecitationPhase.IDLE,",
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": ["la capture est la seule phase qui prend la couleur d'alerte"],
+    },
+    {
+        # Le mot d'un geste vient du domaine — c'est ce qui a fait sortir les libelles de
+        # l'enumeration. En prenant le nom du cas d'enumeration, le rendu se met a afficher
+        # « BEGIN » et « SHARE », et le test qui relie les deux doit tomber.
+        "nom": "enregistreur : le mot d'un geste devient son nom de code",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/RecitationRecorderRenderer.kt",
+        "avant": "label = RecitationRecorder.compactActionLabel(action),",
+        "apres": "label = action.name,",
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": ["le libelle d'un geste vient du domaine"],
+    },
+    {
+        # Deux phases portent un mot different selon la mise en page : « En pause » dans la barre,
+        # « II En pause » en pleine page. En prenant le mot de la pleine page, la pause et le repos
+        # se mettent a dire autre chose — et le repos, lui, ne dit plus rien du tout.
+        "nom": "enregistreur : la ligne d'etat prend le mot de la pleine page",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/RecitationRecorderRenderer.kt",
+        "avant": "status = RecitationRecorder.compactLabel(phase) +",
+        "apres": 'status = (RecitationRecorder.fullLabel(phase) ?: "") +',
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": ["la ligne d'etat de chaque phase est celle de l'original"],
+    },
+
+    # -----------------------------------------------------------------------
+    # La barre d'enregistrement — ce qui a besoin d'un appareil
+    # -----------------------------------------------------------------------
+    # Les cas ci-dessus visent le **rendu**. Ceux-ci visent ce qui reste dans la surface une fois
+    # que le domaine et le rendu ont pris tout le reste : quelle capacite est appelee, dans quel
+    # ordre, et sous quelle condition. Le controle qui les tient est
+    # `RecitationRecorderBarWiringTest` — un controle de forme, la surface etant une fonction
+    # `@Composable` qu'aucun test ne peut declencher sans hote Compose.
+    {
+        # L'original coupe son lecteur avant de preparer le microphone (`player.current?.pause()`),
+        # et ce n'est pas une politesse : la recitation qu'on vient de reecouter sortirait du
+        # haut-parleur et entrerait dans la prise. En retirant l'appel, le test qui l'exige tombe.
+        "nom": "enregistreur : la capture ne coupe pas l'ecoute",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/RecitationRecorderBar.kt",
+        "avant": "        capability.player.pause()\n        if (!capability.recorder.start()) {",
+        "apres": "        if (!capability.recorder.start()) {",
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": ["la capture coupe l'ecoute avant d'ouvrir le microphone"],
+    },
+    {
+        # Le brouillon ne doit naitre qu'a l'arret, quand il a une duree a porter. Pose au depart
+        # avec une duree nulle, il figerait la ligne d'etat sur `00:00` pendant toute la capture :
+        # la duree affichee prend le brouillon avant le compteur vivant.
+        "nom": "enregistreur : un brouillon nait avec la capture",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/RecitationRecorderBar.kt",
+        "avant": "        phase = RecitationPhase.RECORDING\n        message = null\n    }\n\n    // La permission du microphone.",
+        "apres": '        draft = RecitationDraft(path = "", durationMs = 0L)\n        phase = RecitationPhase.RECORDING\n        message = null\n    }\n\n    // La permission du microphone.',
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": ["aucun brouillon n'est pose avant l'arret"],
+    },
+    {
+        # L'original appelle `stop()` puis jette le brouillon, ce qui laisse son fichier dans le
+        # cache du systeme. Le port a `cancel()` et s'en sert — et cela compte ici, ou l'on annule
+        # souvent plusieurs prises d'affilee. En revenant a `stop()`, le test qui l'exige tombe.
+        "nom": "enregistreur : l'annulation arrete au lieu d'effacer",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/RecitationRecorderBar.kt",
+        "avant": "                    capability.recorder.cancel()",
+        "apres": "                    capability.recorder.stop()",
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": ["l'annulation efface la prise au lieu de la garder"],
+    },
+    {
+        # L'original met son lecteur en pause a la reprise (`player.current?.pause()`), il ne le
+        # detruit pas. En prenant `stop()`, le test qui distingue les deux tombe.
+        "nom": "enregistreur : reprendre detruit l'ecoute",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/RecitationRecorderBar.kt",
+        "avant": "        capability.player.pause()\n        draft = null",
+        "apres": "        capability.player.stop()\n        draft = null",
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": ["reprendre suspend l'ecoute, il ne la detruit pas"],
+    },
+    {
+        # La seconde condition de l'original — `item && onShare` — n'est pas decorative : la route
+        # du lecteur ne sait pas encore ou partager, donc sa capacite porte `share = null`. En ne
+        # gardant que la recitation gardee, le geste apparaitrait dans la barre sans rien faire.
+        "nom": "enregistreur : le partage s'offre sans destination",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/RecitationRecorderBar.kt",
+        "avant": "        canShare = item != null && capability.share != null,",
+        "apres": "        canShare = item != null,",
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": ["le partage exige la recitation et sa destination"],
+    },
+    {
+        # Sans la remise a faux au demontage, l'ecran qui garde le drapeau resterait bloque pour
+        # toujours : fermeture refusee, barre de revision grisee, et cela sans aucun symptome
+        # ailleurs — la barre a quitte l'ecran, donc plus rien ne la remettra a jour.
+        "nom": "enregistreur : le drapeau ne retombe pas au depart de la barre",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/RecitationRecorderBar.kt",
+        "avant": "        onDispose { notifier.value(false) }",
+        "apres": "        onDispose { }",
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": ["le drapeau retombe quand la barre quitte l'ecran"],
+    },
+
+    # -----------------------------------------------------------------------
+    # Le panneau de l'enregistreur — sa garde, et ses quatre issues
+    # -----------------------------------------------------------------------
+    {
+        # Une seule garde couvre les quatre chemins qui ferment — la touche de retour, le voile,
+        # la poignee et le bouton. En la retirant, le test qui la nomme tombe. Le compte des
+        # appels, lui, ne bouge pas : c'est la forme de la garde qui change, pas son nombre.
+        "nom": "enregistreur : la fermeture du panneau n'est plus gardee",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/RecitationRecorderSheet.kt",
+        "avant": "    val fermer = { if (!recordingActive) onClose() }",
+        "apres": "    val fermer = { onClose() }",
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": ["une seule garde couvre les quatre fermetures"],
+    },
+    {
+        # Le bouton est grise pendant une capture, comme l'original (`disabled={recordingActive}`,
+        # ligne 507). Actif, il mentirait sur ce qu'il fait : son rappel refuse de fermer.
+        "nom": "enregistreur : le bouton de fermeture reste actif pendant la capture",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/RecitationRecorderSheet.kt",
+        "avant": "                            enabled = !recordingActive,",
+        "apres": "                            enabled = true,",
+        "tache": ":feature:reader:testDebugUnitTest",
+        "attendus": ["le bouton de fermeture est grise pendant une capture"],
+    },
+
+    # -----------------------------------------------------------------------
+    # La route du lecteur — la capacite, et ce qu'elle refuse de promettre
+    # -----------------------------------------------------------------------
+    # Le controle est `ReaderRouteRecorderTest`, dans `navigation`. Il regarde le seul endroit ou
+    # les trois autres suites ne regardent pas : entre le conteneur et le lecteur.
+    {
+        # La route n'a qu'une sortie, `onClose` : l'original, lui, quitte le lecteur pour la liste
+        # des recitations. Le partage est donc **retire** plutot que rendu inerte. En fournissant
+        # une lambda vide, le geste apparaitrait dans la barre et ne ferait rien — exactement ce
+        # que la regle du depot interdit.
+        "nom": "enregistreur : la route fournit un partage vide",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/ReaderRoute.kt",
+        "avant": "                    share = null,",
+        "apres": "                    share = { _ -> },",
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["le partage est retire faute de sortie"],
+    },
+    {
+        # Les deux portes du panneau disparaitraient d'un coup — la barre de la coquille et
+        # « Ma voix » dans une revision —, et aucune autre suite ne le dirait : le domaine, le
+        # rendu et la surface resteraient verts, le lecteur ne recevant simplement plus rien.
+        "nom": "enregistreur : le lecteur ne recoit plus la capacite",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/ReaderRoute.kt",
+        "avant": "        recorder = capaciteDEnregistrement,",
+        "apres": "        recorder = null,",
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["le lecteur recoit la capacite"],
+    },
+    {
+        # Le compte doit etre lu **au moment du geste** : il peut s'ouvrir ou se fermer sans que le
+        # lecteur soit reconstruit, et une valeur figee a la composition enregistrerait une
+        # recitation sous un compte qui n'est plus le sien.
+        "nom": "enregistreur : le compte est fige a la composition",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/ReaderRoute.kt",
+        "avant": "    val proprietaireCourant = rememberUpdatedState(userState?.userId)",
+        "apres": '    val proprietaireCourant = rememberUpdatedState("invite")',
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["le compte est lu au moment du geste"],
+    },
+    {
+        # Les champs de la capacite sont des fonctions, donc deux constructions successives ne sont
+        # jamais egales : sans la memorisation, le lecteur se recomposerait a chaque image.
+        "nom": "enregistreur : la capacite est composee a chaque recomposition",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/ReaderRoute.kt",
+        "avant": "        remember(container, enregistreur, lecteurDeRecitation) {",
+        "apres": "        remember(container) {",
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["la capacite est composee une seule fois"],
+    },
 ]
 
 

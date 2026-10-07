@@ -260,6 +260,31 @@ object RecitationText {
     const val NOTICE_ACCEPT: String = "Compris, enregistrer"
 
     // -----------------------------------------------------------------------
+    // Le panneau de l'enregistreur — son cadre
+    // -----------------------------------------------------------------------
+
+    /**
+     * Le titre du panneau qui abrite l'enregistreur.
+     *
+     * Il est écrit **dans** `App.tsx` (ligne 507), avec les quatre autres titres de panneaux, et
+     * non dans le composant de l'enregistreur : c'est le panneau qui le porte, comme « Ma séance »
+     * porte celui du carrefour d'une tâche. Il vient donc ici, avec les mots de l'enregistreur,
+     * parce que c'est le seul objet de textes qui les rassemble — et non parce qu'il appartiendrait
+     * à la barre.
+     */
+    const val PANEL_TITLE: String = "Ma récitation"
+
+    /**
+     * Le nom du bouton de fermeture du panneau, pour qui ne le voit pas.
+     *
+     * L'original écrit ici un libellé **générique** — « Fermer le panneau » — parce qu'un seul
+     * gestionnaire ferme cinq de ses six panneaux. Ce portage a donné à chacun le sien, et le
+     * perdre ici ne serait pas une simplification mais une régression : « Fermer le panneau » ne
+     * dit pas lequel, et un lecteur d'écran qui les annonce tous de la même façon n'apprend rien.
+     */
+    const val PANEL_CLOSE: String = "Fermer l’enregistrement"
+
+    // -----------------------------------------------------------------------
     // La liste des récitations — l'ossature
     // -----------------------------------------------------------------------
 

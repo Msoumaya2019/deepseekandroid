@@ -213,6 +213,45 @@ object RecitationRecorder {
     }
 
     /**
+     * Le libellé d'un geste **dans la barre réduite**.
+     *
+     * ## Pourquoi une fonction, et non un champ de l'énumération
+     *
+     * Le libellé dépend de la **mise en page**, et c'est l'original : la barre réduite dit
+     * « Terminer » là où la pleine page dit « Terminer et sauvegarder », et « Partager » là où
+     * elle dit « Partager avec un ami ». Un geste qui porterait un seul libellé ne serait plus le
+     * même geste selon l'écran qui l'affiche, et l'énumération ne peut pas porter les deux.
+     *
+     * C'est aussi la forme du dépôt : `ReviewText.actionLabel` est la même correspondance pour la
+     * barre de révision, et elle vit dans `core:domain` — les mots sont dans `RecitationText`, et
+     * **quelle mise en page dit lequel** est une règle, donc elle s'éprouve sans appareil.
+     *
+     * ## Les libellés de la pleine page ne sont pas ici, et c'est une mesure
+     *
+     * Trois d'entre eux dépendent de la **phase**, et pas seulement du geste : en phase d'aperçu
+     * la pleine page dit « Réécouter avant sauvegarde », et « Réécouter » une fois l'enregistrement
+     * gardé. `RecitationAction.LISTEN` porte donc deux libellés selon la phase où il apparaît, et
+     * choisir entre les deux demande la phase — que la barre réduite, elle, n'utilise jamais : son
+     * unique libellé est `LISTEN`. Les mots de la pleine page existent déjà
+     * (`RecitationText.PAGE_*`) ; la règle qui les choisit arrivera avec la surface qui les
+     * affiche, comme `fullLabel` a attendu la sienne.
+     *
+     * La fonction est **exhaustive et sans `else`** : ajouter un geste à [RecitationAction] sans
+     * lui donner de libellé ne compile pas, ce qui vaut mieux qu'un bouton sans mot.
+     */
+    fun compactActionLabel(action: RecitationAction): String = when (action) {
+        RecitationAction.BEGIN -> RecitationText.BAR_BEGIN
+        RecitationAction.PAUSE -> RecitationText.PAUSE
+        RecitationAction.RESUME -> RecitationText.RESUME
+        RecitationAction.FINISH -> RecitationText.BAR_FINISH
+        RecitationAction.CANCEL -> RecitationText.CANCEL
+        RecitationAction.LISTEN -> RecitationText.LISTEN
+        RecitationAction.RESTART -> RecitationText.RESTART
+        RecitationAction.SAVE -> RecitationText.SAVE
+        RecitationAction.SHARE -> RecitationText.BAR_SHARE
+    }
+
+    /**
      * Le temps écoulé, en `MM:SS`.
      *
      * L'original écrit `Math.floor(ms/60000)` et `Math.floor(ms/1000%60)`. Les minutes **ne sont
@@ -353,9 +392,12 @@ enum class RecitationPhase {
 /**
  * Un geste de l'enregistreur.
  *
- * Les libellés ne sont pas ici : ils dépendent de la mise en page — la barre réduite dit
- * « Terminer » là où la pleine page dit « Terminer et sauvegarder » —, et un geste qui porterait
- * deux libellés ne serait plus un geste.
+ * Les libellés ne sont pas portés par l'énumération : ils dépendent de la mise en page — la barre
+ * réduite dit « Terminer » là où la pleine page dit « Terminer et sauvegarder » —, et un geste qui
+ * porterait deux libellés ne serait plus un geste. Ils vivent dans une **fonction** de
+ * [RecitationRecorder] : `compactActionLabel` pour la barre réduite, et la pleine page la sienne
+ * quand sa surface arrivera — voir la note de cette fonction, qui dit pourquoi l'un de ses
+ * libellés dépend de la phase.
  */
 enum class RecitationAction {
     /** Demander le microphone et commencer. */

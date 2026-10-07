@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.setValue
@@ -32,6 +33,7 @@ import com.msoumaya.deepseekandroid.core.model.MushafPageSource
 import com.msoumaya.deepseekandroid.feature.reader.BookmarksScreen
 import com.msoumaya.deepseekandroid.feature.reader.EmbeddedMushafPages
 import com.msoumaya.deepseekandroid.feature.reader.ReaderScreen
+import com.msoumaya.deepseekandroid.feature.reader.RecitationRecorderCapability
 import com.msoumaya.deepseekandroid.feature.reader.StudyChromeState
 import com.msoumaya.deepseekandroid.feature.sources.QuranDownloadPanel
 import com.msoumaya.deepseekandroid.feature.sources.QuranSourcePickerDialog
@@ -358,6 +360,58 @@ fun ReaderRoute(
         }
     }
 
+    // -----------------------------------------------------------------------
+    // L'enregistreur
+    // -----------------------------------------------------------------------
+    // La capacité est **composée ici**, et c'est la seule raison d'être de ce bloc : la route est
+    // le seul endroit qui connaisse le conteneur. Le lecteur, lui, ne sait ni où sont les fichiers,
+    // ni à qui ils appartiennent, ni comment on parle au réseau — c'est la frontière de
+    // `RecitationRecorderCapability`, et elle est tenue.
+    //
+    // Elle est construite **une seule fois** : ses champs sont des fonctions, donc deux
+    // constructions successives ne sont jamais égales, et en refaire une à chaque recomposition
+    // ferait recomposer le lecteur à chaque image.
+    //
+    // `null` quand l'une des deux pièces manque — pas de microphone, ou pas de lecteur de
+    // récitation : le panneau n'existerait alors que pour ne rien pouvoir faire, et ses deux portes
+    // sont **retirées** plutôt que d'ouvrir sur du vide. C'est le cas des tests et des aperçus.
+    //
+    // **Le compte est lu au moment du geste**, jamais capturé : il peut s'ouvrir ou se fermer sans
+    // que le lecteur soit reconstruit, et une valeur figée à la composition enregistrerait une
+    // récitation sous un compte qui n'est plus le sien — ou sous aucun, ce que le domaine refuse
+    // déjà (`RecitationStartProblem.OWNER_MISSING`).
+    val proprietaireCourant = rememberUpdatedState(userState?.userId)
+    val enregistreur = container.recorder
+    val lecteurDeRecitation = container.recitationPlayer
+    val capaciteDEnregistrement: RecitationRecorderCapability? =
+        remember(container, enregistreur, lecteurDeRecitation) {
+            if (enregistreur == null || lecteurDeRecitation == null) {
+                null
+            } else {
+                RecitationRecorderCapability(
+                    recorder = enregistreur,
+                    player = lecteurDeRecitation,
+                    owner = { proprietaireCourant.value },
+                    noticeAccepted = { userId -> container.recitationNotice.accepted(userId) },
+                    acceptNotice = { userId -> container.recitationNotice.accept(userId) },
+                    // Les bornes viennent du lecteur — lui seul sait si une séance est servie —, et
+                    // la copie au registre les reçoit **décomposées** : `save` ne connaît que des
+                    // versets, parce qu'une invocation n'en a pas.
+                    save = { chemin, duree, plage ->
+                        container.recitations.save(chemin, plage.start, plage.end, duree)
+                    },
+                    // **Pas encore de partage depuis le lecteur.** L'original quitte l'écran pour
+                    // la liste des récitations, où la feuille du geste s'ouvre sur la ligne
+                    // attendue ; notre route n'a qu'une sortie, `onClose`, et la liste ne reçoit
+                    // pas d'identifiant en attente. Tant que ce chemin n'existe pas, le geste
+                    // « Partager » **disparaît** de la barre au lieu d'y figurer sans effet —
+                    // c'est la règle du dépôt, et elle est tenue par `canShare`, jamais par une
+                    // lambda vide.
+                    share = null,
+                )
+            }
+        }
+
     ReaderScreen(
         initialPage = page,
         source = source,
@@ -366,6 +420,7 @@ fun ReaderRoute(
         // longtemps que l'application. Revenir au lecteur retrouve la récitation en cours au
         // lieu de la faire repartir du premier verset.
         playback = container.playback,
+        recorder = capaciteDEnregistrement,
         onClose = quitter,
         // Le premier rapport répète la page d'ouverture : ce n'est pas un geste, et le marquer
         // interdirait d'adopter la page mémorisée, qui arrive après l'état du compte. Les

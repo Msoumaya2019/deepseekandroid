@@ -275,9 +275,18 @@ class RecitationRepository(
      * dépôt part ensuite, en arrière-plan, et l'écran affiche la récitation tout de suite avec
      * son statut « en attente ». C'est ce qui permet d'enregistrer sans réseau.
      *
+     * **Ce que le geste rend, et pourquoi ce n'est pas un booléen.** Il rend la récitation
+     * **inscrite**. L'écran qui vient d'enregistrer ne s'arrête pas là : il propose de réécouter
+     * ce qu'il a gardé, et de le **partager** — deux gestes qui demandent l'identifiant et le
+     * chemin de la copie, que seul le registre connaît. Un booléen obligerait l'appelant à
+     * retrouver la ligne après coup, en supposant que la plus récente est la sienne ; l'ordre de
+     * la liste est bien « du plus récent au plus ancien », mais c'est une propriété d'affichage,
+     * et fonder une écriture sur une propriété d'affichage est exactement ce qui casse en silence.
+     *
      * @param invocationId invocation enregistrée, ou `null` pour un passage du Coran. La nature
      *   s'en déduit — voir `RecitationStore.add`.
-     * @return vrai si la récitation est inscrite.
+     * @return la récitation inscrite, ou `null` si rien n'a été rangé — compte absent, geste déjà
+     *   en cours, ou copie refusée. Voir la note de tête : ce n'est pas un booléen.
      */
     suspend fun save(
         sourcePath: String,
@@ -285,20 +294,25 @@ class RecitationRepository(
         end: Int,
         durationMs: Long,
         invocationId: String? = null,
-    ): Boolean {
+    ): LocalRecitation? {
         val owner = session.currentOwner()
         if (owner == null) {
             _state.value = _state.value.copy(notice = RecitationText.SIGNED_OUT)
-            return false
+            return null
         }
-        if (_state.value.busy) return false
+        if (_state.value.busy) return null
         _state.value = _state.value.copy(busy = true, notice = null)
 
         return try {
-            store.add(sourcePath, start, end, durationMs, owner, invocationId)
+            // La ligne inscrite est **rendue**, et non seulement rangée. C'est le registre qui
+            // fabrique l'identifiant et le chemin de la copie, et l'appelant ne peut ni l'un ni
+            // l'autre : le fichier copié ne porte **pas** le chemin de celui de l'enregistreur,
+            // qui est un brouillon temporaire. Un booléen obligerait donc à retrouver la ligne
+            // après coup, en devinant que la plus récente est la bonne.
+            val item = store.add(sourcePath, start, end, durationMs, owner, invocationId)
             _state.value = _state.value.copy(busy = false, items = store.list(owner))
             syncInBackground()
-            true
+            item
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Exception) {
@@ -306,7 +320,7 @@ class RecitationRepository(
                 busy = false,
                 notice = RecitationText.INVALID_RECORDING,
             )
-            false
+            null
         }
     }
 

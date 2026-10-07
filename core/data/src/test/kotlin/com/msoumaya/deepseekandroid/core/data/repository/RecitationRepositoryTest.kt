@@ -30,6 +30,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -175,7 +176,7 @@ class RecitationRepositoryTest {
         val repository = recitations(FakeOwners(null), FakeRecitationUploader())
         settle(repository)
 
-        assertFalse(repository.save(source.absolutePath, 1, 7, 5_000L))
+        assertNull(repository.save(source.absolutePath, 1, 7, 5_000L))
 
         assertEquals(RecitationText.SIGNED_OUT, repository.state.value.notice)
         assertTrue(store.all().isEmpty(), "aucune recitation ne doit etre rangee sans compte")
@@ -552,7 +553,7 @@ class RecitationRepositoryTest {
         val repository = recitations(FakeOwners(moi), uploader)
         settle(repository)
 
-        assertTrue(repository.save(source.absolutePath, 1, 7, 5_000L))
+        assertNotNull(repository.save(source.absolutePath, 1, 7, 5_000L))
         settle(repository)
 
         assertEquals(1, repository.state.value.items.size, "la liste publiee porte la nouvelle recitation")
@@ -565,7 +566,7 @@ class RecitationRepositoryTest {
         val repository = recitations(FakeOwners(moi), FakeRecitationUploader())
         settle(repository)
 
-        assertFalse(repository.save(source.absolutePath, 10, 5, 5_000L))
+        assertNull(repository.save(source.absolutePath, 10, 5, 5_000L))
 
         assertEquals(RecitationText.INVALID_RECORDING, repository.state.value.notice)
         assertTrue(store.all().isEmpty())
@@ -578,7 +579,7 @@ class RecitationRepositoryTest {
         val repository = recitations(FakeOwners(moi), uploader = null)
         settle(repository)
 
-        assertTrue(repository.save(source.absolutePath, 1, 7, 5_000L))
+        assertNotNull(repository.save(source.absolutePath, 1, 7, 5_000L))
         settle(repository)
 
         assertEquals(RecitationSyncStatus.PENDING, repository.state.value.items.single().syncStatus)

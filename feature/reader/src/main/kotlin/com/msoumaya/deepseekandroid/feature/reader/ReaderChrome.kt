@@ -16,6 +16,7 @@ import androidx.compose.material.icons.outlined.CenterFocusStrong
 import androidx.compose.material.icons.outlined.ChevronLeft
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Headphones
+import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material3.Slider
@@ -59,6 +60,11 @@ import kotlin.math.roundToInt
  *   enregistrer de signet : le bouton est alors **absent**, comme les autres. Il ouvre le
  *   **panneau** et non directement le mode de pose — c'est le détour du client d'origine, et
  *   c'est lui qui empêche qu'un appui malencontreux arme le geste.
+ * @param onRecord ouvre le panneau d'enregistrement. `null` quand l'appelant n'a pas
+ *   d'enregistreur, ou pas de plage à enregistrer : le bouton est alors **absent**, comme les
+ *   autres. C'est la porte de la barre flottante du client d'origine — son action `record`, entre
+ *   « Écouter » et « Marque-page » —, et son mot y est « Enregistrer », qui n'est celui ni du
+ *   titre du panneau ni d'un geste de la barre réduite : trois choses différentes, trois mots.
  * @param bookmarkActive vrai pendant le mode de pose : le bouton reçoit alors un fond doux, ce
  *   qui est la marque d'activité de la barre flottante d'origine. L'autre cas de l'original —
  *   le panneau ouvert — ne s'applique pas ici : notre panneau est une fenêtre de dialogue, donc
@@ -78,6 +84,7 @@ internal fun ReaderChrome(
     modifier: Modifier = Modifier,
     onOpenSourcePicker: (() -> Unit)? = null,
     onListen: (() -> Unit)? = null,
+    onRecord: (() -> Unit)? = null,
     onOpenOptions: (() -> Unit)? = null,
     onOpenBookmarks: (() -> Unit)? = null,
     bookmarkActive: Boolean = false,
@@ -144,6 +151,18 @@ internal fun ReaderChrome(
                     icon = Icons.Outlined.Headphones,
                     label = "Écouter cette page",
                     onClick = onListen,
+                )
+            }
+
+            // Enregistrer sa voix. Absent quand l'appelant n'a pas d'enregistreur, ou pas de plage
+            // à enregistrer : la porte du panneau, et rien d'autre — la barre réduite décide
+            // ensuite de ce qui s'y dit. Sa place est celle de l'original, entre « Écouter » et
+            // « Marque-page ».
+            if (onRecord != null) {
+                AppIconButton(
+                    icon = Icons.Outlined.Mic,
+                    label = "Enregistrer",
+                    onClick = onRecord,
                 )
             }
 

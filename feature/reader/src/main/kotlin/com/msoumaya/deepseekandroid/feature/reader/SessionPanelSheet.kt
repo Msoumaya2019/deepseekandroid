@@ -51,9 +51,11 @@ import com.msoumaya.deepseekandroid.core.model.ReviewGrade
  * ## Une destination absente retire son entrée
  *
  * Les sept destinations sont des paramètres **facultatifs**, et c'est la règle du dépôt : une
- * entrée sans destination est **retirée**, et non grisée. Aujourd'hui, « À réapprendre » n'existe
- * pas — elle dépend de `revisionId`, que ce client n'écrit jamais — et « Ma voix » non plus, faute
- * d'enregistreur. Aucune des deux ne figure donc à l'écran, au lieu d'y figurer sans effet.
+ * entrée sans destination est **retirée**, et non grisée. « Ma voix » en est l'exemple vivant :
+ * elle a disparu tant que l'enregistreur n'était pas porté, et elle est revenue le jour où
+ * l'appelant a eu de quoi la brancher — sans qu'une ligne de ce fichier change. « À réapprendre »,
+ * elle, dépend de `revisionId`, que ce client n'écrit jamais : elle ne figure pas à l'écran, au
+ * lieu d'y figurer sans effet.
  *
  * ## Le bloc « Après ma séance » est le seul qui se déploie
  *

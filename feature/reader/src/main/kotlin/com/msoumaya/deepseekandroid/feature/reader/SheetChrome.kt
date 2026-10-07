@@ -88,9 +88,14 @@ internal fun SheetHandle(onDismiss: () -> Unit) {
  * La description est un **paramètre**, et non une constante : chaque feuille annonce ce qu'elle
  * ferme. Un lecteur d'écran qui entend « Fermer les options » sur l'écran des réglages d'écoute
  * ferait douter de l'endroit où l'on se trouve.
+ *
+ * @param enabled faux pour rendre la fermeture impossible. Une feuille s'en sert quand la refermer
+ *   perdrait ce qu'elle est en train de faire — l'enregistreur pendant une capture. Le dessin suit
+ *   celui de `AppIconButton` : la teinte passe au gris doux, et le geste ne part pas. Un bouton
+ *   grisé qui répondrait quand même serait pire que pas de bouton.
  */
 @Composable
-internal fun SheetCloseButton(onClose: () -> Unit, description: String) {
+internal fun SheetCloseButton(onClose: () -> Unit, description: String, enabled: Boolean = true) {
     val colors = AppTheme.colors
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
@@ -98,12 +103,13 @@ internal fun SheetCloseButton(onClose: () -> Unit, description: String) {
     Box(
         modifier = Modifier
             .size(CLOSE_SIZE)
-            .alpha(if (pressed) PRESSED_ALPHA else 1f)
+            .alpha(if (pressed && enabled) PRESSED_ALPHA else 1f)
             .clip(RoundedCornerShape(CLOSE_SIZE / 2))
             .background(colors.soft)
             .clickable(
                 interactionSource = interaction,
                 indication = null,
+                enabled = enabled,
                 role = Role.Button,
                 onClick = onClose,
             ),
@@ -112,7 +118,7 @@ internal fun SheetCloseButton(onClose: () -> Unit, description: String) {
         Icon(
             imageVector = Icons.Outlined.Close,
             contentDescription = description,
-            tint = colors.green,
+            tint = if (enabled) colors.green else colors.mutedLight,
         )
     }
 }

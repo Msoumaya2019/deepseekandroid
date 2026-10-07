@@ -159,6 +159,10 @@ private const val DEFAULT_TOTAL_PAGES = 604
  *   panneau au lieu de mener nulle part.
  * @param initialVerse le verset à désigner au premier rendu — celui qu'une reprise de signet
  *   vient de demander. `null` quand personne n'en attend : le lecteur s'ouvre sans fiche.
+ * @param recorder ce avec quoi enregistrer sa voix. `null` quand l'appelant n'a pas
+ *   d'enregistreur — tests, aperçus, appelants sans conteneur : le panneau « Ma récitation »
+ *   n'existe alors pas, et **ses deux portes non plus**. Le bouton de la coquille disparaît, et
+ *   « Ma voix » disparaît de la barre d'une révision, au lieu d'y figurer sans effet.
  */
 @Composable
 fun ReaderScreen(
@@ -224,6 +228,10 @@ fun ReaderScreen(
     // qui n'existe pas. Elle est **reçue**, jamais créée ici : c'est ce qui la fait survivre à
     // l'écran.
     playback: AudioSessionHolder? = null,
+    // Ce avec quoi enregistrer sa voix. `null` quand l'appelant n'a pas d'enregistreur : le
+    // panneau n'existe alors pas, et ses deux portes sont retirées — même règle que partout
+    // ailleurs dans ce lecteur, une entrée sans destination ne s'affiche pas.
+    recorder: RecitationRecorderCapability? = null,
 ) {
     val colors = AppTheme.colors
     val totalPages = remember { Quran.pages.size.takeIf { it > 0 } ?: DEFAULT_TOTAL_PAGES }
@@ -254,6 +262,16 @@ fun ReaderScreen(
     // second rouvre la première. Deux fenêtres empilées donneraient deux voiles superposés et
     // un retour arrière qui ne rendrait pas la main au bon endroit.
     var panel by rememberSaveable { mutableStateOf(ReaderPanel.NONE) }
+
+    // L'enregistreur occupe-t-il la personne ? C'est le `recordingActive` du client d'origine
+    // (ligne 434), tenu **ici** et non dans le panneau : c'est l'écran qui décide de ce qui se
+    // ferme, et une valeur tenue par le composant qu'elle protège ne protégerait rien.
+    //
+    // **Non sauvegardé**, et c'est un choix : une capture ne survit pas à une rotation — le
+    // `MediaRecorder` est tenu par le conteneur, mais la barre qui la pilote est reconstruite —,
+    // donc restaurer « vrai » laisserait un panneau qu'on ne pourrait plus refermer, sur un
+    // enregistrement qui n'existe plus.
+    var recordingActive by remember { mutableStateOf(false) }
 
     // La feuille de validation est-elle ouverte ? **Sauvegardée** : tourner le
     // téléphone pendant qu'on choisit son point d'arrêt ne doit ni refermer la feuille,
@@ -507,6 +525,40 @@ fun ReaderScreen(
         runCatching { MushafSourceNavigation.pageRange(source, page) }.getOrNull()?.let { range ->
             { playback?.start(range, settings) }
         }
+    }
+
+    // La plage que l'enregistreur prendra : celle de la **séance** quand il y en a une, celle de
+    // la **page** affichée sinon. C'est le `range={focused ? reader.range : sourcePageRange}` du
+    // client d'origine (ligne 508), et les deux sources ne sont pas interchangeables — une séance
+    // peut couvrir plus qu'une page, et enregistrer la seule page laisserait le passage à moitié.
+    //
+    // Elle est calculée **ici**, et une fois : le panneau la reçoit en paramètre, et la barre ne
+    // la relit jamais. Une page qui tournerait pendant la capture changerait sinon les bornes d'un
+    // enregistrement déjà commencé.
+    val recordRange: Range? = remember(seance, source, page) {
+        seance?.range
+            ?: runCatching { MushafSourceNavigation.pageRange(source, page) }.getOrNull()
+    }
+
+    // La porte du panneau d'enregistrement. Deux appelants s'en servent — le bouton de la coquille
+    // et « Ma voix », dans la barre d'une révision — et c'est la **même**, comme dans le client
+    // d'origine, où les deux passent par `openPanel('record')` (lignes 503 et 511).
+    //
+    // Elle **arrête l'écoute en cours** avant d'ouvrir : c'est le `stopActiveAudio()` de
+    // l'original, et ce n'est pas une politesse — le panneau suivant propose d'enregistrer, et
+    // laisser tourner une récitation ferait entrer le haut-parleur dans la capture. L'original
+    // arrête en outre le lecteur de verset (`audioAction(headingVerse,'stop')`) ; ici les deux
+    // passent par le même détenteur, donc `close()` les couvre tous les deux.
+    //
+    // `null` quand l'une des deux pièces manque : sans enregistreur, ou sans plage connue, les
+    // deux portes n'existent pas plutôt que de mener nulle part.
+    val openRecord: (() -> Unit)? = if (recorder != null && recordRange != null) {
+        {
+            playback?.close()
+            panel = ReaderPanel.RECORD
+        }
+    } else {
+        null
     }
 
     // Le bandeau de séance n'existe que si une séance est servie **et** que la validation est
@@ -853,6 +905,7 @@ fun ReaderScreen(
                 onResetZoom = { zoomState.value = ReaderZoom() },
                 onOpenSourcePicker = onOpenSourcePicker,
                 onListen = listenAction,
+                onRecord = openRecord,
                 onOpenOptions = openOptions,
                 onOpenBookmarks = openBookmarks,
                 bookmarkActive = bookmarkMode,
@@ -1049,9 +1102,13 @@ fun ReaderScreen(
                         ecouter()
                     }
                 },
-                // Aucun enregistreur dans ce client : le paramètre reste `null`, et « Ma voix »
-                // disparaît de la barre au lieu d'y figurer sans effet. C'est ici qu'elle se
-                // rebranchera.
+                // La seconde porte de l'enregistreur : « Ma voix », dans la barre d'une révision.
+                // Elle est passée **telle quelle**, sans refermer le panneau de séance au
+                // préalable : `openRecord` écrit `panel = RECORD`, et l'énumération n'en admet
+                // qu'un — c'est le `setSessionPanel('record')` de l'original, qui remplace au lieu
+                // d'empiler. `null` retire « Ma voix » de la barre au lieu de la laisser mener
+                // nulle part.
+                onRecord = openRecord,
                 onRelearn = onRelearn?.let { action ->
                     {
                         panel = ReaderPanel.NONE
@@ -1111,6 +1168,29 @@ fun ReaderScreen(
             onClose = { panel = ReaderPanel.OPTIONS },
             totalPages = totalPages,
         )
+
+        // Le panneau de l'enregistreur. Sa garde est `recorder?.let`, comme celle du panneau de
+        // séance plus haut : sans enregistreur il n'a rien à montrer. La seconde garde —
+        // `recordRange?.let` — dit la même chose de la plage : sans passage à enregistrer, il n'y a
+        // pas d'enregistrement. Les deux sont doublées par `openRecord`, qui retire les portes ;
+        // elles sont là pour que l'énumération reste exhaustive sans `else`, et pour qu'un appelant
+        // qui forcerait `ReaderPanel.RECORD` n'ouvre pas un panneau vide.
+        //
+        // `recordingActive` fait l'aller-retour : la barre rapporte, l'écran tient, et l'écran
+        // renvoie. C'est ce qui permet au panneau de **refuser de se fermer** pendant une capture
+        // — la seule garde de l'original qui soit encore atteignable dans ce portage, et la seule
+        // qui protège quelque chose.
+        ReaderPanel.RECORD -> recorder?.let { capacite ->
+            recordRange?.let { plage ->
+                RecitationRecorderSheet(
+                    capability = capacite,
+                    range = plage,
+                    recordingActive = recordingActive,
+                    onRecordingChange = { recordingActive = it },
+                    onClose = { panel = ReaderPanel.NONE },
+                )
+            }
+        }
     }
 
     // La feuille de validation, par-dessus le lecteur. Elle ne s'ouvre que par le
@@ -1243,6 +1323,19 @@ private enum class ReaderPanel {
      * donc **refermer** celui qui était ouvert, et non s'empiler avec lui.
      */
     SESSION,
+
+    /**
+     * Le panneau « Ma récitation » : l'enregistreur, et rien d'autre.
+     *
+     * Il a **deux portes** lui aussi — le bouton « Enregistrer » de la coquille, et « Ma voix »
+     * dans la barre d'une révision. Les deux passent par le même geste, comme dans le client
+     * d'origine, où elles appellent toutes deux `openPanel('record')`.
+     *
+     * Il est dans cette énumération, et non dans un état à part, pour la même raison que
+     * [SESSION] : ouvrir l'un referme l'autre, et c'est ce que fait le `sessionPanel` unique de
+     * l'original.
+     */
+    RECORD,
 }
 
 /**

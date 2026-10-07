@@ -72,15 +72,23 @@ import com.msoumaya.deepseekandroid.core.model.ReviewGrade
  * ## Une destination absente retire son geste
  *
  * [onAudio] et [onRecord] sont facultatifs, et [ReviewText.actionBar] retire les gestes qui n'ont
- * pas de destination. Aujourd'hui, l'enregistrement de la voix n'est pas porté — ni le panneau qui
- * l'ouvrirait : « Ma voix » n'existe donc pas dans la barre, au lieu d'y figurer sans effet.
+ * pas de destination. C'est la règle du dépôt, et elle vaut pour les deux : un geste qui ne mène
+ * nulle part est **retiré**, jamais grisé.
  *
- * ## Ce que la source porte et que ce portage n'a pas
+ * ## Le `disabled` de la source, et pourquoi il ne revient pas avec l'enregistreur
  *
  * Le source accepte un `disabled` global, vrai pendant un enregistrement : il grise la barre
- * entière et la met à `opacity: .5`. Ce portage ne l'a pas, et ce n'est pas une simplification —
- * c'est une **conséquence** : l'enregistrement est la seule chose qui le rendait vrai, et il n'est
- * pas porté. Le jour où il arrivera, le paramètre reviendra avec lui.
+ * entière et la met à `opacity: .5`. Ce portage ne l'a pas, et ce n'est ni une simplification ni un
+ * report : cette garde est **morte dans la source elle-même**. La barre ne se dessine que pour
+ * `sessionPanel === 'session'` (ligne 511), et `recordingActive` n'est vrai que pendant `'record'`
+ * — dont l'ouverture referme le premier, puisque `sessionPanel` n'admet qu'une valeur. Les deux
+ * conditions s'excluent : `disabled={recordingActive}` ne peut pas être vrai une seule fois.
+ *
+ * Ce qui protège réellement une capture en cours est ailleurs dans la source : la fermeture du
+ * panneau (ligne 507) et la barre flottante du lecteur (ligne 503), toutes deux
+ * `disabled={recordingActive}`. La première est portée — c'est la garde de
+ * `RecitationRecorderSheet`. La seconde est inatteignable ici, nos panneaux étant des fenêtres de
+ * dialogue : voir la note de tête de `RecitationRecorderSheet`.
  *
  * @param onGrade reçoit le grade du geste touché. Voir la note de tête : le lecteur l'ignore
  *   aujourd'hui, et ouvre la feuille de validation.

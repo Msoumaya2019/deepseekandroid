@@ -15,6 +15,7 @@ import com.msoumaya.deepseekandroid.core.data.local.QuizCacheStore
 import com.msoumaya.deepseekandroid.core.data.local.QuizOutbox
 import com.msoumaya.deepseekandroid.core.data.local.QuizOutboxStore
 import com.msoumaya.deepseekandroid.core.data.local.QuranArchiveInstaller
+import com.msoumaya.deepseekandroid.core.data.local.RecitationNoticeStore
 import com.msoumaya.deepseekandroid.core.data.local.RecitationStore
 import com.msoumaya.deepseekandroid.core.data.remote.AuthGateway
 import com.msoumaya.deepseekandroid.core.data.remote.OwnerStore
@@ -44,6 +45,7 @@ import com.msoumaya.deepseekandroid.core.domain.QuranArchive
 import com.msoumaya.deepseekandroid.core.domain.QuranDataLoader
 import com.msoumaya.deepseekandroid.core.domain.StoredAudioSettings
 import com.msoumaya.deepseekandroid.core.audio.AudioOutput
+import com.msoumaya.deepseekandroid.core.audio.AudioRecorder
 import com.msoumaya.deepseekandroid.core.audio.RecitationPlayer
 import com.msoumaya.deepseekandroid.core.playback.AudioSessionHolder
 import kotlinx.coroutines.CoroutineScope
@@ -112,6 +114,21 @@ class AppContainer(
      * bouton de lecture.
      */
     val recitationPlayer: RecitationPlayer? = null,
+    /**
+     * L'enregistreur natif, construit par `:app`.
+     *
+     * Reçu pour la même raison que les deux lecteurs : `MediaRecorder` ne tourne pas sur la JVM,
+     * et le conteneur doit rester éprouvable sans appareil. Un défaut `null` laisse le conteneur
+     * utilisable dans les tests qui n'enregistrent rien — l'appelant sait alors qu'il n'y a pas de
+     * micro à ouvrir, et n'offre pas « Ma voix » au lieu de l'offrir sans effet.
+     *
+     * Il est **distinct** des deux lecteurs, et pour une raison plus forte que leur séparation
+     * mutuelle : il ne partage avec eux ni le matériel ni le cycle de vie. Un enregistreur occupé
+     * ne doit pas empêcher d'écouter, et une lecture en cours ne doit pas empêcher de capter — le
+     * client d'origine arrête d'ailleurs l'audio actif au moment de commencer, ce qui montre bien
+     * que les deux peuvent se disputer le même haut-parleur.
+     */
+    val recorder: AudioRecorder? = null,
 ) {
 
     private val appContext = context.applicationContext
@@ -271,6 +288,18 @@ class AppContainer(
         session = session,
         scope = scope,
     )
+
+    /**
+     * Ce que l'appareil retient des notices de récitation déjà lues, **par compte**.
+     *
+     * Il est ici, à côté du registre, parce qu'il porte la même règle de partage : une récitation
+     * appartient à un compte, et la notice qui dit ce qu'elle devient aussi. Le fichier vit à la
+     * racine de l'état, comme celui du registre et pour la même raison — c'est le **document** qui
+     * porte le compte, et non son emplacement. Un dossier par compte demanderait de déplacer les
+     * fichiers au changement de compte, et une récitation enregistrée hors ligne se retrouverait
+     * alors dans un dossier qui n'est plus le sien.
+     */
+    val recitationNotice: RecitationNoticeStore = RecitationNoticeStore(root)
 
     /**
      * Les réglages d'écoute de l'appareil.

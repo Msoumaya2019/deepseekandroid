@@ -499,6 +499,80 @@ class RecitationRecorderTest {
         )
     }
 
+    // --- les libelles des gestes ------------------------------------------
+
+    @Test
+    fun `chaque geste a son mot dans la barre reduite`() {
+        assertEquals(RecitationText.BAR_BEGIN, RecitationRecorder.compactActionLabel(RecitationAction.BEGIN))
+        assertEquals(RecitationText.PAUSE, RecitationRecorder.compactActionLabel(RecitationAction.PAUSE))
+        assertEquals(RecitationText.RESUME, RecitationRecorder.compactActionLabel(RecitationAction.RESUME))
+        assertEquals(RecitationText.BAR_FINISH, RecitationRecorder.compactActionLabel(RecitationAction.FINISH))
+        assertEquals(RecitationText.CANCEL, RecitationRecorder.compactActionLabel(RecitationAction.CANCEL))
+        assertEquals(RecitationText.LISTEN, RecitationRecorder.compactActionLabel(RecitationAction.LISTEN))
+        assertEquals(RecitationText.RESTART, RecitationRecorder.compactActionLabel(RecitationAction.RESTART))
+        assertEquals(RecitationText.SAVE, RecitationRecorder.compactActionLabel(RecitationAction.SAVE))
+        assertEquals(RecitationText.BAR_SHARE, RecitationRecorder.compactActionLabel(RecitationAction.SHARE))
+    }
+
+    @Test
+    fun `les deux mots propres a la barre reduite sont ceux de l'original`() {
+        // « Commencer » et « Partager » ne sont **pas** partages avec la pleine page, qui dit
+        // « Enregistrer ma voix » et « Partager avec un ami ». Les figer empeche qu'une reecriture
+        // de la barre les aligne sur l'autre mise en page sans que rien ne le dise : c'est la
+        // seule paire de mots que les deux mises en page ne partagent pas.
+        assertEquals("Commencer", RecitationText.BAR_BEGIN)
+        assertEquals("Partager", RecitationText.BAR_SHARE)
+        assertNotEquals(RecitationText.BAR_BEGIN, RecitationText.PAGE_BEGIN)
+        assertNotEquals(RecitationText.BAR_SHARE, RecitationText.PAGE_SHARE)
+        assertEquals("Commencer", RecitationRecorder.compactActionLabel(RecitationAction.BEGIN))
+        assertEquals("Partager", RecitationRecorder.compactActionLabel(RecitationAction.SHARE))
+    }
+
+    @Test
+    fun `aucun geste ne se lit deux fois dans la barre reduite`() {
+        // Deux gestes qui porteraient le meme mot rendraient la barre ambigue : on ne saurait plus
+        // lequel arrete en gardant et lequel arrete en jetant. L'original les distingue
+        // (« Terminer » contre « Annuler »), et c'est cette distinction qui est verifiee — un
+        // `map` exhaustif la couvre pour les neuf gestes d'un coup.
+        val mots = RecitationAction.entries.map { RecitationRecorder.compactActionLabel(it) }
+        assertEquals(mots.size, mots.toSet().size, "deux gestes portent le meme mot : $mots")
+    }
+
+    @Test
+    fun `tout geste offert par une phase porte un mot dans la barre reduite`() {
+        // Le lien entre les deux fonctions : ce qu'une phase offre doit pouvoir s'ecrire. Un geste
+        // ajoute a `actionsFor` sans libelle donnerait un bouton vide, et le compilateur ne le
+        // dirait pas — l'exhaustivite de `compactActionLabel` couvre le cas neuf, pas le cas
+        // « offre mais pas encore nomme ».
+        for (phase in RecitationPhase.entries) {
+            for (geste in RecitationRecorder.actionsFor(phase, canShare = true)) {
+                assertTrue(
+                    RecitationRecorder.compactActionLabel(geste).isNotBlank(),
+                    "$phase offre $geste, qui n'a pas de mot dans la barre reduite",
+                )
+            }
+        }
+    }
+
+    // --- le cadre du panneau -----------------------------------------------
+
+    @Test
+    fun `le panneau de l'enregistreur porte les mots de l'original`() {
+        // Les deux mots du **cadre**, écrits dans `App.tsx` (ligne 507) et non dans le composant de
+        // l'enregistreur : le titre du panneau, et le nom de son bouton de fermeture.
+        //
+        // Le second **diverge** de l'original, et c'est le seul des deux : la source y écrit un
+        // libellé générique — « Fermer le panneau » — parce qu'un seul gestionnaire ferme cinq de
+        // ses six panneaux. Le figer ici empêche qu'une réécriture y retombe sans que rien ne le
+        // dise : un lecteur d'écran qui les annonce tous de la même façon n'apprend plus **lequel**
+        // il ferme.
+        assertEquals("Ma récitation", RecitationText.PANEL_TITLE)
+        assertEquals("Fermer l’enregistrement", RecitationText.PANEL_CLOSE)
+        // Le panneau et la liste sont deux écrans, et l'original leur donne deux titres. Les
+        // confondre ferait dire « Ma récitation » à l'écran qui les liste toutes.
+        assertNotEquals(RecitationText.PANEL_TITLE, RecitationText.LIST_TITLE)
+    }
+
     // --- la duree affichee -------------------------------------------------
 
     @Test

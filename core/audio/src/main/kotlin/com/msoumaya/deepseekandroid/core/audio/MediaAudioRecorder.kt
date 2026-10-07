@@ -69,6 +69,12 @@ class MediaAudioRecorder(
 
     override val isRecording: Boolean get() = recorder != null
 
+    // Le compteur du **domaine**, et non une horloge locale : c'est le même objet qui donne la
+    // durée du fichier rendu par `stop`, donc l'écran qui affiche cette valeur affiche exactement
+    // ce qu'il enregistrera. Voir la note du port, qui dit pourquoi cette lecture est ici et non
+    // dans l'écran.
+    override val elapsedMs: Long get() = stopwatch.elapsedMs()
+
     override fun start(): Boolean {
         check(!released) { "L'enregistreur a été libéré." }
         if (recorder != null) return false

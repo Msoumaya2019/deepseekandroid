@@ -47,8 +47,10 @@ class RevisionActionBarWiringTest {
     @Test
     fun `un geste sans destination est retire`() {
         // La règle du dépôt, et sa raison : un geste grisé laisse croire qu'il existe et qu'il est
-        // momentanément indisponible. « Ma voix » n'a pas d'enregistreur dans ce client : elle
-        // disparaît au lieu d'y figurer sans effet.
+        // momentanément indisponible. Elle gouverne les deux gestes facultatifs de la barre —
+        // « Écouter » et « Ma voix » —, et elle n'a pas changé le jour où l'enregistreur est
+        // arrivé : c'est **l'appelant** qui décide s'il a de quoi les brancher, et l'absence de
+        // l'un retire son geste au lieu de le laisser mener nulle part.
         assertTrue(
             sourceDeLaBarre().contains("ReviewText.actionBar(destinations.keys)"),
             "La barre ne retire plus les gestes sans destination : un geste sans effet pourrait " +

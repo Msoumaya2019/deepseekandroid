@@ -3,9 +3,11 @@ package com.msoumaya.deepseekandroid
 import android.app.Application
 import com.msoumaya.deepseekandroid.core.audio.ExoAudioOutput
 import com.msoumaya.deepseekandroid.core.audio.ExoRecitationPlayer
+import com.msoumaya.deepseekandroid.core.audio.MediaAudioRecorder
 import com.msoumaya.deepseekandroid.core.data.AppContainer
 import com.msoumaya.deepseekandroid.core.data.remote.SupabaseConfig
 import com.msoumaya.deepseekandroid.core.playback.PlaybackBridge
+import java.io.File
 
 /**
  * Point d'entrée de l'application : construit le graphe d'objets une seule fois.
@@ -50,6 +52,18 @@ class DeepSeekApplication : Application() {
             // **distinct** du précédent — jouer une récitation ne doit pas remplacer le média de
             // la séance d'enchaînement en cours.
             recitationPlayer = ExoRecitationPlayer(applicationContext),
+            // L'enregistreur natif, construit ici comme les deux lecteurs : `MediaRecorder`
+            // demande un `Context`, et c'est le seul endroit qui en ait un d'application.
+            //
+            // Le dossier visé est celui du **cache**, et non celui de l'état : un brouillon qu'on
+            // n'a pas gardé n'a aucune raison de survivre à une purge du système, et le registre
+            // **copie** le fichier dans le dossier d'état au moment où on le garde. Une capture
+            // abandonnée ne laisse donc rien derrière elle — ce que l'original obtient de son
+            // fichier temporaire, et ce qu'un enregistrement interrompu doit obtenir ici.
+            recorder = MediaAudioRecorder(
+                context = applicationContext,
+                directory = File(applicationContext.cacheDir, "recitations"),
+            ),
         )
         // Le lecteur unique est **depose** pour le service : celui-ci peut etre reveille par
         // Android alors que l'application n'existe plus en memoire, et n'a donc aucun autre
