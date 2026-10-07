@@ -44,6 +44,7 @@ import com.msoumaya.deepseekandroid.core.domain.QuranArchive
 import com.msoumaya.deepseekandroid.core.domain.QuranDataLoader
 import com.msoumaya.deepseekandroid.core.domain.StoredAudioSettings
 import com.msoumaya.deepseekandroid.core.audio.AudioOutput
+import com.msoumaya.deepseekandroid.core.audio.RecitationPlayer
 import com.msoumaya.deepseekandroid.core.playback.AudioSessionHolder
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -101,6 +102,16 @@ class AppContainer(
      * conteneur utilisable dans les tests qui n'écoutent rien.
      */
     audioOutput: AudioOutput? = null,
+    /**
+     * Le lecteur d'une récitation enregistrée, construit par `:app`.
+     *
+     * Il est **distinct** du lecteur d'enchaînement, et reçu pour la même raison que lui :
+     * `ExoRecitationPlayer` demande un `Context` et Media3, et le conteneur doit rester éprouvable
+     * sans appareil. Un défaut `null` laisse le conteneur utilisable dans les tests qui n'écoutent
+     * rien — l'écran des récitations sait alors qu'il n'y a rien à piloter, et n'offre pas de
+     * bouton de lecture.
+     */
+    val recitationPlayer: RecitationPlayer? = null,
 ) {
 
     private val appContext = context.applicationContext

@@ -4107,6 +4107,88 @@ CAS: list[dict] = [
         "tache": ":navigation:testDebugUnitTest",
         "attendus": ["les recitations sont servies et branchees"],
     },
+    {
+        # La piste chargee appartient a la ligne ouverte. Sans la comparaison d'identite, reprendre
+        # la piste d'une AUTRE recitation ferait entendre le son d'une autre sous la ligne ouverte —
+        # et rien a l'ecran ne dirait laquelle on entend.
+        "nom": "recitation : la piste d'une autre ligne ne se reprend pas",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/RecitationsList.kt",
+        "avant": "        loadedId == openId && !ended -> PlaybackAction.RESUME\n",
+        "apres": "        !ended -> PlaybackAction.RESUME\n",
+        "tache": ":core:domain:test",
+        "attendus": ["une piste chargee pour une autre recitation se recharge"],
+    },
+    {
+        # Un lecteur arrive a la fin de sa piste y reste : reprendre ne rendrait aucun son, et le
+        # bouton « Reecouter » serait muet — le defaut que ce portage s'interdit.
+        "nom": "recitation : une piste terminee se relance au lieu de se reprendre",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/RecitationsList.kt",
+        "avant": "        loadedId == openId && !ended -> PlaybackAction.RESUME\n",
+        "apres": "        loadedId == openId -> PlaybackAction.RESUME\n",
+        "tache": ":core:domain:test",
+        "attendus": ["une piste terminee se relance au lieu de se reprendre"],
+    },
+    {
+        # L'ordre des cas porte le sens : `openId == null` passe avant `playing`, sinon un appui
+        # sans ligne ouverte demanderait une pause — un geste que personne n'a demande, sur une
+        # piste dont l'ecran ne montre meme pas le bouton.
+        "nom": "recitation : un appui sans ligne ouverte ne demande rien",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/RecitationsList.kt",
+        "avant": "        openId == null -> PlaybackAction.NOTHING\n        playing -> PlaybackAction.PAUSE\n",
+        "apres": "        playing -> PlaybackAction.PAUSE\n        openId == null -> PlaybackAction.NOTHING\n",
+        "tache": ":core:domain:test",
+        "attendus": ["sans ligne ouverte, un appui ne demande rien"],
+    },
+    {
+        # Le rappel a une valeur par defaut vide : l'oublier compile, s'affiche, et laisse le bouton
+        # de lecture sans effet. Rien d'autre ne le dirait.
+        "nom": "recitation : l'ecran branche le geste de lecture",
+        "fichier": "feature/recitations/src/main/kotlin/com/msoumaya/deepseekandroid/feature/recitations/RecitationsScreen.kt",
+        "avant": "        onPlayPause = viewModel::onPlayPause,\n",
+        "apres": "        onPlayPause = {},\n",
+        "tache": ":feature:recitations:testDebugUnitTest",
+        "attendus": ["l'ecran branche toutes les saisies et tous les gestes"],
+    },
+    {
+        # Les deux avances portent deux libelles distincts : le signe et le sens. Substituer l'un a
+        # l'autre laisse deux boutons qui reculent tous les deux, et rien ne le dirait.
+        "nom": "recitation : l'ecran offre l'avance de dix secondes",
+        "fichier": "feature/recitations/src/main/kotlin/com/msoumaya/deepseekandroid/feature/recitations/RecitationsScreen.kt",
+        "avant": "                        text = RecitationText.SEEK_FORWARD,\n",
+        "apres": "                        text = RecitationText.SEEK_BACK,\n",
+        "tache": ":feature:recitations:testDebugUnitTest",
+        "attendus": ["l'ecran offre l'ecoute, ses deux avances et sa barre"],
+    },
+    {
+        # Sans la garde, l'ecran poserait un bouton de lecture alors qu'aucun lecteur n'a ete fourni
+        # au conteneur : le bouton s'affiche, et le premier appui ne fait rien.
+        "nom": "recitation : l'ecoute n'est pas offerte sans lecteur",
+        "fichier": "feature/recitations/src/main/kotlin/com/msoumaya/deepseekandroid/feature/recitations/RecitationsScreen.kt",
+        "avant": "                    ecoute = if (state.canListen && ligne.open) {\n",
+        "apres": "                    ecoute = if (ligne.open) {\n",
+        "tache": ":feature:recitations:testDebugUnitTest",
+        "attendus": ["l'ecoute n'est offerte que si un lecteur existe"],
+    },
+    {
+        # L'echec d'ecoute est le seul retour qu'on recoit quand un fichier ne s'ouvre pas. Le
+        # retirer laisse un appui sans effet et sans explication.
+        "nom": "recitation : l'echec d'ecoute est affiche",
+        "fichier": "feature/recitations/src/main/kotlin/com/msoumaya/deepseekandroid/feature/recitations/RecitationsRenderer.kt",
+        "avant": "            playbackError != null -> playbackError\n",
+        "apres": "            // mutation : l'echec d'ecoute n'est plus affiche\n",
+        "tache": ":feature:recitations:testDebugUnitTest",
+        "attendus": ["une erreur d'ecoute remplace le message du depot"],
+    },
+    {
+        # Le composant attend une fraction, l'etat un pourcentage. Sans la division, la barre
+        # recevrait 50 au lieu de 0,5 : bornee a 1, elle paraîtrait toujours pleine.
+        "nom": "recitation : la barre recoit une fraction, pas un pourcentage",
+        "fichier": "feature/recitations/src/main/kotlin/com/msoumaya/deepseekandroid/feature/recitations/RecitationsScreen.kt",
+        "avant": "                ProgressTrack(value = gestes.progressPercent / 100f)\n",
+        "apres": "                ProgressTrack(value = gestes.progressPercent)\n",
+        "tache": ":feature:recitations:testDebugUnitTest",
+        "attendus": ["l'ecran offre l'ecoute, ses deux avances et sa barre"],
+    },
 ]
 
 

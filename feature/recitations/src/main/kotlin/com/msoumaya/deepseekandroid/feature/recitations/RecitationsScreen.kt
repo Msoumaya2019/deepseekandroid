@@ -24,6 +24,7 @@ import com.msoumaya.deepseekandroid.core.design.component.AppHero
 import com.msoumaya.deepseekandroid.core.design.component.AppLabel
 import com.msoumaya.deepseekandroid.core.design.component.AppSegmentedControl
 import com.msoumaya.deepseekandroid.core.design.component.AppTitle
+import com.msoumaya.deepseekandroid.core.design.component.ProgressTrack
 import com.msoumaya.deepseekandroid.core.design.theme.AppTheme
 import com.msoumaya.deepseekandroid.core.domain.RecitationText
 
@@ -33,14 +34,15 @@ import com.msoumaya.deepseekandroid.core.domain.RecitationText
 // Portage de `RecitationsScreen` (`src/RecitationsScreen.tsx`), dont le calcul vit dans
 // `RecitationsRenderer` — pur, donc éprouvé sans appareil. Ce fichier ne fait que **disposer**.
 //
-// **Ce que l'écran n'offre pas encore, et pourquoi.** L'original a trois gestes de plus :
-// réécouter, avancer ou reculer de dix secondes, et partager avec un ami. Aucun des trois n'est
-// ici, et ce n'est pas un oubli :
+// **Ce que l'écran n'offre pas encore, et pourquoi.** L'original a un geste de plus : partager une
+// récitation avec un ami. Il n'est pas ici, et ce n'est pas un oubli : `shareRecitation` n'a de
+// capacité dans **aucune** couche du portage, et l'écran ne doit pas mener à une porte qui
+// n'existe pas.
 //
-//  - **écouter** demande une couche audio branchée dans ce module, et un bouton de lecture qui ne
-//    joue rien est exactement le geste mort que ce dépôt s'interdit ;
-//  - **partager** n'a de capacité dans **aucune** couche du portage : `shareRecitation` n'existe
-//    nulle part, et l'écran ne doit pas mener à une porte qui n'existe pas.
+// **L'écoute n'apparaît que si un lecteur existe** — c'est `state.canListen`, et il ne décide pas
+// seulement de l'affichage : c'est la présence réelle d'un lecteur qui l'alimente. Un bouton de
+// lecture qui ne joue rien est le geste mort que ce dépôt s'interdit, et il le serait ici pour la
+// raison la plus banale : aucun lecteur n'a été fourni au conteneur.
 //
 // **Le repère « locale seule » n'est pas affiché.** Le rendu le porte (`RecitationRow.localOnly`),
 // et il servira à masquer les gestes qui exigent le serveur — mais aucune phrase de l'original ne
@@ -83,6 +85,9 @@ fun RecitationsScreen(
         onFilterSelected = viewModel::onFilterSelected,
         onOpen = viewModel::onOpen,
         onDelete = viewModel::onDelete,
+        onPlayPause = viewModel::onPlayPause,
+        onSeekBackward = viewModel::onSeekBackward,
+        onSeekForward = viewModel::onSeekForward,
     )
 }
 
@@ -101,6 +106,9 @@ internal fun RecitationsContent(
     onFilterSelected: (String) -> Unit = {},
     onOpen: (String) -> Unit = {},
     onDelete: (String) -> Unit = {},
+    onPlayPause: () -> Unit = {},
+    onSeekBackward: () -> Unit = {},
+    onSeekForward: () -> Unit = {},
 ) {
     // La récitation dont la suppression est **demandée**, en attente de confirmation.
     //
@@ -174,6 +182,18 @@ internal fun RecitationsContent(
                 RecitationRowCard(
                     row = ligne,
                     suppressionDemandee = aSupprimer == ligne.id,
+                    ecoute = if (state.canListen && ligne.open) {
+                        RecitationAudio(
+                            playLabel = state.playLabel,
+                            positionLabel = state.positionLabel,
+                            progressPercent = state.progressPercent,
+                            onPlayPause = onPlayPause,
+                            onSeekBackward = onSeekBackward,
+                            onSeekForward = onSeekForward,
+                        )
+                    } else {
+                        null
+                    },
                     feedback = state.feedback,
                     corrections = state.corrections,
                     onOpen = { onOpen(ligne.id) },
@@ -190,6 +210,30 @@ internal fun RecitationsContent(
 }
 
 /**
+ * Les gestes d'écoute d'une ligne, réunis.
+ *
+ * **Un porteur, et non six paramètres de plus.** Les six valeurs vont toujours ensemble — elles ne
+ * concernent que la ligne ouverte, et l'écran les rassemble en un seul endroit. Les passer une à
+ * une ferait une signature de quatorze paramètres, où l'oubli d'un rappel ne se verrait pas.
+ *
+ * `null` veut dire **pas d'écoute du tout** : ou bien aucun lecteur n'est disponible, ou bien cette
+ * ligne n'est pas la ligne ouverte. L'écran ne pose alors ni bouton, ni avance, ni barre — plutôt
+ * qu'un bouton inerte.
+ *
+ * @param playLabel « ▶ Réécouter » ou « Pause », déjà résolu par le rendu.
+ * @param positionLabel « Position : 0:12 / 1:04 · Corrigée ».
+ * @param progressPercent le remplissage de la barre, de 0 à 100.
+ */
+private data class RecitationAudio(
+    val playLabel: String,
+    val positionLabel: String,
+    val progressPercent: Float,
+    val onPlayPause: () -> Unit,
+    val onSeekBackward: () -> Unit,
+    val onSeekForward: () -> Unit,
+)
+
+/**
  * Une récitation de la liste.
  *
  * **Les cartes du professeur ne s'affichent que sous la ligne ouverte** : l'état ne les porte que
@@ -199,11 +243,13 @@ internal fun RecitationsContent(
  * @param suppressionDemandee vrai quand la personne a touché « Supprimer » sur **cette** ligne. La
  *   confirmation est demandée **dans la carte**, et non dans une boîte de dialogue : le dépôt n'a
  *   pas d'outillage d'interface, et une confirmation qui vit dans la ligne se vérifie à l'œil.
+ * @param ecoute les gestes d'écoute, ou `null` quand il n'y a rien à écouter.
  */
 @Composable
 private fun RecitationRowCard(
     row: RecitationRow,
     suppressionDemandee: Boolean,
+    ecoute: RecitationAudio?,
     feedback: List<FeedbackRow>,
     corrections: List<CorrectionRow>,
     onOpen: () -> Unit,
@@ -220,20 +266,62 @@ private fun RecitationRowCard(
 
         if (!row.open) return@AppCard
 
+        // **L'écoute passe avant les cartes du professeur**, comme dans l'original : on relit
+        // d'abord ce qu'on a enregistré, et les remarques viennent après.
+        ecoute?.let { gestes ->
+            AppButton(
+                text = gestes.playLabel,
+                onClick = gestes.onPlayPause,
+                small = true,
+            )
+
+            Row(modifier = Modifier.padding(top = AppTheme.spacing.sm)) {
+                Box(modifier = Modifier.weight(1f)) {
+                    AppButton(
+                        text = RecitationText.SEEK_BACK,
+                        onClick = gestes.onSeekBackward,
+                        secondary = true,
+                        small = true,
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .padding(start = AppTheme.spacing.sm)
+                        .weight(1f),
+                ) {
+                    AppButton(
+                        text = RecitationText.SEEK_FORWARD,
+                        onClick = gestes.onSeekForward,
+                        secondary = true,
+                        small = true,
+                    )
+                }
+            }
+
+            Box(modifier = Modifier.padding(top = AppTheme.spacing.sm)) {
+                // Le composant attend une fraction, l'état porte un pourcentage : la division est
+                // faite ici, au dernier moment, plutôt que de faire porter deux unités au même
+                // nombre. La barre borne de toute façon ce qu'elle reçoit.
+                ProgressTrack(value = gestes.progressPercent / 100f)
+            }
+
+            if (gestes.positionLabel.isNotEmpty()) {
+                AppLabel(text = gestes.positionLabel, selectable = false)
+            }
+        }
+
+        // **Le repli n'est pas répété ici.** `FeedbackRow.comment` et `CorrectionRow.comment` sont
+        // non nuls : c'est le rendu qui a déjà remplacé le commentaire absent par « Commentaire
+        // vocal du professeur » ou « À retravailler ». Le refaire ici serait du code mort — et le
+        // compilateur le dit, ce qui vaut mieux qu'un repli qui ne s'applique jamais.
         feedback.forEach { carte ->
             AppLabel(text = carte.title, selectable = false)
-            AppLabel(
-                text = carte.comment ?: RecitationText.FEEDBACK_FALLBACK,
-                selectable = false,
-            )
+            AppLabel(text = carte.comment, selectable = false)
         }
 
         corrections.forEach { carte ->
             AppLabel(text = carte.label, selectable = false)
-            AppLabel(
-                text = carte.comment ?: RecitationText.CORRECTION_FALLBACK,
-                selectable = false,
-            )
+            AppLabel(text = carte.comment, selectable = false)
             carte.date?.let { jour -> AppLabel(text = jour, selectable = false) }
         }
 

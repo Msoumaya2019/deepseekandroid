@@ -408,12 +408,16 @@ class RecitationsRendererTest {
         corrections: List<VerseCorrection> = emptyList(),
         feedback: List<GeneralFeedback> = emptyList(),
         configured: Boolean = true,
+        canListen: Boolean = false,
+        playbackError: String? = null,
     ) = RecitationsRenderer.render(
         state = state,
         inputs = inputs,
         corrections = corrections,
         feedback = feedback,
         configured = configured,
+        canListen = canListen,
+        playbackError = playbackError,
         reference = reference,
         verse = verset,
     )
@@ -535,6 +539,46 @@ class RecitationsRendererTest {
         assertFalse(
             vue.empty,
             "l'ecran ne doit pas affirmer que la personne n'a rien enregistre pendant qu'il lit",
+        )
+    }
+
+    @Test
+    fun `sans lecteur, l'ecran n'offre pas d'ecoute`() {
+        // C'est la garde qui empeche le geste mort : un bouton de lecture qui ne joue rien. Le
+        // defaut est ferme, et non ouvert : oublier de dire qu'un lecteur existe ne doit pas
+        // offrir l'ecoute, mais la refuser.
+        val vue = rendre(etat(remote = listOf(distante("dis-1"))), RecitationsInputs(openId = "dis-1"))
+
+        assertFalse(vue.canListen, "aucun lecteur n'a ete fourni : l'ecran ne doit rien offrir")
+    }
+
+    @Test
+    fun `avec un lecteur, l'ecran offre l'ecoute`() {
+        val vue = rendre(
+            etat(remote = listOf(distante("dis-1"))),
+            RecitationsInputs(openId = "dis-1"),
+            canListen = true,
+        )
+
+        assertTrue(vue.canListen, "le lecteur est la : l'ecran doit offrir l'ecoute")
+    }
+
+    @Test
+    fun `une erreur d'ecoute remplace le message du depot`() {
+        // L'original ecrit `setMessage('Lecture impossible : ...')`, qui ecrase le message
+        // precedent. C'est le seul retour qu'on recoit quand un fichier ne s'ouvre pas : un appui
+        // sans effet et sans explication est exactement ce que ce depot s'interdit.
+        val vue = rendre(
+            etat(notice = "Les fichiers locaux restent disponibles.", remote = listOf(distante("dis-1"))),
+            RecitationsInputs(openId = "dis-1"),
+            canListen = true,
+            playbackError = "Lecture impossible : le fichier audio est introuvable.",
+        )
+
+        assertEquals(
+            "Lecture impossible : le fichier audio est introuvable.",
+            vue.message,
+            "l'echec de lecture doit se voir, et primer sur le message de la derniere lecture",
         )
     }
 

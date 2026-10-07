@@ -5,8 +5,9 @@
 // donc **pas** besoin de declarer `core:domain` ni `core:model` — `core:data` les expose deja en
 // `api`, et les redire ici ferait croire a une dependance directe qui n'existe pas.
 //
-// Ni le reseau, ni une autre fonctionnalite : le lecteur audio viendra avec l'ecran, et il
-// appartient a `core:audio`.
+// Ni le reseau, ni une autre fonctionnalite. `core:audio` porte le lecteur d'une recitation
+// enregistree — le port `RecitationPlayer`, distinct de celui qui conduit une seance de versets —,
+// et c'est la seule dependance que l'ecran a gagnee avec l'ecoute.
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -42,6 +43,7 @@ kotlin {
 dependencies {
     api(project(":core:design"))
     implementation(project(":core:data"))
+    implementation(project(":core:audio"))
 
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)

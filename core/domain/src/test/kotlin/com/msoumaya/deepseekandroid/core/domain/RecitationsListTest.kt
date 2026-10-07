@@ -511,4 +511,92 @@ class RecitationsListTest {
     fun `le pas de deplacement est de dix secondes`() {
         assertEquals(10_000L, RecitationsList.SEEK_STEP_MS)
     }
+
+    // -----------------------------------------------------------------------
+    // Ce qu'un appui sur « Réécouter / Pause » produit
+    // -----------------------------------------------------------------------
+
+    @Test
+    fun `sans ligne ouverte, un appui ne demande rien`() {
+        // Même si quelque chose joue encore : sans ligne depliee il n'y a pas de bouton, et
+        // demarrer une lecture que personne n'a demandee serait pire que ne rien faire.
+        assertEquals(
+            RecitationsList.PlaybackAction.NOTHING,
+            RecitationsList.playbackAction(
+                playing = true,
+                ended = false,
+                loadedId = "rec-1",
+                openId = null,
+            ),
+        )
+    }
+
+    @Test
+    fun `ce qui joue se suspend`() {
+        assertEquals(
+            RecitationsList.PlaybackAction.PAUSE,
+            RecitationsList.playbackAction(
+                playing = true,
+                ended = false,
+                loadedId = "rec-1",
+                openId = "rec-1",
+            ),
+        )
+    }
+
+    @Test
+    fun `une piste chargee et inachevee se reprend`() {
+        assertEquals(
+            RecitationsList.PlaybackAction.RESUME,
+            RecitationsList.playbackAction(
+                playing = false,
+                ended = false,
+                loadedId = "rec-1",
+                openId = "rec-1",
+            ),
+        )
+    }
+
+    @Test
+    fun `une piste jamais chargee se charge`() {
+        assertEquals(
+            RecitationsList.PlaybackAction.LOAD,
+            RecitationsList.playbackAction(
+                playing = false,
+                ended = false,
+                loadedId = null,
+                openId = "rec-1",
+            ),
+        )
+    }
+
+    @Test
+    fun `une piste chargee pour une autre recitation se recharge`() {
+        // Le cas qui compte : reprendre la piste d'une autre ferait entendre le son d'une autre
+        // recitation sous la ligne ouverte, et rien a l'ecran ne le dirait.
+        assertEquals(
+            RecitationsList.PlaybackAction.LOAD,
+            RecitationsList.playbackAction(
+                playing = false,
+                ended = false,
+                loadedId = "rec-2",
+                openId = "rec-1",
+            ),
+        )
+    }
+
+    @Test
+    fun `une piste terminee se relance au lieu de se reprendre`() {
+        // Un lecteur arrive a la fin de sa piste y reste : reprendre ne rendrait aucun son, et le
+        // bouton « Reecouter » serait muet — le defaut que ce portage s'interdit.
+        assertEquals(
+            RecitationsList.PlaybackAction.LOAD,
+            RecitationsList.playbackAction(
+                playing = false,
+                ended = true,
+                loadedId = "rec-1",
+                openId = "rec-1",
+            ),
+        )
+    }
 }

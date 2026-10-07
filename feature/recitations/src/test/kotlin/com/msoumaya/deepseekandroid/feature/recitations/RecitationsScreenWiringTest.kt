@@ -18,7 +18,7 @@ import kotlin.test.assertTrue
  *
  * ## Ce qui disparaîtrait sans un mot
  *
- * Trois choses, et c'est pour elles que ce fichier existe :
+ * Quatre choses, et c'est pour elles que ce fichier existe :
  *
  *  - **l'appel de `onVisible()`** : sans lui, l'écran s'ouvre sur ce que le dépôt a lu à sa
  *    construction et **ne se relit plus jamais**. Rien ne le signale : la liste s'affiche, elle est
@@ -26,12 +26,16 @@ import kotlin.test.assertTrue
  *  - **la fabrique du `ViewModel`** : elle passe le conteneur applicatif. La perdre ferait
  *    construire un `ViewModel` sans dépôt, et l'écran resterait vide indéfiniment ;
  *  - **les rappels de gestes** : chacun a une valeur par défaut vide. Un rappel oublié compile,
- *    s'affiche, et laisse un bouton sans effet — c'est déjà arrivé ailleurs dans ce dépôt.
+ *    s'affiche, et laisse un bouton sans effet — c'est déjà arrivé ailleurs dans ce dépôt ;
+ *  - **la garde de l'écoute** : sans elle, l'écran offrirait un bouton de lecture alors qu'aucun
+ *    lecteur n'a été fourni au conteneur, et le premier appui ne ferait rien.
  *
  * ## Ce qu'il ne prouve pas
  *
  * Il ne prouve pas que l'écran est beau, ni que ses libellés sont les bons : les mots vivent dans
- * `RecitationText`, et c'est `RecitationsListTest` qui les tient.
+ * `RecitationText`, et c'est `RecitationsListTest` qui les tient. Il ne prouve pas non plus *ce
+ * qu'un appui sur le bouton de lecture doit faire* : cette règle vit dans
+ * `RecitationsList.playbackAction`, et c'est là-bas qu'elle s'éprouve.
  */
 class RecitationsScreenWiringTest {
 
@@ -66,6 +70,9 @@ class RecitationsScreenWiringTest {
             "onFilterSelected = viewModel::onFilterSelected",
             "onOpen = viewModel::onOpen",
             "onDelete = viewModel::onDelete",
+            "onPlayPause = viewModel::onPlayPause",
+            "onSeekBackward = viewModel::onSeekBackward",
+            "onSeekForward = viewModel::onSeekForward",
             "onClose = onClose",
         )) {
             assertTrue(
@@ -92,19 +99,50 @@ class RecitationsScreenWiringTest {
     }
 
     @Test
-    fun `l'ecran n'offre pas encore d'ecoute, et c'est delibere`() {
-        // L'original a un bouton de lecture, une avance et un retour de dix secondes. La couche
-        // audio n'est pas branchée dans ce module : un bouton qui ne joue rien est le geste mort
-        // que ce dépôt s'interdit. Ce contrôle épingle l'absence pour qu'on ne l'ajoute pas
-        // **sans** la capacité — et il devra être inversé quand elle arrivera.
+    fun `l'ecran offre l'ecoute, ses deux avances et sa barre`() {
+        // L'original a un bouton de lecture, une avance et un retour de dix secondes, et une barre
+        // de progression. Les trois libellés fixes viennent de `RecitationText` — celui du bouton
+        // de lecture, lui, est déjà résolu par le rendu (« Pause » quand ça joue) et ne peut donc
+        // pas être cherché ici.
         val source = sourceDeLEcran()
-        assertFalse(
-            source.contains("RecitationText.LIST_PLAY") || source.contains("RecitationText.SEEK_"),
-            "L'écran offre un geste d'écoute alors que rien ne peut jouer : le premier appui " +
-                "serait sans effet, et rien d'autre ne le dirait.",
+        for (reference in listOf(
+            "RecitationText.SEEK_BACK",
+            "RecitationText.SEEK_FORWARD",
+            // L'ancre porte la division : le composant attend une fraction, l'état un
+            // pourcentage, et c'est cette ligne qui fait le passage.
+            "ProgressTrack(value = gestes.progressPercent / 100f)",
+        )) {
+            assertTrue(
+                source.contains(reference),
+                "L'écran n'offre plus `$reference` : le geste d'écoute correspondant a disparu, " +
+                    "et rien d'autre ne le dirait.",
+            )
+        }
+    }
+
+    @Test
+    fun `l'ecoute n'est offerte que si un lecteur existe`() {
+        // Sans cette garde, l'écran poserait un bouton de lecture alors qu'aucun lecteur n'a été
+        // fourni au conteneur — le geste mort que ce dépôt s'interdit, et il ne se verrait qu'à
+        // l'usage : le bouton s'affiche, et le premier appui ne fait rien.
+        //
+        // **L'ancre porte sur la garde, et non sur le nom du champ.** `state.canListen` apparaît
+        // aussi dans le commentaire d'en-tête du fichier : chercher le nom seul serait satisfait
+        // par le commentaire, et le contrôle passerait alors que la garde a disparu du code.
+        assertTrue(
+            sourceDeLEcran().contains("if (state.canListen"),
+            "L'écran n'interroge plus `state.canListen` : il offrirait l'écoute même sans lecteur, " +
+                "et le bouton ne jouerait rien.",
         )
+    }
+
+    @Test
+    fun `l'ecran garde le partage absent, et c'est delibere`() {
+        // L'original partage une récitation avec un ami accepté. `shareRecitation` n'existe dans
+        // **aucune** couche du portage : le bouton mènerait à une porte qui n'existe pas. Ce
+        // contrôle épingle l'absence pour qu'on ne l'ajoute pas **sans** la capacité.
         assertFalse(
-            source.contains("RecitationText.SHARE_"),
+            sourceDeLEcran().contains("RecitationText.SHARE_"),
             "L'écran offre le partage alors que `shareRecitation` n'existe dans aucune couche du " +
                 "portage : le bouton mènerait à une porte qui n'existe pas.",
         )

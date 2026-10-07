@@ -87,6 +87,16 @@ data class RecitationsUiState(
     /** Identifiant de la récitation dépliée, ou `null`. */
     val openId: String? = null,
 
+    /**
+     * Vrai si un lecteur audio est disponible.
+     *
+     * **C'est ce qui décide si l'écran offre l'écoute.** Faux, les boutons de lecture et d'avance,
+     * et la barre de progression, ne sont pas affichés du tout : un bouton de lecture qui ne joue
+     * rien est le geste mort que ce dépôt s'interdit, et il le serait ici pour la raison la plus
+     * banale — aucun lecteur n'a été fourni au conteneur, ce qui est le cas dans les tests.
+     */
+    val canListen: Boolean = false,
+
     /** Vrai si l'audio de la récitation ouverte joue. */
     val playing: Boolean = false,
 

@@ -103,12 +103,18 @@ internal object RecitationsRenderer {
      * @param reference ce qu'un intervalle de versets s'appelle. Passé plutôt que lu de [Quran],
      *   comme dans `RecitationsList.title` : la règle reste pure.
      * @param verse ce qu'un verset corrigé s'appelle. Même raison.
+     * @param playbackError ce que l'écoute a laissé derrière elle — un fichier qui ne s'ouvre pas,
+     *   une adresse signée impossible à obtenir —, ou `null`. Voir la note du message, plus bas.
+     * @param canListen vrai si un lecteur audio est disponible. Faux, l'écran n'offre aucun geste
+     *   d'écoute : voir `RecitationsUiState.canListen`.
      */
     fun render(
         state: RecitationState,
         inputs: RecitationsInputs,
         corrections: List<VerseCorrection> = emptyList(),
         feedback: List<GeneralFeedback> = emptyList(),
+        canListen: Boolean = false,
+        playbackError: String? = null,
         configured: Boolean = true,
         reference: (Int, Int) -> String = { debut, fin -> Quran.reference(Range(debut, fin)) },
         verse: (Int) -> String = { id ->
@@ -124,9 +130,16 @@ internal object RecitationsRenderer {
             .filtered(toutes, inputs.filter)
             .map { item -> ligne(item, state, ouvertes, reference) }
 
-        // Le message **remplace** celui du dépôt quand personne n'est connecté : l'original
-        // s'arrête avant la lecture, et son message est celui de la connexion, pas celui d'une
-        // panne qui n'a pas eu lieu.
+        // Trois sources pour un seul message, et l'ordre est celui de l'original :
+        //
+        //  - **sans compte**, c'est l'invitation à se connecter qui compte : l'original s'arrête
+        //    avant la lecture, et son message est celui de la connexion, pas celui d'une panne qui
+        //    n'a pas eu lieu ;
+        //  - **sinon ce que l'écoute vient de laisser derrière elle** : l'original écrit
+        //    `setMessage('Lecture impossible : ...')`, qui écrase le message précédent, et c'est le
+        //    seul retour qu'on reçoit quand un fichier ne s'ouvre pas — un appui sans effet et sans
+        //    explication est exactement ce que ce dépôt s'interdit ;
+        //  - **sinon** le message du dépôt.
         val message = when {
             !connecte -> if (configured) {
                 RecitationText.LIST_SIGNED_OUT_PROFILE
@@ -134,6 +147,7 @@ internal object RecitationsRenderer {
                 RecitationText.LIST_SIGNED_OUT
             }
 
+            playbackError != null -> playbackError
             else -> state.notice
         }
 
@@ -156,6 +170,7 @@ internal object RecitationsRenderer {
             empty = toutes.isEmpty() && connecte && message == null && !state.loading,
 
             openId = ouverte?.id,
+            canListen = canListen,
             playing = inputs.playing,
             playLabel = if (inputs.playing) RecitationText.LIST_PAUSE else RecitationText.LIST_PLAY,
             positionLabel = ouverte?.let { item ->

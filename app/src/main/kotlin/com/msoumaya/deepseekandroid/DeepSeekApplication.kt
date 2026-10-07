@@ -2,6 +2,7 @@ package com.msoumaya.deepseekandroid
 
 import android.app.Application
 import com.msoumaya.deepseekandroid.core.audio.ExoAudioOutput
+import com.msoumaya.deepseekandroid.core.audio.ExoRecitationPlayer
 import com.msoumaya.deepseekandroid.core.data.AppContainer
 import com.msoumaya.deepseekandroid.core.data.remote.SupabaseConfig
 import com.msoumaya.deepseekandroid.core.playback.PlaybackBridge
@@ -44,6 +45,11 @@ class DeepSeekApplication : Application() {
             // la récitation. Le `Context` d'application est passé, et non celui d'une activité,
             // qui survivrait mal à la fermeture de celle-ci.
             audioOutput = ExoAudioOutput(applicationContext),
+            // Le lecteur des récitations enregistrées, construit ici pour la même raison : il a
+            // besoin d'un `Context`, et c'est le seul endroit qui en ait un d'application. Il est
+            // **distinct** du précédent — jouer une récitation ne doit pas remplacer le média de
+            // la séance d'enchaînement en cours.
+            recitationPlayer = ExoRecitationPlayer(applicationContext),
         )
         // Le lecteur unique est **depose** pour le service : celui-ci peut etre reveille par
         // Android alors que l'application n'existe plus en memoire, et n'a donc aucun autre

@@ -260,4 +260,68 @@ object RecitationsList {
      * qu'un appui produit quand on est déjà à la fin.
      */
     fun seekForward(positionMs: Long, stepMs: Long = SEEK_STEP_MS): Long = positionMs + stepMs
+
+    // -----------------------------------------------------------------------
+    // Ce qu'un appui sur « Réécouter / Pause » produit
+    // -----------------------------------------------------------------------
+
+    /**
+     * Les quatre choses qu'un appui peut demander au lecteur.
+     *
+     * **Quatre, et non deux**, parce que le client d'origine distingue *reprendre* de *relancer* —
+     * et que les confondre produit un bouton muet. Un lecteur arrivé à la fin de sa piste y reste :
+     * reprendre une piste terminée ne rend aucun son. C'est le piège que `ExoAudioOutput.play`
+     * documente déjà du côté de l'enchaînement des versets ; il se représente ici, du côté de
+     * l'écoute d'une récitation.
+     */
+    enum class PlaybackAction {
+        /** Rien à faire : aucune ligne n'est dépliée, donc aucun bouton n'existe. */
+        NOTHING,
+
+        /** Suspendre : la piste joue en ce moment. */
+        PAUSE,
+
+        /** Reprendre où l'on s'était arrêté : la piste est chargée, et pas arrivée à sa fin. */
+        RESUME,
+
+        /**
+         * Charger puis jouer.
+         *
+         * C'est le cas de la **première** écoute, et aussi celui d'une **réécoute** après la fin :
+         * dans les deux, il faut repartir du début, et le lecteur ne le fait pas de lui-même.
+         */
+        LOAD,
+    }
+
+    /**
+     * Décide ce qu'un appui sur le bouton de lecture demande au lecteur.
+     *
+     * @param playing vrai si une piste joue en ce moment.
+     * @param ended vrai si la piste chargée est arrivée à sa fin.
+     * @param loadedId la récitation dont la piste est **chargée**, ou `null` si rien ne l'est.
+     * @param openId la récitation dépliée, ou `null`.
+     *
+     * **L'ordre des cas porte tout le sens, et chacun a sa raison :**
+     *
+     *  - `openId == null` **d'abord** : sans ligne dépliée il n'y a pas de bouton, donc la question
+     *    ne se pose pas — et répondre autre chose ferait démarrer une lecture que personne n'a
+     *    demandée ;
+     *  - `playing` **ensuite** : ce qui joue se suspend, et c'est le seul cas où la ligne chargée
+     *    peut différer de la ligne ouverte sans que ce soit une erreur ;
+     *  - **l'identité avant la fin** : une piste chargée pour une **autre** récitation ne se reprend
+     *    pas — elle serait le son d'une autre, sous la ligne ouverte. La recharger est le seul
+     *    geste qui joue ce que la personne regarde ;
+     *  - **la fin en dernier** : une piste terminée se relance, elle ne se reprend pas.
+     */
+    fun playbackAction(
+        playing: Boolean,
+        ended: Boolean,
+        loadedId: String?,
+        openId: String?,
+    ): PlaybackAction = when {
+        openId == null -> PlaybackAction.NOTHING
+        playing -> PlaybackAction.PAUSE
+        loadedId == openId && !ended -> PlaybackAction.RESUME
+        else -> PlaybackAction.LOAD
+    }
 }
