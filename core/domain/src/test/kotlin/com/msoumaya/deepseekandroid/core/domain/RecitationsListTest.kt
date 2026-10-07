@@ -6,6 +6,7 @@ import com.msoumaya.deepseekandroid.core.model.RecitationSyncStatus
 import com.msoumaya.deepseekandroid.core.model.RemoteRecitation
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -597,6 +598,61 @@ class RecitationsListTest {
                 loadedId = "rec-1",
                 openId = "rec-1",
             ),
+        )
+    }
+
+    // ------------------------------------------------------------------ le partage
+
+    @Test
+    fun `le partage est offert pour un passage du coran`() {
+        assertTrue(RecitationsList.shareOffered(RecitationKind.QURAN))
+    }
+
+    @Test
+    fun `le partage n'est pas offert pour une invocation`() {
+        // L'original **retire** le bouton pour une invocation, il ne le desactive pas : aucun
+        // depot ne rendrait une invocation partageable, et un bouton qui ne s'activerait jamais
+        // serait un geste mort de plus.
+        assertFalse(RecitationsList.shareOffered(RecitationKind.INVOCATION))
+    }
+
+    @Test
+    fun `un passage du coran arrive sur le serveur se partage`() {
+        assertTrue(RecitationsList.shareable(RecitationKind.QURAN, remote = true))
+    }
+
+    @Test
+    fun `une invocation ne se partage pas`() {
+        // Une invocation porte la prononciation d'une personne sur un texte qu'elle a choisi ;
+        // le partager n'aurait pas le sens d'un passage du Coran, qui est le meme pour tous.
+        assertFalse(RecitationsList.shareable(RecitationKind.INVOCATION, remote = true))
+    }
+
+    @Test
+    fun `une recitation encore locale ne se partage pas`() {
+        // Le partage ecrit l'identifiant d'une ligne distante dans un message. Un enregistrement
+        // qui n'est encore que sur l'appareil n'en a pas, et le serveur refuserait le message :
+        // le bouton ne menerait qu'a un refus.
+        assertFalse(RecitationsList.shareable(RecitationKind.QURAN, remote = false))
+    }
+
+    @Test
+    fun `une invocation encore locale ne se partage pas non plus`() {
+        // Les deux conditions sont independantes, et aucune n'absorbe l'autre : le cas ou elles
+        // sont fausses toutes les deux doit rendre faux, pas vrai par accident d'ordre.
+        assertFalse(RecitationsList.shareable(RecitationKind.INVOCATION, remote = false))
+    }
+
+    @Test
+    fun `le message partage nomme la recitation et la reference`() {
+        // Le corps du message est ce que l'ami lit dans la conversation : il part tel quel dans
+        // `friend_messages`. Le texte est donc ecrit **en clair** ici, et non relu du constant :
+        // c'est celui de l'original, et deux telephones du parc doivent lire la meme phrase pour
+        // le meme partage. Sans le prefixe, « Al-Fatiha 1-7 » se lirait comme une citation ; sans
+        // la reference, l'ami ne saurait pas ce qu'on lui envoie.
+        assertEquals(
+            "Récitation vocale · reference 1-7",
+            RecitationsList.shareDescription("reference 1-7"),
         )
     }
 }

@@ -439,6 +439,15 @@ object RecitationText {
     /** Ouvrir le choix d'un destinataire. */
     const val SHARE_FRIEND: String = "Partager avec un ami"
 
+    /**
+     * Le préfixe du message déposé dans la conversation au moment du partage.
+     *
+     * L'original écrit `Récitation vocale · Al-Fâtiha 1–7`. Le préfixe dit **ce qu'on reçoit** —
+     * un enregistrement, et non un texte —, ce que le corps seul ne dirait pas : un message qui
+     * commencerait par la référence se lirait comme une citation.
+     */
+    const val SHARE_PREFIX: String = "Récitation vocale"
+
     /** Ce que le partage demande, et ce qu'il promet : rien ne part sans confirmation. */
     const val SHARE_HINT: String = "Choisis un ami. L’envoi sera confirmé avant le partage."
 

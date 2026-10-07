@@ -137,14 +137,49 @@ class RecitationsScreenWiringTest {
     }
 
     @Test
-    fun `l'ecran garde le partage absent, et c'est delibere`() {
-        // L'original partage une récitation avec un ami accepté. `shareRecitation` n'existe dans
-        // **aucune** couche du portage : le bouton mènerait à une porte qui n'existe pas. Ce
-        // contrôle épingle l'absence pour qu'on ne l'ajoute pas **sans** la capacité.
+    fun `l'ecran branche le partage, du bouton a la confirmation`() {
+        // Le partage a désormais une capacité dans **toutes** les couches : une règle dans
+        // `RecitationsList` (ce qui est partageable), une autre dans `Social` (à qui), un geste
+        // dans `SocialRepository` (par où), et des libellés dans `RecitationText`. Ce contrôle
+        // épingle le dernier maillon. Sans lui, les quatre couches existeraient et l'écran
+        // n'offrirait rien — c'est exactement l'état où ce fichier a été écrit la première fois,
+        // quand il épinglait l'absence.
+        val source = sourceDeLEcran()
+        for (reference in listOf(
+            "RecitationText.SHARE_FRIEND",
+            "RecitationText.SHARE_HINT",
+            "RecitationText.SHARE_TITLE",
+            "RecitationText.SHARE_CONFIRM",
+            "RecitationText.SHARE_NO_FRIEND",
+            // **La garde de capacité.** Sans elle, l'écran poserait un bouton de partage alors
+            // qu'aucune couche sociale n'a été fournie au conteneur : il n'y aurait personne à
+            // qui envoyer, et l'appui ne ferait rien.
+            "if (state.canShare",
+            // **Les quatre gestes.** Chacun a une valeur par défaut vide : les oublier compile,
+            // s'affiche, et laisse un bouton sans effet.
+            "onShare = viewModel::onShare",
+            "onPickFriend = viewModel::onPickFriend",
+            "onConfirmShare = viewModel::onConfirmShare",
+            "onCancelShare = viewModel::onCancelShare",
+        )) {
+            assertTrue(
+                source.contains(reference),
+                "L'écran n'offre plus `$reference` : le partage a une capacité dans toutes les " +
+                    "couches, et plus rien ne le brancherait.",
+            )
+        }
+    }
+
+    @Test
+    fun `l'ecran ne partage rien lui-meme`() {
+        // **L'envoi passe par le ViewModel, jamais par un composable.** Un appel à
+        // `shareRecitation` depuis la ligne partirait à chaque recomposition — et la position de
+        // lecture en provoque une tous les dixièmes de seconde : le même partage serait envoyé des
+        // dizaines de fois, et aucun test de comportement ne le verrait.
         assertFalse(
-            sourceDeLEcran().contains("RecitationText.SHARE_"),
-            "L'écran offre le partage alors que `shareRecitation` n'existe dans aucune couche du " +
-                "portage : le bouton mènerait à une porte qui n'existe pas.",
+            sourceDeLEcran().contains("shareRecitation"),
+            "L'écran appelle `shareRecitation` lui-même : un partage lancé depuis une " +
+                "recomposition partirait plusieurs fois.",
         )
     }
 

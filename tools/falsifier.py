@@ -4015,9 +4015,15 @@ CAS: list[dict] = [
     {
         # Une recitation que le serveur ne porte pas se supprime par l'appareil. Repondre faux
         # ferait appeler le serveur pour une ligne qu'il n'a pas, et le fichier resterait.
+        #
+        # L'ancre a ete reprise quand `ligne` a cesse de recalculer la presence sur le serveur :
+        # elle la lit desormais **une seule fois** (`surLeServeur`), parce qu'elle decide de deux
+        # choses — par ou l'on supprime, et si le partage peut aboutir. Le cas vise toujours la
+        # meme decision, et la mutation garde le meme sens : tout croire sur le serveur.
         "nom": "recitation : une recitation absente du serveur est locale seule",
         "fichier": "feature/recitations/src/main/kotlin/com/msoumaya/deepseekandroid/feature/recitations/RecitationsRenderer.kt",
-        "avant": "            localOnly = state.remote.none { it.id == item.id },",
+        "avant": "            localOnly = !surLeServeur,",
+        "apres": "            localOnly = false,",
         "apres": "            localOnly = false,",
         "tache": ":feature:recitations:testDebugUnitTest",
         "attendus": ["une recitation que le serveur ne porte pas se supprime par l'appareil"],
@@ -4188,6 +4194,197 @@ CAS: list[dict] = [
         "apres": "                ProgressTrack(value = gestes.progressPercent)\n",
         "tache": ":feature:recitations:testDebugUnitTest",
         "attendus": ["l'ecran offre l'ecoute, ses deux avances et sa barre"],
+    },
+    # --- Le partage d'une recitation -----------------------------------------------------------
+    # Le partage traverse quatre couches : une regle dans `RecitationsList` (ce qui est
+    # partageable), une autre dans `Social` (a qui), un geste dans `SocialRepository` (par ou), et
+    # un branchement dans l'ecran. Chaque cas ci-dessous neutralise un maillon, et nomme le test
+    # qui doit tomber.
+    {
+        # L'original **retire** le bouton pour une invocation. Le rendre partageable offrirait un
+        # bouton qui ne s'activerait jamais : le geste mort que ce depot s'interdit.
+        "nom": "partage : une invocation se partage aussi",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/RecitationsList.kt",
+        "avant": "fun shareOffered(kind: RecitationKind): Boolean = kind != RecitationKind.INVOCATION",
+        "apres": "fun shareOffered(kind: RecitationKind): Boolean = true",
+        "tache": ":core:domain:test",
+        "attendus": ["le partage n'est pas offert pour une invocation"],
+    },
+    {
+        # Le partage ecrit l'identifiant d'une ligne **distante** dans un message. L'oublier
+        # laisserait partir un enregistrement encore local, que le serveur refuserait.
+        "nom": "partage : une recitation encore locale se partage",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/RecitationsList.kt",
+        "avant": "        shareOffered(kind) && remote",
+        "apres": "        shareOffered(kind)",
+        "tache": ":core:domain:test",
+        "attendus": ["une recitation encore locale ne se partage pas"],
+    },
+    {
+        # Le corps du message est ce que l'ami lit. Perdre le prefixe laisserait « Al-Fatiha 1-7 »
+        # tout seul, ce qui se lit comme une citation, et non comme un enregistrement.
+        "nom": "partage : le message perd le prefixe de la recitation",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/RecitationsList.kt",
+        "avant": '        "${RecitationText.SHARE_PREFIX} · $reference"',
+        "apres": "        reference",
+        "tache": ":core:domain:test",
+        "attendus": ["le message partage nomme la recitation et la reference"],
+    },
+    {
+        # La regle est celle du **serveur** : `can_play_shared_recitation` n'ouvre l'enregistrement
+        # qu'a un lien accepte. Proposer une demande en attente enverrait un partage que l'ami ne
+        # pourrait pas ecouter — et l'ecran aurait annonce un envoi reussi.
+        "nom": "partage : un destinataire non accepte reste propose",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Social.kt",
+        "avant": "        links.filter { it.status == FriendLinkStatus.ACCEPTED }",
+        "apres": "        links",
+        "tache": ":core:domain:test",
+        "attendus": ["seules les amities acceptees recoivent une recitation partagee"],
+    },
+    {
+        # Le partage part par un **lien** : c'est le lien que le message porte. Envoyer la
+        # recitation a la place du lien deposerait le message dans la mauvaise conversation.
+        "nom": "partage : le partage part vers la mauvaise conversation",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/SocialRepository.kt",
+        "avant": "            api.shareRecitation(linkId, recitationId, description)",
+        "apres": "            api.shareRecitation(recitationId, recitationId, description)",
+        "tache": ":core:data:testDebugUnitTest",
+        "attendus": ["un partage depose la recitation dans le lien vise"],
+    },
+    {
+        # Sans source, il n'y a personne a qui envoyer. Rendre `null` ferait croire a un envoi
+        # reussi, et l'ecran afficherait « Recitation partagee » pour un partage qui n'a pas eu
+        # lieu — le seul geste de ce depot qui **rend** son erreur au lieu de la publier.
+        "nom": "partage : sans source, le partage se croit reussi",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/SocialRepository.kt",
+        "avant": "        val api = source ?: return SocialText.CONNECTION_NEEDED",
+        "apres": "        val api = source ?: return null",
+        "tache": ":core:data:testDebugUnitTest",
+        "attendus": ["sans source, un partage est refuse au lieu de partir dans le vide"],
+    },
+    {
+        # Un refus doit rendre sa raison : l'ecran la pose dans son bandeau, et c'est le seul
+        # retour qu'on recoit d'un partage qui n'est pas parti. La taire laisserait un appui sans
+        # effet et sans explication.
+        "nom": "partage : un refus ne dit plus pourquoi",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/SocialRepository.kt",
+        "avant": "            describe(error)",
+        "apres": "            null",
+        "tache": ":core:data:testDebugUnitTest",
+        "attendus": ["un partage refuse rend sa raison au lieu de la publier"],
+    },
+    {
+        # La garde de capacite : sans elle, l'ecran poserait un bouton de partage alors qu'aucune
+        # couche sociale n'a ete fournie au conteneur — il n'y aurait personne a qui envoyer.
+        "nom": "partage : l'ecran offre le partage sans couche sociale",
+        "fichier": "feature/recitations/src/main/kotlin/com/msoumaya/deepseekandroid/feature/recitations/RecitationsScreen.kt",
+        "avant": "                    partage = if (state.canShare && ligne.open && ligne.shareOffered) {",
+        "apres": "                    partage = if (ligne.open && ligne.shareOffered) {",
+        "tache": ":feature:recitations:testDebugUnitTest",
+        "attendus": ["l'ecran branche le partage, du bouton a la confirmation"],
+    },
+    {
+        # Le rappel a une valeur par defaut vide : l'oublier compile, s'affiche, et laisse le
+        # bouton « Partager » de la confirmation sans effet.
+        "nom": "partage : la confirmation n'est plus branchee",
+        "fichier": "feature/recitations/src/main/kotlin/com/msoumaya/deepseekandroid/feature/recitations/RecitationsScreen.kt",
+        "avant": "        onConfirmShare = viewModel::onConfirmShare,\n",
+        "apres": "        onConfirmShare = {},\n",
+        "tache": ":feature:recitations:testDebugUnitTest",
+        "attendus": ["l'ecran branche le partage, du bouton a la confirmation"],
+    },
+    {
+        # Meme raison pour le refus : sans ce rappel, la phrase de confirmation resterait a
+        # l'ecran et aucun geste ne la refermerait.
+        "nom": "partage : le refus de la confirmation n'est plus branche",
+        "fichier": "feature/recitations/src/main/kotlin/com/msoumaya/deepseekandroid/feature/recitations/RecitationsScreen.kt",
+        "avant": "        onCancelShare = viewModel::onCancelShare,\n",
+        "apres": "        onCancelShare = {},\n",
+        "tache": ":feature:recitations:testDebugUnitTest",
+        "attendus": ["l'ecran branche le partage, du bouton a la confirmation"],
+    },
+    {
+        # Le choix d'ami appartient a la ligne ouverte. Le publier sans cette garde ferait flotter
+        # une liste d'amis sous une ligne que la personne vient de replier.
+        "nom": "partage : le choix d'ami survit au repli de sa ligne",
+        "fichier": "feature/recitations/src/main/kotlin/com/msoumaya/deepseekandroid/feature/recitations/RecitationsRenderer.kt",
+        "avant": "        val choixOuvert = inputs.sharingId?.takeIf { it == ouverte?.id }",
+        "apres": "        val choixOuvert = inputs.sharingId",
+        "tache": ":feature:recitations:testDebugUnitTest",
+        "attendus": ["le choix d'ami n'est publie que pour la ligne ouverte"],
+    },
+    {
+        # La confirmation nomme l'ami. Le repli generique ferait confirmer l'envoi a « Ami », et
+        # la personne ne saurait pas a qui elle envoie.
+        "nom": "partage : la confirmation ne nomme plus l'ami",
+        "fichier": "feature/recitations/src/main/kotlin/com/msoumaya/deepseekandroid/feature/recitations/RecitationsRenderer.kt",
+        "avant": "                RecitationText.shareBody(ami.name, partageLabel(ouverte, reference))",
+        "apres": "                RecitationText.shareBody(RecitationText.FRIEND_FALLBACK, partageLabel(ouverte, reference))",
+        "tache": ":feature:recitations:testDebugUnitTest",
+        "attendus": ["la confirmation nomme l'ami et la reference"],
+    },
+    {
+        # Le bouton est **retire** pour une invocation. Le rendre toujours offert poserait un geste
+        # qui ne s'activerait jamais.
+        "nom": "partage : le bouton s'offre aussi pour une invocation",
+        "fichier": "feature/recitations/src/main/kotlin/com/msoumaya/deepseekandroid/feature/recitations/RecitationsRenderer.kt",
+        "avant": "            shareOffered = RecitationsList.shareOffered(item.kind),",
+        "apres": "            shareOffered = true,",
+        "tache": ":feature:recitations:testDebugUnitTest",
+        "attendus": ["une invocation n'offre pas le partage"],
+    },
+    {
+        # Le bouton est **desactive** tant que la recitation n'est pas arrivee. L'activer laisserait
+        # partir un partage que le serveur refusera : l'identifiant de la ligne distante n'existe
+        # pas encore.
+        "nom": "partage : une recitation encore locale devient partageable",
+        "fichier": "feature/recitations/src/main/kotlin/com/msoumaya/deepseekandroid/feature/recitations/RecitationsRenderer.kt",
+        "avant": "            shareable = RecitationsList.shareable(item.kind, remote = surLeServeur),",
+        "apres": "            shareable = RecitationsList.shareable(item.kind, remote = true),",
+        "tache": ":feature:recitations:testDebugUnitTest",
+        "attendus": ["une recitation encore locale offre le partage mais l'empeche"],
+    },
+    {
+        # Le message du partage est le geste le plus recent : il passe devant ce que la lecture
+        # avait laisse. Le retirer laisserait la personne sans le seul retour d'un envoi reussi.
+        "nom": "partage : le message du partage n'est plus affiche",
+        "fichier": "feature/recitations/src/main/kotlin/com/msoumaya/deepseekandroid/feature/recitations/RecitationsRenderer.kt",
+        "avant": "            shareMessage != null -> shareMessage",
+        "apres": "            // mutation : le message du partage n'est plus affiche",
+        "tache": ":feature:recitations:testDebugUnitTest",
+        "attendus": ["le message du partage prime sur celui du depot"],
+    },
+    {
+        # L'ordre des branches porte le sens : sans compte, l'original s'arrete avant la lecture,
+        # et son message est celui de la connexion. Mettre le partage en tete ferait lire
+        # « Recitation partagee » a quelqu'un qui n'a pas de compte.
+        "nom": "partage : le message du partage passe avant l'invitation a se connecter",
+        "fichier": "feature/recitations/src/main/kotlin/com/msoumaya/deepseekandroid/feature/recitations/RecitationsRenderer.kt",
+        "avant": "            !connecte -> if (configured) {\n                RecitationText.LIST_SIGNED_OUT_PROFILE\n            } else {\n                RecitationText.LIST_SIGNED_OUT\n            }\n\n            shareMessage != null -> shareMessage\n",
+        "apres": "            shareMessage != null -> shareMessage\n            !connecte -> if (configured) {\n                RecitationText.LIST_SIGNED_OUT_PROFILE\n            } else {\n                RecitationText.LIST_SIGNED_OUT\n            }\n",
+        "tache": ":feature:recitations:testDebugUnitTest",
+        "attendus": ["sans compte, l'invitation a se connecter prime sur le partage"],
+    },
+    {
+        # Le message d'absence d'ami est le seul mot que recoit une personne sans ami accepte :
+        # substituer l'indice de choix lui ferait chercher des destinataires qui n'existent pas.
+        "nom": "partage : l'absence d'ami n'est plus dite",
+        "fichier": "feature/recitations/src/main/kotlin/com/msoumaya/deepseekandroid/feature/recitations/RecitationsScreen.kt",
+        "avant": "                    text = RecitationText.SHARE_NO_FRIEND,\n",
+        "apres": "                    text = RecitationText.SHARE_HINT,\n",
+        "tache": ":feature:recitations:testDebugUnitTest",
+        "attendus": ["l'ecran branche le partage, du bouton a la confirmation"],
+    },
+    {
+        # Le titre de la confirmation est ce qui distingue la question du geste : sans lui, la
+        # phrase de confirmation et le bouton « Partager » se suivent sans que rien n'annonce une
+        # question.
+        "nom": "partage : la confirmation n'a plus de titre",
+        "fichier": "feature/recitations/src/main/kotlin/com/msoumaya/deepseekandroid/feature/recitations/RecitationsScreen.kt",
+        "avant": "                    AppLabel(text = RecitationText.SHARE_TITLE, selectable = false)\n",
+        "apres": "                    AppLabel(text = RecitationText.SHARE_HINT, selectable = false)\n",
+        "tache": ":feature:recitations:testDebugUnitTest",
+        "attendus": ["l'ecran branche le partage, du bouton a la confirmation"],
     },
 ]
 

@@ -34,20 +34,29 @@ import com.msoumaya.deepseekandroid.core.domain.RecitationText
 // Portage de `RecitationsScreen` (`src/RecitationsScreen.tsx`), dont le calcul vit dans
 // `RecitationsRenderer` — pur, donc éprouvé sans appareil. Ce fichier ne fait que **disposer**.
 //
-// **Ce que l'écran n'offre pas encore, et pourquoi.** L'original a un geste de plus : partager une
-// récitation avec un ami. Il n'est pas ici, et ce n'est pas un oubli : `shareRecitation` n'a de
-// capacité dans **aucune** couche du portage, et l'écran ne doit pas mener à une porte qui
-// n'existe pas.
-//
 // **L'écoute n'apparaît que si un lecteur existe** — c'est `state.canListen`, et il ne décide pas
 // seulement de l'affichage : c'est la présence réelle d'un lecteur qui l'alimente. Un bouton de
 // lecture qui ne joue rien est le geste mort que ce dépôt s'interdit, et il le serait ici pour la
 // raison la plus banale : aucun lecteur n'a été fourni au conteneur.
 //
+// **Le partage, et ses deux crans.** Le bouton « Partager avec un ami » est **absent** — et non
+// inactif — pour une invocation : l'original le retire, parce qu'aucun dépôt ne rendrait une
+// invocation partageable. Il reste **visible et inactif** tant que la récitation n'est pas arrivée
+// sur le serveur : on ne partage que ce qui est arrivé, et le sous-titre dit déjà « En attente ».
+// Le toucher ouvre la liste des amitiés **acceptées** ; toucher un ami ouvre la confirmation —
+// « Seul <ami> pourra écouter <référence> tant que vous restez amis. » —, et rien ne part avant
+// elle. C'est l'original, où `Alert.alert` joue ce second cran ; le dépôt n'a pas d'outillage de
+// dialogue, donc la confirmation vit **dans la ligne**, comme celle de la suppression, et elle se
+// vérifie à l'œil.
+//
+// **Et l'écran ne partage rien lui-même.** L'envoi passe par le `ViewModel` : un appel réseau depuis
+// une ligne partirait à chaque recomposition, et la position de lecture en provoque une tous les
+// dixièmes de seconde.
+//
 // **Le repère « locale seule » n'est pas affiché.** Le rendu le porte (`RecitationRow.localOnly`),
-// et il servira à masquer les gestes qui exigent le serveur — mais aucune phrase de l'original ne
-// le nomme, et ce portage n'en invente pas. Le sous-titre dit déjà ce qu'il faut savoir : le
-// statut de synchronisation.
+// et il sert à masquer les gestes qui exigent le serveur — mais aucune phrase de l'original ne le
+// nomme, et ce portage n'en invente pas. Le sous-titre dit déjà ce qu'il faut savoir : le statut de
+// synchronisation.
 // ---------------------------------------------------------------------------
 
 /** Marge latérale de l'écran, comme celle des autres écrans de liste. */
@@ -88,6 +97,10 @@ fun RecitationsScreen(
         onPlayPause = viewModel::onPlayPause,
         onSeekBackward = viewModel::onSeekBackward,
         onSeekForward = viewModel::onSeekForward,
+        onShare = viewModel::onShare,
+        onPickFriend = viewModel::onPickFriend,
+        onConfirmShare = viewModel::onConfirmShare,
+        onCancelShare = viewModel::onCancelShare,
     )
 }
 
@@ -109,6 +122,10 @@ internal fun RecitationsContent(
     onPlayPause: () -> Unit = {},
     onSeekBackward: () -> Unit = {},
     onSeekForward: () -> Unit = {},
+    onShare: (String) -> Unit = {},
+    onPickFriend: (String) -> Unit = {},
+    onConfirmShare: () -> Unit = {},
+    onCancelShare: () -> Unit = {},
 ) {
     // La récitation dont la suppression est **demandée**, en attente de confirmation.
     //
@@ -116,6 +133,10 @@ internal fun RecitationsContent(
     // n'est en attente côté serveur, et une rotation referme simplement la demande. Sauvegarder
     // l'identifiant demanderait un `Saver` pour une ligne dont la seule raison d'être est d'être à
     // l'écran pendant qu'on la regarde.
+    //
+    // Le choix d'ami, lui, n'est **pas** tenu ici : il vit dans le `ViewModel`, parce qu'il change
+    // ce que le rendu calcule — la confirmation nomme l'ami et la référence —, et le garder dans un
+    // composable ferait deux sources pour la même décision.
     var aSupprimer by remember { mutableStateOf<String?>(null) }
 
     Column(
@@ -194,6 +215,27 @@ internal fun RecitationsContent(
                     } else {
                         null
                     },
+                    // **Trois conditions, et chacune a sa raison.** Sans couche sociale, il n'y a
+                    // personne à qui envoyer ; une ligne repliée n'affiche aucun de ses gestes ;
+                    // une invocation ne se partage pas — l'original en **retire** le bouton, et
+                    // c'est le rendu qui le dit (`shareOffered`), pas l'écran.
+                    partage = if (state.canShare && ligne.open && ligne.shareOffered) {
+                        RecitationShare(
+                            enabled = ligne.shareable,
+                            // Le choix n'appartient qu'à la ligne qui l'a ouvert : le rendu ne
+                            // publie `sharingId` que pour la ligne ouverte, et l'écran le revérifie
+                            // plutôt que de faire confiance à l'ordre des recompositions.
+                            sharing = state.sharingId == ligne.id,
+                            friends = state.friends,
+                            confirmation = state.shareBody,
+                            onOpenChoice = { onShare(ligne.id) },
+                            onPickFriend = onPickFriend,
+                            onConfirm = onConfirmShare,
+                            onCancel = onCancelShare,
+                        )
+                    } else {
+                        null
+                    },
                     feedback = state.feedback,
                     corrections = state.corrections,
                     onOpen = { onOpen(ligne.id) },
@@ -234,6 +276,38 @@ private data class RecitationAudio(
 )
 
 /**
+ * Les gestes de partage d'une ligne, réunis.
+ *
+ * Même raison que [RecitationAudio] : ces valeurs vont toujours ensemble — elles ne concernent que
+ * la ligne ouverte —, et les passer une à une ferait une signature où l'oubli d'un rappel ne se
+ * verrait pas.
+ *
+ * `null` veut dire **pas de partage du tout** : la ligne n'est pas ouverte, ou la couche sociale
+ * n'est pas là, ou c'est une invocation — pour laquelle l'original **retire** le bouton.
+ *
+ * @param enabled vrai quand le partage peut aboutir, donc quand la récitation est arrivée sur le
+ *   serveur. Faux, le bouton reste **visible et inactif** : c'est l'original
+ *   (`disabled={!remote.some(row => row.id === item.id)}`), et le bouton s'active de lui-même à la
+ *   prochaine lecture.
+ * @param sharing vrai quand la liste des destinataires est ouverte **sous cette ligne**.
+ * @param friends les amitiés acceptées, déjà mises en forme par le `ViewModel`. Ignorées tant que
+ *   [sharing] est faux.
+ * @param confirmation la phrase qui demande confirmation, ou `null` quand aucun ami n'a été choisi.
+ *   Non nulle, elle **remplace** la liste des destinataires : la boîte de dialogue de l'original est
+ *   modale, et on ne choisit pas un autre ami tant qu'elle est ouverte.
+ */
+private data class RecitationShare(
+    val enabled: Boolean,
+    val sharing: Boolean,
+    val friends: List<RecitationFriend>,
+    val confirmation: String?,
+    val onOpenChoice: () -> Unit,
+    val onPickFriend: (String) -> Unit,
+    val onConfirm: () -> Unit,
+    val onCancel: () -> Unit,
+)
+
+/**
  * Une récitation de la liste.
  *
  * **Les cartes du professeur ne s'affichent que sous la ligne ouverte** : l'état ne les porte que
@@ -244,12 +318,14 @@ private data class RecitationAudio(
  *   confirmation est demandée **dans la carte**, et non dans une boîte de dialogue : le dépôt n'a
  *   pas d'outillage d'interface, et une confirmation qui vit dans la ligne se vérifie à l'œil.
  * @param ecoute les gestes d'écoute, ou `null` quand il n'y a rien à écouter.
+ * @param partage les gestes de partage, ou `null` quand il n'y a rien à partager.
  */
 @Composable
 private fun RecitationRowCard(
     row: RecitationRow,
     suppressionDemandee: Boolean,
     ecoute: RecitationAudio?,
+    partage: RecitationShare?,
     feedback: List<FeedbackRow>,
     corrections: List<CorrectionRow>,
     onOpen: () -> Unit,
@@ -323,6 +399,72 @@ private fun RecitationRowCard(
             AppLabel(text = carte.label, selectable = false)
             AppLabel(text = carte.comment, selectable = false)
             carte.date?.let { jour -> AppLabel(text = jour, selectable = false) }
+        }
+
+        // **Le partage vient avant la suppression**, comme dans l'original, où le bouton
+        // « Partager avec un ami » précède le bouton « Supprimer ».
+        partage?.let { gestes ->
+            Box(modifier = Modifier.padding(top = AppTheme.spacing.sm)) {
+                AppButton(
+                    text = RecitationText.SHARE_FRIEND,
+                    onClick = gestes.onOpenChoice,
+                    secondary = true,
+                    small = true,
+                    enabled = gestes.enabled,
+                )
+            }
+
+            if (!gestes.sharing) return@let
+
+            AppLabel(text = RecitationText.SHARE_HINT, selectable = false)
+
+            val confirmation = gestes.confirmation
+            when {
+                // **La confirmation remplace la liste**, et ce n'est pas un détail : la boîte de
+                // dialogue de l'original est **modale**, donc on ne peut pas viser un autre ami
+                // tant qu'elle est ouverte. Laisser la liste sous la question laisserait croire le
+                // contraire, et un second appui changerait de destinataire sans le dire.
+                confirmation != null -> {
+                    AppLabel(text = RecitationText.SHARE_TITLE, selectable = false)
+                    AppLabel(text = confirmation, selectable = false)
+                    Row(modifier = Modifier.padding(top = AppTheme.spacing.sm)) {
+                        AppButton(
+                            text = RecitationText.SHARE_CONFIRM,
+                            onClick = gestes.onConfirm,
+                            small = true,
+                        )
+                        Box(modifier = Modifier.padding(start = AppTheme.spacing.sm)) {
+                            AppButton(
+                                text = RecitationText.CANCEL,
+                                onClick = gestes.onCancel,
+                                secondary = true,
+                                small = true,
+                            )
+                        }
+                    }
+                }
+
+                gestes.friends.isEmpty() -> AppLabel(
+                    text = RecitationText.SHARE_NO_FRIEND,
+                    selectable = false,
+                )
+
+                else -> gestes.friends.forEach { ami ->
+                    Box(modifier = Modifier.padding(top = AppTheme.spacing.sm)) {
+                        // **Le nom seul, sans vignette.** L'original pose un `FriendAvatar` —
+                        // initiale et photo de profil —, et ce dépôt n'a pas ce composant : le
+                        // portage n'en invente pas, et un partage n'a pas besoin d'une photo pour
+                        // être compris. Le nom est déjà résolu par le `ViewModel`, repli « Ami »
+                        // compris, et le **lien** seul part : c'est lui que le serveur attend.
+                        AppButton(
+                            text = ami.name,
+                            onClick = { gestes.onPickFriend(ami.linkId) },
+                            secondary = true,
+                            small = true,
+                        )
+                    }
+                }
+            }
         }
 
         Box(modifier = Modifier.padding(top = AppTheme.spacing.sm)) {

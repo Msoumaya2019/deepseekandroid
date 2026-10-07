@@ -210,6 +210,25 @@ internal class FakeSocialSource : SocialSource {
     override suspend fun sendMessage(room: ChatRoom, body: String, kind: ChatMessageKind) =
         geste("sendMessage")
 
+    /**
+     * Les partages de récitation demandés, dans l'ordre : `(lien, récitation, texte)`.
+     *
+     * Les arguments sont **enregistrés**, et pas seulement le nom du geste : ce qui doit
+     * s'éprouver ici, c'est ce qui part vraiment — le lien visé, la récitation jointe, et le
+     * texte **rogné**. Un faux qui ne compterait que les appels laisserait passer un partage
+     * envoyé au mauvais destinataire.
+     */
+    val shares = mutableListOf<Triple<String, String, String>>()
+
+    override suspend fun shareRecitation(
+        linkId: String,
+        recitationId: String,
+        description: String,
+    ) {
+        geste("shareRecitation")
+        shares += Triple(linkId, recitationId, description)
+    }
+
     override suspend fun deleteMessage(messageId: String) = geste("deleteMessage")
 
     override suspend fun reportMessage(messageId: String, reason: String) =

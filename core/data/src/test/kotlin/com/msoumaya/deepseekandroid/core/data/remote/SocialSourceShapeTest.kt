@@ -49,6 +49,39 @@ class SocialSourceShapeTest {
         )
     }
 
+    @Test
+    fun `un partage s'ecrit dans une conversation, et jamais dans un cercle`() {
+        // Le declencheur `private.validate_recitation_message()` exige `group_id is null` et un
+        // `link_id` non nul : un partage depose dans un cercle est **refuse par le serveur**. La
+        // requete reelle n'est jamais construite par les tests du depot — la source y est
+        // remplacee par une doublure —, donc un controle qui lit le source est, ici encore, le
+        // seul outil qui mesure la bonne chose.
+        val source = sourceSupabase()
+
+        // L'ancre d'abord : sans elle, les controles qui suivent pourraient passer sur un fichier
+        // qui ne porte plus de partage du tout, et ne mesureraient rien.
+        assertTrue(
+            source.contains("override suspend fun shareRecitation("),
+            "L'ancre a bouge : la source n'implemente plus `shareRecitation`. Ce controle ne " +
+                "mesure donc plus rien, et doit etre repris avant d'etre cru.",
+        )
+        assertTrue(
+            source.contains("groupId = null,"),
+            "Un partage peut de nouveau partir dans un cercle : le serveur le refusera, et " +
+                "l'ecran aura annonce un envoi qui n'a pas eu lieu.",
+        )
+        assertTrue(
+            source.contains("recitationId = recitationId,"),
+            "Le message partage ne porte plus l'identifiant de la recitation : l'ami recevrait " +
+                "un message qui ne mene a rien a ecouter.",
+        )
+        assertTrue(
+            source.contains("body = description.take(SHARE_BODY_MAX),"),
+            "Le corps du message n'est plus borne : le serveur refuse un corps trop long, et " +
+                "l'envoi echouerait sans que rien ne l'ait annonce.",
+        )
+    }
+
     /** Le source de la source Supabase, cherché depuis le module **et** depuis la racine. */
     private fun sourceSupabase(): String {
         val relatif =

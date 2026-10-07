@@ -104,6 +104,15 @@ private const val GOAL_PAGE = 8L
 private const val APPOINTMENT_PAGE = 20L
 
 /**
+ * Longueur maximale du texte d'un partage de récitation.
+ *
+ * L'original rogne a deux mille caracteres (`description.slice(0, 2000)`) : la colonne `body` est
+ * bornee, et un texte plus long serait **refuse** par le serveur au lieu d'etre raccourci. Rogner
+ * ici transforme un echec en un message un peu court, ce qui est le bon cote de l'erreur.
+ */
+private const val SHARE_BODY_MAX = 2000
+
+/**
  * Implémentation réelle, adossée au projet Supabase partagé avec le client React Native.
  *
  * @param client client déjà construit. Il n'est **jamais** construit ici : hors configuration,
@@ -344,6 +353,35 @@ class SupabaseSocialSource(
                 senderId = requireUserId(),
                 body = body.trim(),
                 kind = kind,
+            ),
+        )
+    }
+
+    /**
+     * Partage une récitation : un message de nature `recitation`, portant sa pièce jointe.
+     *
+     * **`group_id` est explicitement nul**, et ce n'est pas une valeur par défaut qu'on laisse
+     * faire : le déclencheur `validate_recitation_message` refuse un message de ce genre dans un
+     * cercle, et la colonne doit être nulle pour qu'il passe. L'écrire ici, plutôt que de compter
+     * sur le `null` par défaut de [MessageInsert], rend la règle visible à l'endroit où elle
+     * s'applique.
+     *
+     * Le corps est **rogné** avant l'envoi, comme dans `sendMessage` : la colonne est bornée, et
+     * un texte trop long ferait échouer tout le partage.
+     */
+    override suspend fun shareRecitation(
+        linkId: String,
+        recitationId: String,
+        description: String,
+    ) {
+        client.postgrest.from(TABLE_MESSAGES).insert(
+            MessageInsert(
+                linkId = linkId,
+                groupId = null,
+                senderId = requireUserId(),
+                body = description.take(SHARE_BODY_MAX),
+                kind = ChatMessageKind.RECITATION,
+                recitationId = recitationId,
             ),
         )
     }
@@ -811,6 +849,14 @@ private data class MessageInsert(
     @SerialName("sender_id") val senderId: String,
     val body: String,
     val kind: ChatMessageKind,
+    /**
+     * La récitation jointe, pour un message de nature `recitation`.
+     *
+     * Nulle pour tout autre genre, et le serveur le vérifie dans les deux sens : un message
+     * ordinaire qui porterait un identifiant de récitation serait refusé comme « pièce jointe
+     * invalide », et un partage sans identifiant comme « récitation privée invalide ».
+     */
+    @SerialName("recitation_id") val recitationId: String? = null,
 )
 
 @Serializable

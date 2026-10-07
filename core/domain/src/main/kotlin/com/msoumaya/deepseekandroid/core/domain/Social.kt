@@ -153,6 +153,23 @@ object Social {
     fun blockedLinks(links: List<FriendLink>, me: String): List<FriendLink> =
         links.filter { it.status == FriendLinkStatus.BLOCKED && it.blockedBy == me }
 
+    /**
+     * Les destinataires possibles d'une **récitation partagée** : les amitiés acceptées.
+     *
+     * La règle n'est pas une commodité d'affichage, c'est celle du **serveur**. La fonction
+     * `can_play_shared_recitation` ne donne accès à l'enregistrement et à son fichier que si le
+     * lien est accepté et si l'expéditeur comme le destinataire en sont les deux participants.
+     * Proposer une amitié en attente, ou un compte bloqué, mènerait donc à un partage que
+     * personne ne pourrait écouter — et l'écran aurait promis ce que le serveur refuse.
+     *
+     * **Sans plafond**, contrairement à [visibleFriends] : l'écran des amis borne sa liste à
+     * [LIST_LIMIT] parce qu'on la parcourt, alors qu'un choix de destinataire se fait sur une
+     * liste courte et **complète** — borner ferait disparaître un ami sans le dire. L'original
+     * filtre sans borner (`links.filter(link => link.status === 'accepted')`).
+     */
+    fun shareRecipients(links: List<FriendLink>): List<FriendLink> =
+        links.filter { it.status == FriendLinkStatus.ACCEPTED }
+
     // ------------------------------------------------------------------ cercles
 
     /** Membres ayant accepté. Le compte affiché est « n/5 ». */

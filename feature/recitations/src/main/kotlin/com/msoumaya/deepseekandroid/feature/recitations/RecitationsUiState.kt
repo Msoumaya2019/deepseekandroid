@@ -114,6 +114,55 @@ data class RecitationsUiState(
 
     /** Les corrections verset par verset de la récitation ouverte. */
     val corrections: List<CorrectionRow> = emptyList(),
+
+    // --- Le partage, s'il est possible ---
+
+    /**
+     * Vrai si un partage est possible **en principe** — c'est-à-dire si la couche sociale est
+     * là.
+     *
+     * Faux, l'écran n'offre **aucun** bouton de partage : il n'y aurait personne à qui envoyer,
+     * et l'original ne partage pas non plus sans ami (`friends` y est vide). C'est la même garde
+     * que [canListen], et pour la même raison — un bouton qui ne mène nulle part est le geste
+     * mort que ce dépôt s'interdit.
+     */
+    val canShare: Boolean = false,
+
+    /**
+     * La récitation dont le **choix d'ami** est ouvert, ou `null`.
+     *
+     * C'est l'identifiant de la **récitation**, et non d'une amitié : c'est le bouton de la ligne
+     * qui ouvre le choix, et c'est sous cette ligne que la liste des destinataires s'affiche. Le
+     * partage lui-même, en revanche, part par un **lien** — voir [RecitationFriend.linkId].
+     *
+     * Le choix disparaît quand la personne déplie autre chose : le rendu ne le publie que s'il
+     * porte sur la ligne ouverte.
+     */
+    val sharingId: String? = null,
+
+    /**
+     * Les destinataires possibles, déjà réduits aux amitiés **acceptées**.
+     *
+     * La réduction vit dans `Social.shareRecipients`, où elle s'éprouve : c'est la règle du
+     * serveur, dont la fonction `can_play_shared_recitation` n'ouvre l'enregistrement qu'à un
+     * lien accepté. La liste est **complète** — pas de plafond, contrairement à l'écran des amis.
+     */
+    val friends: List<RecitationFriend> = emptyList(),
+
+    /**
+     * La phrase qui demande confirmation avant d'envoyer, ou `null` quand il n'y a rien à
+     * confirmer.
+     *
+     * **Le partage n'est pas immédiat.** L'original ouvre une boîte de dialogue — « Partager cette
+     * récitation ? », puis « Seul <ami> pourra écouter <référence> tant que vous restez amis. » —,
+     * et n'envoie qu'à la confirmation. Le dépôt n'a pas d'outillage de dialogue : la phrase est
+     * donc **calculée** ici, et l'écran la pose dans la ligne, comme la confirmation de
+     * suppression.
+     *
+     * Nulle, il n'y a rien à confirmer : aucun ami n'a été choisi, ou la ligne n'est plus celle
+     * dont le choix est ouvert.
+     */
+    val shareBody: String? = null,
 )
 
 /**
@@ -141,6 +190,37 @@ data class RecitationRow(
     val invocationId: String?,
     val localOnly: Boolean,
     val open: Boolean,
+
+    /**
+     * Vrai si l'écran **offre** le partage pour cette ligne.
+     *
+     * Faux pour une invocation : l'original **retire** le bouton, il ne le désactive pas — aucun
+     * dépôt ne rendrait une invocation partageable, et un bouton qui ne s'activerait jamais serait
+     * un geste mort de plus.
+     */
+    val shareOffered: Boolean = false,
+
+    /**
+     * Vrai si le partage peut **aboutir** — donc si le bouton est actif.
+     *
+     * Faux tant que la récitation n'est pas arrivée sur le serveur : le partage écrit
+     * l'identifiant d'une ligne distante, et un enregistrement encore local n'en a pas. Le bouton
+     * reste **visible** et s'active de lui-même à la prochaine lecture — c'est l'original, et le
+     * sous-titre dit déjà « En attente ».
+     */
+    val shareable: Boolean = false,
+
+    /**
+     * La référence du passage, telle que le partage la nomme : « Al-Fâtiha 1–7 ».
+     *
+     * **Sans le préfixe « CORAN · »** du titre : c'est l'original, qui partage `reference(start,
+     * end)` et non le titre de la ligne. Le préfixe du message — « Récitation vocale » — dit, lui,
+     * qu'il s'agit d'un enregistrement.
+     *
+     * Vide quand les bornes manquent : une ligne du Coran sans bornes n'a pas de référence à
+     * partager.
+     */
+    val shareLabel: String = "",
 )
 
 /**
@@ -173,4 +253,20 @@ data class CorrectionRow(
     val comment: String,
     val voicePath: String?,
     val date: String?,
+)
+
+/**
+ * Un destinataire possible d'une récitation partagée, prêt à afficher.
+ *
+ * @param linkId l'**amitié** qui portera le partage, et non le compte. Le serveur attend un lien :
+ *   un partage s'écrit dans une conversation, et une conversation est un lien — le déclencheur
+ *   `validate_recitation_message` refuse un partage sans lien, et le refuse aussi dans un cercle.
+ * @param name le nom affiché, ou le repli « Ami ». L'original en a un
+ *   (`friend.other?.display_name ?? 'Ami'`) : une amitié dont le profil n'est pas lisible reste
+ *   proposée, parce qu'on ne peut pas la retirer du choix sans retirer l'ami.
+ */
+@Immutable
+data class RecitationFriend(
+    val linkId: String,
+    val name: String,
 )

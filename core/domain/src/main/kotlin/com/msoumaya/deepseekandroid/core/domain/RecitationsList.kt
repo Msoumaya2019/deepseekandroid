@@ -324,4 +324,54 @@ object RecitationsList {
         loadedId == openId && !ended -> PlaybackAction.RESUME
         else -> PlaybackAction.LOAD
     }
+
+    // -----------------------------------------------------------------------
+    // Ce qui peut être partagé
+    // -----------------------------------------------------------------------
+
+    /**
+     * `true` si l'écran **offre** le partage pour une récitation de cette nature.
+     *
+     * Une invocation ne se partage pas. Elle porte la prononciation d'une personne sur un texte
+     * qu'elle a choisi ; un passage du Coran, lui, est le même pour tout le monde, et le partager
+     * a un sens que celui d'une invocation n'a pas. L'original retire le bouton pour cette seule
+     * raison (`item.recording_type !== 'invocation'`).
+     *
+     * **Retirer n'est pas désactiver**, et l'original fait bien les deux : une invocation n'a
+     * **aucun** bouton, parce qu'aucun dépôt ne la rendrait partageable ; une récitation du Coran
+     * encore sur l'appareil garde le sien, **désactivé** — voir [shareable].
+     */
+    fun shareOffered(kind: RecitationKind): Boolean = kind != RecitationKind.INVOCATION
+
+    /**
+     * `true` si le partage peut **aboutir** — donc si le bouton est actif.
+     *
+     * **Une récitation absente du serveur ne se partage pas.** Le partage écrit l'identifiant
+     * d'une **ligne distante** dans un message ; un enregistrement qui n'est encore que sur
+     * l'appareil n'en a pas, et le déclencheur `validate_recitation_message` refuserait le
+     * message — il exige que la récitation existe **et** qu'elle appartienne à l'expéditeur.
+     * L'original désactive le bouton pour cette raison
+     * (`disabled={!remote.some(row => row.id === item.id)}`) : il le laisse **visible**, parce
+     * que le dépôt est en cours et que le bouton s'activera de lui-même à la prochaine lecture.
+     *
+     * La nature **absente** ne se pose pas ici : `RemoteRecitation.kind` vaut `QURAN` par défaut,
+     * comme le `recording_type ?? 'quran'` de l'original.
+     */
+    fun shareable(kind: RecitationKind, remote: Boolean): Boolean =
+        shareOffered(kind) && remote
+
+    /**
+     * Le texte déposé dans la conversation au moment du partage : « Récitation vocale · Al-Fâtiha
+     * 1–7 ».
+     *
+     * Le préfixe est **nécessaire**, et pas décoratif : le message part sans la nature de la
+     * récitation — la conversation n'a pas de colonne pour la dire —, et un corps qui commencerait
+     * par la référence se lirait comme une citation du Coran. Le destinataire doit savoir qu'il
+     * reçoit un enregistrement.
+     *
+     * La [reference] est passée en paramètre plutôt que lue de [Quran], comme dans [title] : la
+     * règle reste pure, et c'est le rendu qui décide d'où vient le Coran.
+     */
+    fun shareDescription(reference: String): String =
+        "${RecitationText.SHARE_PREFIX} · $reference"
 }

@@ -723,4 +723,33 @@ class SocialTest {
             "accepter sa propre proposition ecraserait l'attente de l'autre",
         )
     }
+
+    @Test
+    fun `seules les amities acceptees recoivent une recitation partagee`() {
+        // La regle est celle du serveur : `can_play_shared_recitation` n'ouvre l'enregistrement et
+        // son fichier qu'a un lien **accepte**. Proposer une demande en attente, ou un compte
+        // bloque, promettrait ce que le serveur refuse — et le destinataire ne pourrait rien
+        // ecouter.
+        val liens = listOf(
+            lien("a", statut = FriendLinkStatus.ACCEPTED),
+            lien("b", statut = FriendLinkStatus.PENDING),
+            lien("c", statut = FriendLinkStatus.BLOCKED),
+        )
+
+        assertEquals(listOf("a"), Social.shareRecipients(liens).map { it.id })
+    }
+
+    @Test
+    fun `le choix d'un destinataire n'est pas borne comme la liste d'amis`() {
+        // `visibleFriends` borne a `LIST_LIMIT` parce qu'on parcourt une longue liste ; un choix de
+        // destinataire se fait sur une liste courte et **complete**. Reutiliser la borne de l'ecran
+        // des amis ferait disparaitre un ami du choix sans que rien ne le dise.
+        val liens = (1..(Social.LIST_LIMIT + 3)).map { lien("ami-$it") }
+
+        assertEquals(
+            liens.size,
+            Social.shareRecipients(liens).size,
+            "aucun destinataire ne doit etre retire par un plafond",
+        )
+    }
 }

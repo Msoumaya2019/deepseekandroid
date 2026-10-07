@@ -8,12 +8,17 @@ import com.msoumaya.deepseekandroid.core.audio.RecitationPlayer
 import com.msoumaya.deepseekandroid.core.data.AppContainer
 import com.msoumaya.deepseekandroid.core.data.repository.RecitationRepository
 import com.msoumaya.deepseekandroid.core.data.repository.RecitationState
+import com.msoumaya.deepseekandroid.core.data.repository.SocialRepository
 import com.msoumaya.deepseekandroid.core.domain.RecitationText
 import com.msoumaya.deepseekandroid.core.domain.RecitationsList
+import com.msoumaya.deepseekandroid.core.domain.Social
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 // ---------------------------------------------------------------------------
@@ -25,11 +30,11 @@ import kotlinx.coroutines.launch
 // puis délègue la mise en forme à `RecitationsRenderer`. Le calcul vit là-bas parce qu'il est pur,
 // donc éprouvable sans coroutine ni horloge.
 //
-// **Les saisies sont tenues ici, et non dans l'écran.** Le filtre choisi et la ligne dépliée sont
-// des **entrées** du rendu : la liste affichée et les cartes en dépendent. Les garder dans les
-// composables ferait deux sources pour la même décision — la puce allumée à l'écran, et la liste
-// calculée ailleurs —, et un changement de filtre publierait un état où les deux ne seraient pas
-// d'accord.
+// **Les saisies sont tenues ici, et non dans l'écran.** Le filtre choisi, la ligne dépliée et le
+// choix d'ami ouvert sont des **entrées** du rendu : la liste affichée et les cartes en dépendent.
+// Les garder dans les composables ferait deux sources pour la même décision — la puce allumée à
+// l'écran, et la liste calculée ailleurs —, et un changement de filtre publierait un état où les
+// deux ne seraient pas d'accord.
 //
 // **Ce que ce fichier fait des corrections.** Il les **demande** quand une ligne s'ouvre, et les
 // **étiquette** par cette ligne (`RecitationsDetails`). C'est la seule façon d'être sûr qu'une
@@ -40,17 +45,23 @@ import kotlinx.coroutines.launch
 // règle, et elle vit dans `RecitationsList.playbackAction` — pure, donc éprouvée sans lecteur. Ici
 // on se contente de l'exécuter. La distinction n'est pas cosmétique : c'est cette règle qui
 // distingue *reprendre* de *recharger*, et se tromper produit un bouton muet sur une piste
-// terminée — un défaut qu'aucun test d'écran n'attraperait.
+// terminée — un défaut qu'aucun test d'écran n'attraperait. Il en va de même du partage : *ce qui
+// peut être partagé* vit dans `RecitationsList`, et *à qui* dans `Social.shareRecipients`.
 //
 // **La piste chargée appartient à la ligne ouverte.** Déplier une autre ligne, ou tout replier,
 // arrête la lecture. Sans cela, le son d'une récitation continuerait sous une autre, et rien à
 // l'écran ne dirait laquelle on entend.
+//
+// **Un seul message, et il vient du dernier geste.** L'échec de préparation de l'écoute et le
+// résultat du partage écrivent dans le **même** canal. C'est l'original, qui n'a qu'un `setMessage`
+// et où le dernier geste écrase le précédent : deux champs se masqueraient l'un l'autre selon
+// l'ordre des recompositions, et la personne ne saurait pas lequel croire.
 // ---------------------------------------------------------------------------
 
 /**
  * Les sources du rendu, réunies pour être lues d'un seul geste.
  *
- * Un `combine` à cinq branches rendrait un `List<Any>` ou cinq paramètres de types différents à
+ * Un `combine` à six branches rendrait un `List<Any>` ou six paramètres de types différents à
  * re-croiser dans le corps ; nommer les morceaux dit ce qu'on assemble, et l'ordre des champs suit
  * celui des arguments du `combine`.
  */
@@ -59,20 +70,24 @@ private data class Sources(
     val saisies: RecitationsInputs,
     val chargees: RecitationsDetails,
     val lecture: RecitationPlayback,
-    val echec: String?,
+    val message: String?,
+    val amis: List<RecitationFriend>,
 )
 
 /**
- * Prépare l'affichage de la liste des récitations, et conduit son écoute.
+ * Prépare l'affichage de la liste des récitations, conduit son écoute et son partage.
  *
  * @param repository source de l'état des récitations, et destination des gestes.
  * @param player le lecteur d'une récitation enregistrée, ou `null` si aucun n'a été fourni au
  *   conteneur. Nul, l'écran n'offre **pas** de bouton de lecture : un bouton qui ne joue rien est
  *   le geste mort que ce dépôt s'interdit.
+ * @param social la couche sociale, d'où viennent les **destinataires** et par où part le partage.
+ *   Nulle, l'écran n'offre aucun bouton de partage — même raison, et même garde que [player].
  */
 class RecitationsViewModel(
     private val repository: RecitationRepository,
     private val player: RecitationPlayer? = null,
+    private val social: SocialRepository? = null,
 ) : ViewModel() {
 
     /** Les saisies, qui entrent dans le calcul. */
@@ -82,14 +97,17 @@ class RecitationsViewModel(
     private val details = MutableStateFlow(RecitationsDetails())
 
     /**
-     * Le message d'un échec de **préparation** de l'écoute.
+     * Le message du **dernier geste**, ou `null`.
      *
-     * Il ne double pas `RecitationPlayback.error`, qui dit qu'un fichier n'a pas pu s'ouvrir :
-     * celui-ci dit qu'on n'a même pas pu obtenir **l'adresse** à ouvrir — la signature d'un fichier
-     * distant demande un aller-retour, et il échoue quand il n'y a pas de réseau ou pas de compte.
-     * Sans ce canal, appuyer sur lecture hors ligne ne dirait rien du tout.
+     * Il porte deux choses, et c'est délibéré : l'échec de **préparation** de l'écoute — celui qui
+     * dit qu'on n'a même pas pu obtenir l'adresse à ouvrir, faute de réseau ou de compte —, et le
+     * résultat du **partage**, réussite comprise. `RecitationPlayback.error` ne dit pas la même
+     * chose : lui dit qu'un fichier n'a pas pu s'ouvrir.
+     *
+     * Un seul canal, parce que l'original n'a qu'un `setMessage` : deux champs se masqueraient
+     * l'un l'autre selon l'ordre des recompositions.
      */
-    private val echec = MutableStateFlow<String?>(null)
+    private val message = MutableStateFlow<String?>(null)
 
     /**
      * La récitation dont la piste est **chargée** dans le lecteur, ou `null`.
@@ -105,6 +123,25 @@ class RecitationsViewModel(
     private val playback: StateFlow<RecitationPlayback> =
         player?.state ?: MutableStateFlow(RecitationPlayback())
 
+    /**
+     * Les destinataires possibles, tenus à jour depuis la couche sociale.
+     *
+     * La réduction aux amitiés **acceptées** vit dans `Social.shareRecipients`, où elle s'éprouve ;
+     * ici on ne fait que la mettre en forme. Sans couche sociale, la liste est **vide** — et c'est
+     * exactement ce que l'original lit quand il n'y a pas d'ami (« Aucun ami accepté pour le
+     * moment. »).
+     */
+    private val amis: Flow<List<RecitationFriend>> = social?.state
+        ?.map { etat ->
+            Social.shareRecipients(etat.links).map { lien ->
+                RecitationFriend(
+                    linkId = lien.id,
+                    name = lien.other?.displayName ?: RecitationText.FRIEND_FALLBACK,
+                )
+            }
+        }
+        ?: flowOf(emptyList())
+
     private val _state = MutableStateFlow(RecitationsUiState())
 
     /** État affichable de l'écran. */
@@ -112,37 +149,51 @@ class RecitationsViewModel(
 
     init {
         viewModelScope.launch {
-            // Un seul `collect` sur les cinq sources : des collectes séparées liraient des valeurs
-            // de moments différents, et publieraient une liste calculée sur un filtre déjà
-            // remplacé — ou des cartes sans la ligne qui les porte.
-            combine(
+            // Deux `combine` imbriqués, et non un seul : les surcharges typées de `combine`
+            // s'arrêtent à cinq sources. Les cinq premières sont celles du dépôt et des saisies,
+            // la sixième vient de la couche sociale.
+            //
+            // Un seul `collect` sur l'ensemble : des collectes séparées liraient des valeurs de
+            // moments différents, et publieraient une liste calculée sur un filtre déjà remplacé —
+            // ou des cartes sans la ligne qui les porte.
+            val base = combine(
                 repository.state,
                 inputs,
                 details,
                 playback,
-                echec,
+                message,
             ) { etat, saisies, chargees, lecture, souci ->
-                Sources(etat, saisies, chargees, lecture, souci)
-            }.collect { sources ->
-                val pourLaLigne = sources.chargees.forOpen(sources.saisies.openId)
-                _state.value = RecitationsRenderer.render(
-                    state = sources.etat,
-                    // La lecture n'est pas une saisie : elle vient du lecteur, et le rendu la reçoit
-                    // par les deux champs que `RecitationsInputs` réserve à cela.
-                    inputs = sources.saisies.copy(
-                        playing = sources.lecture.playing,
-                        positionMs = sources.lecture.positionMs,
-                    ),
-                    corrections = pourLaLigne.corrections,
-                    feedback = pourLaLigne.feedback,
-                    // **La capacité, et non l'intention** : c'est la présence d'un lecteur qui
-                    // décide si l'écran offre l'écoute, et non le fait qu'une ligne soit dépliée.
-                    canListen = player != null,
-                    // L'échec du lecteur prime sur celui de la préparation : il est plus récent, et
-                    // il décrit ce qui vient de se passer sous les yeux de la personne.
-                    playbackError = sources.lecture.error ?: sources.echec,
-                )
+                Sources(etat, saisies, chargees, lecture, souci, emptyList())
             }
+
+            combine(base, amis) { sources, destinataires -> sources.copy(amis = destinataires) }
+                .collect { sources ->
+                    val pourLaLigne = sources.chargees.forOpen(sources.saisies.openId)
+                    _state.value = RecitationsRenderer.render(
+                        state = sources.etat,
+                        // La lecture n'est pas une saisie : elle vient du lecteur, et le rendu la
+                        // reçoit par les deux champs que `RecitationsInputs` réserve à cela.
+                        inputs = sources.saisies.copy(
+                            playing = sources.lecture.playing,
+                            positionMs = sources.lecture.positionMs,
+                        ),
+                        corrections = pourLaLigne.corrections,
+                        feedback = pourLaLigne.feedback,
+                        // **La capacité, et non l'intention** : c'est la présence d'un lecteur qui
+                        // décide si l'écran offre l'écoute, et non le fait qu'une ligne soit
+                        // dépliée.
+                        canListen = player != null,
+                        // L'erreur du lecteur est distincte du message du dernier geste, et le
+                        // rendu les ordonne : le message d'abord — il vient d'un geste, et il est
+                        // plus récent —, puis l'erreur du lecteur, puis le dépôt.
+                        playbackError = sources.lecture.error,
+                        friends = sources.amis,
+                        // Même garde que pour l'écoute : sans couche sociale, il n'y a personne à
+                        // qui envoyer, et l'écran n'offre pas le geste.
+                        canShare = social != null,
+                        shareMessage = sources.message,
+                    )
+                }
         }
     }
 
@@ -186,11 +237,20 @@ class RecitationsViewModel(
      *
      * **Et l'écoute s'arrête.** La piste chargée appartient à la ligne ouverte : la garder ferait
      * entendre une récitation sous une autre ligne, ou sous aucune.
+     *
+     * **Et le choix d'ami se ferme, confirmation comprise.** C'est l'original, qui remet `sharing`
+     * à `null` à l'ouverture d'une ligne : la liste des destinataires appartient au bouton qui l'a
+     * ouverte. La confirmation en cours tombe avec le choix — la garder ferait confirmer l'envoi
+     * d'une récitation qui n'est plus celle qu'on regarde.
      */
     fun onOpen(id: String) {
         val ouverte = inputs.value.openId
         val nouvelle = if (ouverte == id) null else id
-        inputs.value = inputs.value.copy(openId = nouvelle)
+        inputs.value = inputs.value.copy(
+            openId = nouvelle,
+            sharingId = null,
+            pendingLinkId = null,
+        )
 
         arreterLEcoute()
 
@@ -255,6 +315,83 @@ class RecitationsViewModel(
     }
 
     /**
+     * Ouvre — ou referme — le **choix d'ami** de la ligne [id].
+     *
+     * L'original bascule sur la ligne touchée (`setSharing(sharing === item.id ? null : item.id)`),
+     * et n'ouvre donc qu'un choix à la fois. Rien n'est décidé ici sur ce qui est partageable : le
+     * bouton n'existe déjà que là où le partage a un sens.
+     *
+     * **Une confirmation en cours tombe avec le choix** : refermer le choix, c'est renoncer, et
+     * laisser la phrase de confirmation derrière soi ferait confirmer un envoi que plus rien
+     * n'attend.
+     */
+    fun onShare(id: String) {
+        val ouvert = inputs.value.sharingId
+        inputs.value = inputs.value.copy(
+            sharingId = if (ouvert == id) null else id,
+            pendingLinkId = null,
+        )
+    }
+
+    /**
+     * Retient l'ami [linkId] et **demande confirmation**, sans rien envoyer.
+     *
+     * **Le partage n'est pas immédiat, et c'est l'original.** `Alert.alert` y pose une question —
+     * « Seul <ami> pourra écouter <référence> tant que vous restez amis. » —, et n'appelle
+     * `shareRecitation` qu'au geste de confirmation. Le dépôt n'a pas d'outillage de dialogue : le
+     * second cran est donc tenu ici, et l'écran l'affiche **dans la ligne**.
+     *
+     * **Rien n'est vérifié ici sur l'ami.** Le rendu a déjà réduit la liste aux amitiés acceptées
+     * (`Social.shareRecipients`), et l'écran n'offre que celles-là : retrouver l'ami dans l'état
+     * pour le valider une seconde fois ferait deux sources pour la même décision.
+     */
+    fun onPickFriend(linkId: String) {
+        if (inputs.value.sharingId == null) return
+        inputs.value = inputs.value.copy(pendingLinkId = linkId)
+    }
+
+    /** Renonce au partage en cours de confirmation. Le choix d'ami, lui, **reste ouvert**. */
+    fun onCancelShare() {
+        inputs.value = inputs.value.copy(pendingLinkId = null)
+    }
+
+    /**
+     * Envoie la récitation à l'ami dont la confirmation est ouverte.
+     *
+     * **Le partage part par un lien, et jamais par un cercle.** Un cercle réunit des gens qui ne
+     * sont pas tous amis, et le serveur refuse un partage qui y serait déposé — la signature de
+     * `shareRecitation` ne prend donc qu'un lien, et le type dit la règle.
+     *
+     * La réussite **referme le choix et la confirmation**, comme l'original (`setSharing(null)`),
+     * et laisse un message. L'échec **referme la seule confirmation** : la personne doit pouvoir
+     * réessayer, ou choisir un autre destinataire, sans rouvrir le choix.
+     */
+    fun onConfirmShare() {
+        val ouvert = inputs.value.sharingId ?: return
+        val destinataire = inputs.value.pendingLinkId ?: return
+        val reseau = social ?: return
+        val ligne = _state.value.rows.firstOrNull { it.id == ouvert } ?: return
+
+        viewModelScope.launch {
+            message.value = null
+            val raison = reseau.shareRecitation(
+                linkId = destinataire,
+                recitationId = ouvert,
+                description = RecitationsList.shareDescription(ligne.shareLabel),
+            )
+            message.value = raison ?: RecitationText.SHARE_DONE
+            inputs.value = if (raison == null) {
+                // Réussi : le choix entier se referme, comme l'original.
+                inputs.value.copy(sharingId = null, pendingLinkId = null)
+            } else {
+                // Refusé : seule la confirmation tombe. Le choix reste ouvert, et la personne peut
+                // réessayer ou viser un autre ami sans rouvrir la liste.
+                inputs.value.copy(pendingLinkId = null)
+            }
+        }
+    }
+
+    /**
      * Retire une récitation.
      *
      * **La copie distante l'emporte quand elle existe** : le dépôt emporte alors la copie locale
@@ -272,7 +409,11 @@ class RecitationsViewModel(
         val locale = repository.state.value.items.firstOrNull { it.id == id }
 
         if (inputs.value.openId == id) {
-            inputs.value = inputs.value.copy(openId = null)
+            inputs.value = inputs.value.copy(
+                openId = null,
+                sharingId = null,
+                pendingLinkId = null,
+            )
             details.value = RecitationsDetails()
             arreterLEcoute()
         }
@@ -307,14 +448,17 @@ class RecitationsViewModel(
                 locale != null -> locale.uri
                 distante != null -> runCatching { repository.signedUrl(distante.storagePath) }
                     .getOrElse {
-                        echec.value = RecitationText.AUDIO_UNAVAILABLE
+                        message.value = RecitationText.AUDIO_UNAVAILABLE
                         return@launch
                     }
 
                 else -> return@launch
             }
 
-            echec.value = null
+            // **Le message est effacé avant de jouer**, et ce n'est pas un détail : sans cela, un
+            // échec de préparation resterait affiché par-dessus l'erreur du lecteur, et la personne
+            // lirait la panne de l'essai précédent.
+            message.value = null
             loadedId = id
             lecteur.play(adresse)
         }
@@ -323,7 +467,7 @@ class RecitationsViewModel(
     /** Arrête l'écoute et oublie la piste chargée. */
     private fun arreterLEcoute() {
         loadedId = null
-        echec.value = null
+        message.value = null
         player?.stop()
     }
 
@@ -344,6 +488,7 @@ class RecitationsViewModel(
                     return RecitationsViewModel(
                         repository = container.recitations,
                         player = container.recitationPlayer,
+                        social = container.social,
                     ) as T
                 }
             }

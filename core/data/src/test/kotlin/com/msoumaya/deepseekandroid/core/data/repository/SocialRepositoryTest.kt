@@ -390,6 +390,56 @@ class SocialRepositoryTest {
     }
 
     // ------------------------------------------------------------------
+    // Le partage d'une récitation
+    // ------------------------------------------------------------------
+
+    @Test
+    fun `un partage depose la recitation dans le lien vise`() = runTest {
+        val source = FakeSocialSource().apply {
+            links = listOf(lien("l1", FriendLinkStatus.ACCEPTED))
+        }
+        val repository = SocialRepository(source, FakeOwners(moi), backgroundScope)
+        settle()
+
+        val raison = repository.shareRecitation("l1", "rec-9", "Récitation vocale · Al-Fâtiha 1–7")
+
+        assertNull(raison, "un partage qui aboutit n'a rien a annoncer")
+        assertEquals(
+            listOf(Triple("l1", "rec-9", "Récitation vocale · Al-Fâtiha 1–7")),
+            source.shares,
+            "le lien, la recitation et le texte doivent partir tels quels",
+        )
+        assertTrue("shareRecitation" in source.actions)
+    }
+
+    @Test
+    fun `un partage refuse rend sa raison au lieu de la publier`() = runTest {
+        val source = FakeSocialSource().apply {
+            links = listOf(lien("l1", FriendLinkStatus.ACCEPTED))
+            failAction = IllegalStateException("Reseau indisponible")
+        }
+        val repository = SocialRepository(source, FakeOwners(moi), backgroundScope)
+        settle()
+
+        val raison = repository.shareRecitation("l1", "rec-9", "Récitation vocale")
+
+        assertNotNull(raison, "un echec muet laisserait l'ecran des recitations sans explication")
+        assertTrue("Reseau indisponible" in raison, "la raison doit decrire la panne")
+        assertFalse(repository.state.value.busy, "le geste est fini : l'ecran ne reste pas occupe")
+    }
+
+    @Test
+    fun `sans source, un partage est refuse au lieu de partir dans le vide`() = runTest {
+        val repository = SocialRepository(null, FakeOwners(moi), backgroundScope)
+        settle()
+
+        assertEquals(
+            SocialText.CONNECTION_NEEDED,
+            repository.shareRecitation("l1", "rec-9", "Récitation vocale"),
+        )
+    }
+
+    // ------------------------------------------------------------------
     // Outils
     // ------------------------------------------------------------------
 

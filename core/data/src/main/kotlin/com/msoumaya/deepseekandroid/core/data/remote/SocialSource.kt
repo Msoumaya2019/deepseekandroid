@@ -165,6 +165,25 @@ interface SocialSource {
         kind: ChatMessageKind = ChatMessageKind.TEXT,
     )
 
+    /**
+     * Partage la récitation [recitationId] dans la conversation du lien [linkId].
+     *
+     * **Un partage est un message**, et c'est pourquoi il vit ici plutôt qu'auprès des
+     * récitations : il s'écrit dans `friend_messages`, avec `kind = 'recitation'` et la colonne
+     * `recitation_id`. La conversation, elle, l'affiche comme n'importe quel message — c'est déjà
+     * le cas à la lecture ([messages] va chercher la pièce jointe des messages de ce genre).
+     *
+     * **Jamais dans un cercle.** Le déclencheur `validate_recitation_message` exige `group_id`
+     * nul : un cercle réunit des gens qui ne sont pas tous amis, et l'enregistrement de quelqu'un
+     * ne s'ouvre pas à eux. La signature ne prend donc qu'un lien, et non une [ChatRoom] — le
+     * type dit la règle, au lieu de la laisser à l'appelant.
+     *
+     * La [description] est le texte du message — l'original y met la référence du passage. Elle
+     * est **rognée** par la réalisation : la colonne est bornée, et un corps trop long serait
+     * refusé par le serveur au lieu d'être raccourci.
+     */
+    suspend fun shareRecitation(linkId: String, recitationId: String, description: String)
+
     suspend fun deleteMessage(messageId: String)
 
     suspend fun reportMessage(messageId: String, reason: String)

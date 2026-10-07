@@ -394,6 +394,40 @@ class SocialRepository(
         return actInRoom(success) { it.sendMessage(room, body, kind) }
     }
 
+    /**
+     * Partage une récitation dans la conversation du lien [linkId].
+     *
+     * Rend `null` quand le partage a abouti, et la **raison** de l'échec sinon.
+     *
+     * **C'est le seul geste de ce dépôt qui rend son erreur au lieu de la publier**, et la raison
+     * est précise : le partage se déclenche depuis l'**écran des récitations**, qui a son propre
+     * bandeau. Publier ici un avis ferait apparaître la panne sur l'écran « Amis », où personne
+     * n'a rien demandé — et laisserait l'écran des récitations muet, ce que ce dépôt s'interdit.
+     *
+     * **Et il ne relit rien.** Les autres gestes passent par [act], qui recharge l'espace social
+     * entier ; ici ce serait quatre lectures pour un message déposé dans une conversation qui
+     * n'est peut-être même pas ouverte. Rien de ce que l'écran des récitations affiche n'en
+     * dépend : sa liste vient de `RecitationRepository`, pas d'ici.
+     */
+    suspend fun shareRecitation(
+        linkId: String,
+        recitationId: String,
+        description: String,
+    ): String? {
+        val api = source ?: return SocialText.CONNECTION_NEEDED
+        _state.value = _state.value.copy(busy = true)
+        return try {
+            api.shareRecitation(linkId, recitationId, description)
+            _state.value = _state.value.copy(busy = false)
+            null
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            _state.value = _state.value.copy(busy = false)
+            describe(error)
+        }
+    }
+
     /** Supprime un message. */
     suspend fun deleteMessage(messageId: String): Boolean =
         actInRoom(SocialText.SAVED) { it.deleteMessage(messageId) }

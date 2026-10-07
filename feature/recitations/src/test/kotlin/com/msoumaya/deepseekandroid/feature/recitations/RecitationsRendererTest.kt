@@ -399,6 +399,199 @@ class RecitationsRendererTest {
     }
 
     // ------------------------------------------------------------------
+    // ------------------------------------------------------------------
+    // Le partage
+    // ------------------------------------------------------------------
+
+    @Test
+    fun `un passage du coran arrive sur le serveur offre le partage`() {
+        val vue = rendre(etat(remote = listOf(distante("dis-1"))))
+
+        val ligne = vue.rows.single()
+        assertTrue(ligne.shareOffered, "un passage du Coran se partage")
+        assertTrue(ligne.shareable, "il est sur le serveur : le partage peut aboutir")
+    }
+
+    @Test
+    fun `une invocation n'offre pas le partage`() {
+        // L'original **retire** le bouton pour une invocation : aucun dépôt ne la rendrait
+        // partageable, et un bouton qui ne s'activerait jamais serait un geste mort de plus.
+        val vue = rendre(
+            etat(
+                remote = listOf(
+                    distante("invoc", kind = RecitationKind.INVOCATION, start = null, end = null),
+                ),
+            ),
+        )
+
+        val ligne = vue.rows.single()
+        assertFalse(ligne.shareOffered, "une invocation ne se partage pas")
+        assertFalse(ligne.shareable)
+    }
+
+    @Test
+    fun `une recitation encore locale offre le partage mais l'empeche`() {
+        // Le bouton reste **visible et inactif** : c'est l'original
+        // (`disabled={!remote.some(row => row.id === item.id)}`), et il s'active de lui-même à la
+        // prochaine lecture. Le retirer ferait disparaître le geste, et la personne ne saurait
+        // plus qu'il existe.
+        val vue = rendre(etat(items = listOf(locale("loc-1")), remote = emptyList()))
+
+        val ligne = vue.rows.single()
+        assertTrue(ligne.shareOffered, "un passage du Coran se partage")
+        assertFalse(ligne.shareable, "il n'est pas encore sur le serveur : rien à partager")
+    }
+
+    @Test
+    fun `la reference partagee est celle du passage, sans prefixe`() {
+        // L'original partage `reference({start, end})`, et non le titre de la ligne : le préfixe
+        // « CORAN · » sert à la liste, et le message partagé porte le sien — « Récitation vocale ».
+        val vue = rendre(etat(remote = listOf(distante("dis-1", start = 3, end = 9))))
+
+        assertEquals("reference 3-9", vue.rows.single().shareLabel)
+    }
+
+    @Test
+    fun `une ligne sans bornes n'a pas de reference a partager`() {
+        val vue = rendre(
+            etat(
+                remote = listOf(
+                    distante("invoc", kind = RecitationKind.INVOCATION, start = null, end = null),
+                ),
+            ),
+        )
+
+        assertEquals("", vue.rows.single().shareLabel)
+    }
+
+    @Test
+    fun `sans couche sociale l'ecran n'offre pas le partage`() {
+        val vue = rendre(etat(remote = listOf(distante("dis-1"))))
+
+        assertFalse(vue.canShare, "aucune couche sociale : il n'y a personne à qui envoyer")
+        assertTrue(vue.friends.isEmpty())
+    }
+
+    @Test
+    fun `avec la couche sociale l'ecran offre le partage et ses destinataires`() {
+        val vue = rendre(
+            etat(remote = listOf(distante("dis-1"))),
+            canShare = true,
+            friends = listOf(ami("lien-1", "Amina")),
+        )
+
+        assertTrue(vue.canShare)
+        assertEquals(listOf("Amina"), vue.friends.map { it.name })
+    }
+
+    @Test
+    fun `le choix d'ami n'est publie que pour la ligne ouverte`() {
+        // Un choix ouvert sur une ligne que la personne vient de replier ne doit pas survivre : le
+        // bouton qui l'ouvre n'est plus là, et la liste d'amis flotterait sous rien.
+        val vue = rendre(
+            etat(remote = listOf(distante("dis-1"), distante("dis-2"))),
+            RecitationsInputs(openId = "dis-2", sharingId = "dis-1"),
+            canShare = true,
+        )
+
+        assertNull(vue.sharingId, "le choix appartient à la ligne ouverte, et à elle seule")
+    }
+
+    @Test
+    fun `le choix d'ami de la ligne ouverte est publie`() {
+        val vue = rendre(
+            etat(remote = listOf(distante("dis-1"))),
+            RecitationsInputs(openId = "dis-1", sharingId = "dis-1"),
+            canShare = true,
+        )
+
+        assertEquals("dis-1", vue.sharingId)
+    }
+
+    @Test
+    fun `la confirmation nomme l'ami et la reference`() {
+        // C'est la phrase de la boîte de dialogue de l'original : elle nomme le destinataire et ce
+        // qu'il recevra, et rien ne part avant elle.
+        val vue = rendre(
+            etat(remote = listOf(distante("dis-1", start = 1, end = 7))),
+            RecitationsInputs(openId = "dis-1", sharingId = "dis-1", pendingLinkId = "lien-1"),
+            canShare = true,
+            friends = listOf(ami("lien-1", "Amina")),
+        )
+
+        assertEquals(RecitationText.shareBody("Amina", "reference 1-7"), vue.shareBody)
+    }
+
+    @Test
+    fun `sans ami choisi il n'y a rien a confirmer`() {
+        val vue = rendre(
+            etat(remote = listOf(distante("dis-1"))),
+            RecitationsInputs(openId = "dis-1", sharingId = "dis-1"),
+            canShare = true,
+            friends = listOf(ami("lien-1", "Amina")),
+        )
+
+        assertNull(vue.shareBody)
+    }
+
+    @Test
+    fun `un ami retire de la liste ne se confirme pas`() {
+        // L'amitié a été retirée pendant qu'on regardait : mieux vaut ne rien demander que de
+        // nommer « Ami » quelqu'un qui n'est plus un destinataire — le serveur refuserait l'envoi,
+        // puisque `can_play_shared_recitation` exige un lien **accepté**.
+        val vue = rendre(
+            etat(remote = listOf(distante("dis-1"))),
+            RecitationsInputs(openId = "dis-1", sharingId = "dis-1", pendingLinkId = "lien-9"),
+            canShare = true,
+            friends = listOf(ami("lien-1", "Amina")),
+        )
+
+        assertNull(vue.shareBody)
+    }
+
+    @Test
+    fun `une confirmation ne survit pas au repli de sa ligne`() {
+        val vue = rendre(
+            etat(remote = listOf(distante("dis-1"))),
+            RecitationsInputs(openId = null, sharingId = "dis-1", pendingLinkId = "lien-1"),
+            canShare = true,
+            friends = listOf(ami("lien-1", "Amina")),
+        )
+
+        assertNull(vue.shareBody)
+        assertNull(vue.sharingId)
+    }
+
+    @Test
+    fun `le message du partage prime sur celui du depot`() {
+        // L'original écrit `setMessage('Récitation partagée…')`, ou la raison de l'échec, et c'est
+        // le geste le plus récent : il passe donc devant ce que la lecture avait laissé.
+        val vue = rendre(
+            etat(
+                notice = "Les fichiers locaux restent disponibles.",
+                remote = listOf(distante("dis-1")),
+            ),
+            RecitationsInputs(openId = "dis-1"),
+            shareMessage = RecitationText.SHARE_DONE,
+        )
+
+        assertEquals(RecitationText.SHARE_DONE, vue.message)
+    }
+
+    @Test
+    fun `sans compte, l'invitation a se connecter prime sur le partage`() {
+        // L'original s'arrête avant la lecture quand personne n'est connecté : son message est
+        // celui de la connexion, et non le résultat d'un partage qui n'a pas eu lieu.
+        val vue = rendre(
+            etat(ownerId = null, remote = listOf(distante("dis-1"))),
+            RecitationsInputs(openId = "dis-1"),
+            shareMessage = RecitationText.SHARE_DONE,
+        )
+
+        assertEquals(RecitationText.LIST_SIGNED_OUT_PROFILE, vue.message)
+    }
+
+    // ------------------------------------------------------------------
     // Outillage
     // ------------------------------------------------------------------
 
@@ -410,6 +603,9 @@ class RecitationsRendererTest {
         configured: Boolean = true,
         canListen: Boolean = false,
         playbackError: String? = null,
+        friends: List<RecitationFriend> = emptyList(),
+        canShare: Boolean = false,
+        shareMessage: String? = null,
     ) = RecitationsRenderer.render(
         state = state,
         inputs = inputs,
@@ -418,9 +614,15 @@ class RecitationsRendererTest {
         configured = configured,
         canListen = canListen,
         playbackError = playbackError,
+        friends = friends,
+        canShare = canShare,
+        shareMessage = shareMessage,
         reference = reference,
         verse = verset,
     )
+
+    /** Un destinataire, tel que le `ViewModel` le publie : un lien, et un nom déjà replié. */
+    private fun ami(linkId: String, name: String) = RecitationFriend(linkId = linkId, name = name)
 
     private fun etat(
         ownerId: String? = MOI,
