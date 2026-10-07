@@ -3104,10 +3104,28 @@ CAS: list[dict] = [
     {
         # Le detenteur ne retient plus les reglages : relancer le meme passage repart des valeurs
         # par defaut, et la personne retrouve ses reglages perdus sans qu'on le lui dise.
+        #
+        # L'attendu est le test de `updateSettings`, et **pas** celui dont le nom ressemble le
+        # plus. Mesure : `les reglages sont retenus par le detenteur` ouvre la seance par `start`,
+        # donc n'atteint jamais la ligne mutee, et ne tombe pas — le cas a rendu FAUX tant qu'il
+        # l'annoncait. Le test qui tombe est celui qui pousse la vitesse par `updateSettings`.
         "nom": "seance : les reglages ne sont plus retenus par le detenteur",
         "fichier": "core/playback/src/main/kotlin/com/msoumaya/deepseekandroid/core/playback/AudioSessionHolder.kt",
         "avant": "    fun updateSettings(value: AudioSession) {\n        settings = value",
         "apres": "    fun updateSettings(value: AudioSession) {\n        settings = AudioSession()",
+        "tache": ":core:playback:testDebugUnitTest",
+        "attendus": ["updateSettings pousse la vitesse au lecteur natif"],
+    },
+    {
+        # Le meme reglage perdu, mais par l'autre porte : celle qui ouvre la seance.
+        #
+        # Ce cas comble un trou mesure. Le test `les reglages sont retenus par le detenteur`
+        # existait, et **aucun** cas ne le faisait tomber : sa garde n'etait prouvee par rien, et
+        # la suppression de la ligne mutee serait passee inapercue.
+        "nom": "seance : la seance ouverte ne retient plus ses reglages",
+        "fichier": "core/playback/src/main/kotlin/com/msoumaya/deepseekandroid/core/playback/AudioSessionHolder.kt",
+        "avant": "    fun start(range: Range, settings: AudioSession) {\n        this.settings = settings",
+        "apres": "    fun start(range: Range, settings: AudioSession) {\n        this.settings = AudioSession()",
         "tache": ":core:playback:testDebugUnitTest",
         "attendus": ["les reglages sont retenus par le detenteur"],
     },
