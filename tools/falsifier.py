@@ -3232,19 +3232,31 @@ def commande_gradle() -> list[str]:
 def lancer(tache: str) -> tuple[int, str]:
     """Joue une tache Gradle. `tache` peut porter des options (`--tests ...`).
 
-    **`--rerun` n'est pas un confort.** Une tache de test que Gradle sert sans la rejouer rend le
+    **Rejouer n'est pas un confort.** Une tache de test que Gradle sert sans la rejouer rend le
     verdict d'une execution **precedente** : le rapport XML n'est pas reecrit, `echecs_depuis` ne
-    voit rien, et le harnais accuserait le test de ne pas couvrir la regle alors qu'il n'a pas
-    tourne. Le cas s'est produit pour de vrai : `Social.MESSAGE_PAGE` est un `const val`, la
-    mutation recopiait la **meme** valeur, la classe compilee etait identique a l'octet pres, et
-    Gradle a repondu `:core:data:testDebugUnitTest FROM-CACHE`.
+    voit rien, et le harnais conclut a tort. Le cas s'est produit deux fois, et de deux facons
+    differentes.
 
-    La portee du drapeau est **mesuree**, pas supposee. Deux passes consecutives sur
-    `:core:domain:test` ont rendu `1 executed, 6 up-to-date`, avec `:core:domain:testClasses
-    UP-TO-DATE` : `--rerun` ne rejoue que les taches **nommees sur la ligne de commande**, et
-    laisse les dependances incrementales — ce qui garde le harnais utilisable sur vingt et un
-    modules. Et c'est bien le **cache** qui tombe, pas seulement le controle de fraicheur : sans
-    cela la seconde passe aurait repondu `FROM-CACHE`.
+    1. `Social.MESSAGE_PAGE` est un `const val` : la mutation recopiait la **meme** valeur, la
+       classe compilee etait identique a l'octet pres, et Gradle a repondu `FROM-CACHE`.
+
+    2. Un cas a **deux** modules — `:core:model:test :core:domain:test` — ou la mutation ne
+       tombait que dans le **premier**. `--rerun` rejouait bien `:core:domain:test` mais servait
+       `:core:model:test FROM-CACHE`, donc la mutation n'etait **jamais** jouee, et le cas
+       passait pour concluant en ne tombant que sur les tests du module ou la mutation avait
+       ete lue a la compilation.
+
+    **Les deux drapeaux sont necessaires, et c'est mesure.** `--rerun` seul laisse le cache de
+    build servir la tache : `:core:model:test FROM-CACHE` avec `--rerun`. `--no-build-cache`
+    seul laisse le controle de fraicheur : `:core:model:test UP-TO-DATE`. Il faut
+    `--rerun-tasks --no-build-cache` pour obtenir `:core:model:test` sans suffixe, donc
+    reellement executee.
+
+    Pourquoi `--rerun-tasks` et non `--rerun`. `--rerun` ne s'applique qu'aux taches **nommees**
+    sur la ligne de commande ; `--rerun-tasks` couvre le graphe demande, ce qui est exactement
+    ce qu'un falsificateur veut — et ce qui reste borne, puisqu'on ne nomme que la tache de test
+    du ou des modules vises. Les dependances lointaines restent incrementales, ce qui garde le
+    harnais utilisable sur vingt-deux modules.
 
     La surete vis-a-vis de la concurrence vient de cette fonction elle-meme : elle impose
     `--max-workers=1` et `parallel=false`, donc aucun autre ouvrier Gradle ne lit l'arbre pendant
@@ -3255,7 +3267,16 @@ def lancer(tache: str) -> tuple[int, str]:
     env["PATH"] = os.path.join(JDK, "bin") + os.pathsep + env.get("PATH", "")
     resultat = subprocess.run(
         commande_gradle() + shlex.split(tache) + [
-            "--rerun",
+            "--rerun-tasks",
+            "--no-build-cache",
+            # **`--continue` est indispensable des qu'un cas nomme deux modules.** Sans lui,
+            # Gradle s'arrete au premier module dont les tests tombent : mesure faite sur le cas
+            # « signets : les cles de source », qui joue `:core:model:test :core:domain:test` —
+            # la sortie ne portait que `> Task :core:model:test FAILED`, et `:core:domain:test`
+            # n'a **jamais tourne**. Les tombes du second module etaient donc invisibles, et le
+            # cas accusait `BookmarksScreenRulesTest` de ne pas couvrir une regle qu'il couvre :
+            # joue seul sous la meme mutation, ce test tombe.
+            "--continue",
             "--max-workers=1",
             "-Dorg.gradle.parallel=false",
         ],
@@ -3510,7 +3531,31 @@ def jouer(cas: dict) -> str:
             print(f"    - {t}")
         return FAUX
 
-    print(f"  OK : {len(tombes)} test(s) tombe(s), dont {len(correspond)} attendu(s) :")
+    # Chaque attendu doit avoir **son** test tombe, et pas seulement « au moins un ».
+    #
+    # Pourquoi ce controle en plus du precedent. Un cas peut nommer plusieurs attendus quand la
+    # regle qu'il vise est tenue par plusieurs tests — c'est le cas de quatre cas ici. Avec un
+    # simple « au moins un », un cas a deux attendus dont un seul tomberait serait declare
+    # concluant : la moitie de la regle ne serait pas couverte, et personne ne le saurait. Le
+    # compte des attendus doit donc etre confronte, nom par nom.
+    #
+    # Les tests tombes **en plus** ne rendent pas le cas faux : une mutation peut legitimement
+    # faire tomber un test voisin qui partage l'invariant mute. Ce qui est exige, c'est que
+    # **aucun** attendu ne reste sans test tombe.
+    orphelins = [
+        a for a in cas["attendus"]
+        if not any(a in t for t in tombes)
+    ]
+    if orphelins:
+        print("  FAUX : des attendus n'ont aucun test tombe :")
+        for a in orphelins:
+            print(f"    - {a!r} : annonce comme devant tomber, et rien n'est tombe.")
+        print(f"  (tests tombes : {len(tombes)})")
+        for t in tombes:
+            print(f"    - {t}")
+        return FAUX
+
+    print(f"  OK : {len(tombes)} test(s) tombe(s), couvrant les {len(cas['attendus'])} attendu(s) :")
     for t in tombes:
         print(f"    - {t}")
     return CONCLUANT
