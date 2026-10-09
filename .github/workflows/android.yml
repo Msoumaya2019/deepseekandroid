@@ -11,9 +11,15 @@
 #      secondes et couvrent les règles qui coûtent cher quand elles sont fausses : fusion de
 #      compte, dates de séance, révisions, porte d'entrée. Un échec ici doit être connu avant
 #      qu'on ait dépensé cinq minutes de compilation Android ;
-#   2. **le lint ensuite.** Il attrape ce que les tests ne voient pas — permission manquante,
+#   2. **les compteurs des documents ensuite**, et c'est **parce que rien ne les lisait qu'ils
+#      ont dérivé** : mesuré, `README.md` annonçait 983 tests du domaine quand le banc en
+#      comptait 1056, `ARCHITECTURE.md` en annonçait 787, le partage des tests de `navigation`
+#      avait sept tests de retard, et le nombre de cas du falsificateur était resté à 272. Cette
+#      étape relit les rapports écrits par l'étape précédente — elle doit donc venir **après**
+#      les tests — et refuse si un compteur annoncé n'est pas celui du banc ;
+#   3. **le lint ensuite.** Il attrape ce que les tests ne voient pas — permission manquante,
 #      API trop récente pour le `minSdk`, ressource inutilisée ;
-#   3. **l'APK de test enfin.** C'est la preuve que l'application est réellement assemblable,
+#   4. **l'APK de test enfin.** C'est la preuve que l'application est réellement assemblable,
 #      et l'artefact est joint pour être installé sans reconstruire.
 #
 # Aucun secret n'est **nécessaire** : sans `SUPABASE_ANON_KEY`, l'application se compile en mode
@@ -89,6 +95,15 @@ jobs:
 
       - name: Tests unitaires
         run: ./gradlew test --console=plain --stacktrace
+
+      - name: Vérifier les compteurs des documents
+        # Les outils de `tools/` ne tournent pas tout seuls, et un compteur recopié **dérive** :
+        # il est cru. Cette étape lit les rapports XML écrits par l'étape précédente — d'où sa
+        # place, juste après les tests —, compare **chaque ligne** des deux tableaux au rapport du
+        # coureur, exige que la **somme** des lignes retombe sur le total annoncé, et contrôle le
+        # nombre de cas du falsificateur par son propre `--verifier`. Elle ne lance pas Gradle :
+        # elle ajoute quelques secondes, pas une compilation.
+        run: python3 tools/verifier-compteurs-documents.py
 
       - name: Lint
         run: ./gradlew lint --console=plain

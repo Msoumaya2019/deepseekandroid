@@ -4873,6 +4873,215 @@ CAS: list[dict] = [
         "tache": ":core:domain:test --tests *NotificationsTest*",
         "attendus": ["le rappel s'annule toujours et ne se planifie que si active et autorise"],
     },
+    # ---------------------------------------------------------- la connectivite (phase E)
+    #
+    # Portee de `src/services/connectivity.ts` (douze lignes) et du bandeau de `src/App.tsx`.
+    # Onze mutations, et trois d'entre elles visent une regle qu'on ne voit qu'en cherchant :
+    # la lecture STRICTE a `false` (donc `null` compte comme en ligne), la PRESERVATION de
+    # l'echeance par une lecture qui n'est pas un retour, et le REARMEMENT du minuteur quand
+    # un second retour arrive pendant que le bandeau du premier est encore affiche.
+    {
+        # `=== false` deux fois dans l'original. Ecrire `!= true` inverserait exactement le cas
+        # de la mesure absente : `NetInfo` rend `null` tant qu'il n'a pas mesure, et le client
+        # refuse de declarer hors ligne sur une mesure qu'il n'a pas. C'est le piege numero un
+        # du portage, et le seul qu'un relecteur introduirait en croyant simplifier.
+        "nom": "connectivite : une mesure absente vaut une mesure en ligne",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Connectivity.kt",
+        "avant": "    isConnected == false || isInternetReachable == false",
+        "apres": "    isConnected != true || isInternetReachable != true",
+        "tache": ":core:domain:test --tests *ConnectivityTest*",
+        "attendus": [
+            "une mesure absente compte comme en ligne",
+            "une mesure absente apres une panne annonce un retour",
+        ],
+    },
+    {
+        # Le retour n'est annonce que si l'on ETAIT hors ligne. Sans la memoire de la panne,
+        # un demarrage en ligne annoncerait « Connexion retablie » — une panne qui n'a pas eu
+        # lieu — et declencherait une synchronisation a chaque lecture.
+        "nom": "connectivite : le retour s'annonce sans panne prealable",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Connectivity.kt",
+        "avant": "    val retour = !down && etat.horsLigne",
+        "apres": "    val retour = !down",
+        "tache": ":core:domain:test --tests *ConnectivityTest*",
+        "attendus": [
+            "le premier demarrage en ligne n'annonce aucun retour",
+            "deux lectures en ligne d'affilee n'annoncent qu'un retour",
+        ],
+    },
+    {
+        # L'echeance n'est jamais armee : le bandeau de retour n'existe plus du tout.
+        "nom": "connectivite : le bandeau de retour n'est jamais arme",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Connectivity.kt",
+        "avant": "            retourJusquaMs = if (retour) maintenantMs + DUREE_RETOUR_MS else etat.retourJusquaMs,",
+        "apres": "            retourJusquaMs = etat.retourJusquaMs,",
+        "tache": ":core:domain:test --tests *ConnectivityTest*",
+        "attendus": [
+            "un retour demande la synchronisation une seule fois",
+            "le bandeau de retour dure trois secondes",
+        ],
+    },
+    {
+        # Le minuteur n'est pas REARME : il s'arme une fois et ne bouge plus. C'est le
+        # `clearTimeout(timer)` de l'original, et ce cas ne tombe que sur le second retour.
+        "nom": "connectivite : le minuteur du bandeau n'est pas rearme",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Connectivity.kt",
+        "avant": "            retourJusquaMs = if (retour) maintenantMs + DUREE_RETOUR_MS else etat.retourJusquaMs,",
+        "apres": "            retourJusquaMs = if (retour) etat.retourJusquaMs ?: maintenantMs + DUREE_RETOUR_MS else etat.retourJusquaMs,",
+        "tache": ":core:domain:test --tests *ConnectivityTest*",
+        "attendus": ["un second retour rearre l'echeance au lieu d'en laisser deux"],
+    },
+    {
+        # L'echeance n'est plus PRESERVEE : reperdre le reseau, ou simplement relire un etat en
+        # ligne, efface l'annonce du retour en cours. Dans l'original, seul le minuteur l'eteint.
+        "nom": "connectivite : une lecture quelconque efface l'annonce du retour",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Connectivity.kt",
+        "avant": "            retourJusquaMs = if (retour) maintenantMs + DUREE_RETOUR_MS else etat.retourJusquaMs,",
+        "apres": "            retourJusquaMs = if (retour) maintenantMs + DUREE_RETOUR_MS else null,",
+        "tache": ":core:domain:test --tests *ConnectivityTest*",
+        "attendus": [
+            "deux lectures en ligne d'affilee n'annoncent qu'un retour",
+            "reperdre le reseau n'efface pas l'annonce du retour",
+        ],
+    },
+    {
+        # La duree du bandeau : trois secondes dans l'original.
+        "nom": "connectivite : le bandeau de retour dure trente secondes",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Connectivity.kt",
+        "avant": "const val DUREE_RETOUR_MS: Long = 3_000",
+        "apres": "const val DUREE_RETOUR_MS: Long = 30_000",
+        "tache": ":core:domain:test --tests *ConnectivityTest*",
+        "attendus": [
+            "le bandeau de retour dure trois secondes",
+            "un second retour rearre l'echeance au lieu d'en laisser deux",
+        ],
+    },
+    {
+        # Le bandeau ne s'affiche plus que pour une panne : les trois secondes du retour
+        # deviennent invisibles, et la personne ne sait pas que la connexion est revenue.
+        "nom": "connectivite : le retour ne rend plus le bandeau visible",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Connectivity.kt",
+        "avant": "    etat.horsLigne || etat.retablieA(maintenantMs)",
+        "apres": "    etat.horsLigne",
+        "tache": ":core:domain:test --tests *ConnectivityTest*",
+        "attendus": ["le bandeau de retour est visible sans etre hors ligne"],
+    },
+    {
+        # Les deux textes sont echanges. Un appareil hors ligne annoncerait que la connexion
+        # est revenue.
+        "nom": "connectivite : les deux textes du bandeau sont echanges",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Connectivity.kt",
+        "avant": "    if (etat.horsLigne) TEXTE_HORS_LIGNE else TEXTE_RETABLIE",
+        "apres": "    if (etat.horsLigne) TEXTE_RETABLIE else TEXTE_HORS_LIGNE",
+        "tache": ":core:domain:test --tests *ConnectivityTest*",
+        "attendus": ["le premier demarrage hors ligne affiche le bandeau de panne"],
+    },
+    {
+        # La borne du minuteur : l'original eteint le bandeau a l'instant pile ou le delai est
+        # ecoule. Une borne inclusive le laisse affiche un instant de trop.
+        "nom": "connectivite : le bandeau s'eteint une milliseconde trop tard",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Connectivity.kt",
+        "avant": "        retourJusquaMs?.let { maintenantMs < it } == true",
+        "apres": "        retourJusquaMs?.let { maintenantMs <= it } == true",
+        "tache": ":core:domain:test --tests *ConnectivityTest*",
+        "attendus": ["le bandeau de retour dure trois secondes"],
+    },
+    {
+        # Le retour n'annonce plus rien : l'effet est retire, donc `flushPendingSync` n'est plus
+        # jamais appele, et une modification faite hors ligne ne part plus.
+        "nom": "connectivite : le retour ne demande plus la synchronisation",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Connectivity.kt",
+        "avant": "        effets = if (retour) listOf(ConnectivityEffect.DemanderSynchronisation) else emptyList(),",
+        "apres": "        effets = emptyList(),",
+        "tache": ":core:domain:test --tests *ConnectivityTest*",
+        "attendus": ["un retour demande la synchronisation une seule fois"],
+    },
+    {
+        # Le cadratin du texte hors ligne (U+2014) devient un tiret demi-cadratin (U+2013).
+        # Le texte reste lisible et faux, et rien d'autre ne le signalerait.
+        "nom": "connectivite : le cadratin du texte devient un tiret demi-cadratin",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Connectivity.kt",
+        "avant": r'    "Mode hors connexion \u2014 les modifications seront synchronisées automatiquement"',
+        "apres": r'    "Mode hors connexion \u2013 les modifications seront synchronisées automatiquement"',
+        "tache": ":core:domain:test --tests *ConnectivityTest*",
+        "attendus": ["le cadratin du texte hors ligne est typographique"],
+    },
+    # ------------------------------------------- la connectivite, cote branchement (phase E)
+    #
+    # Six mutations, et elles visent toutes des **branchements** : le bandeau monte dans la
+    # coquille, les regles du domaine reellement appelees par le composable, et la reprise du
+    # reseau qui pousse l'etat. Aucune ne casse quoi que ce soit — l'application compile, se
+    # lance, et se comporte exactement comme avant, sauf que le bandeau n'existe plus ou qu'une
+    # modification hors ligne ne part plus. C'est la famille de defauts que ce banc existe pour
+    # attraper, et c'est celle qu'aucun test de comportement ne peut voir.
+    {
+        # Le bandeau est retire de la coquille. Le composable reste, personne ne l'appelle.
+        "nom": "branchement : le bandeau est retire de la coquille",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/AppScaffold.kt",
+        "avant": "            ConnectivityBanner(\n                modifier = if (AppRoutes.isEdgeToEdge(route)) {\n                    Modifier.windowInsetsPadding(WindowInsets.statusBars)\n                } else {\n                    Modifier\n                },\n            )",
+        "apres": "",
+        "tache": ":navigation:testDebugUnitTest --tests *AppScaffoldConnectivityTest*",
+        "attendus": [
+            "le bandeau est monte dans la coquille, et pas seulement importe",
+            "le bandeau precede la barre superieure",
+        ],
+    },
+    {
+        # Le composable recalcule la visibilite au lieu de demander au domaine. La recette
+        # ci-dessous est celle qu'un relecteur ecrirait naturellement — et elle ignore l'horloge,
+        # donc le bandeau de retour ne s'eteindrait jamais.
+        "nom": "branchement : le bandeau recalcule sa visibilite sans l'horloge",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/ConnectivityBanner.kt",
+        "avant": "bandeauVisible(etat, maintenant)",
+        "apres": "(etat.horsLigne || etat.retourJusquaMs != null)",
+        "tache": ":navigation:testDebugUnitTest --tests *AppScaffoldConnectivityTest*",
+        "attendus": ["le bandeau demande sa visibilite au domaine, et lui donne l'horloge"],
+    },
+    {
+        # Le texte est ecrit en clair dans le composable au lieu d'etre emprunte au domaine. Les
+        # deux textes peuvent alors diverger — et le cadratin du texte hors ligne serait perdu
+        # sans que rien ne le dise.
+        "nom": "branchement : le bandeau ecrit son texte en clair",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/ConnectivityBanner.kt",
+        "avant": "texteDuBandeau(etat)",
+        "apres": "\"Mode hors connexion\"",
+        "tache": ":navigation:testDebugUnitTest --tests *AppScaffoldConnectivityTest*",
+        "attendus": ["le bandeau demande son texte au domaine au lieu de l'ecrire"],
+    },
+    {
+        # Le minuteur n'est plus clave sur l'echeance. C'est le `clearTimeout` de l'original qui
+        # disparait : un second retour de reseau laisserait le premier minuteur eteindre le
+        # bandeau du second avant l'heure.
+        "nom": "branchement : le minuteur du bandeau n'est plus clave sur l'echeance",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/ConnectivityBanner.kt",
+        "avant": "LaunchedEffect(etat.retourJusquaMs)",
+        "apres": "LaunchedEffect(Unit)",
+        "tache": ":navigation:testDebugUnitTest --tests *AppScaffoldConnectivityTest*",
+        "attendus": ["le minuteur du bandeau est reclave sur l'echeance"],
+    },
+    {
+        # La reprise du reseau ne fait plus rien. Le bandeau s'affiche, annonce le retour, et la
+        # modification faite hors ligne reste dans la file pour toujours.
+        "nom": "branchement : la reprise du reseau ne pousse plus rien",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/AppContainer.kt",
+        "avant": "            userState.sync()\n            quiz.refresh()",
+        "apres": "",
+        "tache": ":core:data:testDebugUnitTest --tests *AppContainerWiringTest*",
+        "attendus": [
+            "la reprise du reseau pousse l'etat et relit le Quiz",
+            "la reprise pousse l'etat avant de relire le Quiz",
+        ],
+    },
+    {
+        # Les deux appels sont inverses. Chacun est present, et l'ordre est faux : le Quiz
+        # relirait une progression calculee sur un etat que le serveur n'a pas encore recu.
+        "nom": "branchement : la reprise relit le Quiz avant de pousser l'etat",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/AppContainer.kt",
+        "avant": "            userState.sync()\n            quiz.refresh()",
+        "apres": "            quiz.refresh()\n            userState.sync()",
+        "tache": ":core:data:testDebugUnitTest --tests *AppContainerWiringTest*",
+        "attendus": ["la reprise pousse l'etat avant de relire le Quiz"],
+    },
 ]
 
 

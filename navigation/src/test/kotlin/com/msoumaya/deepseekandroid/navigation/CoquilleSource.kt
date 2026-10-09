@@ -3,27 +3,44 @@ package com.msoumaya.deepseekandroid.navigation
 import java.io.File
 
 /**
- * Le source de la coquille, lu depuis la tâche de test.
+ * Le source d'un fichier du module, lu depuis la tâche de test.
  *
  * Deux chemins sont essayés, et non un seul : la tâche `Test` de Gradle s'exécute dans le dossier
  * **du module**, alors qu'un contrôle joué à la main depuis la racine du dépôt part de là. C'est
  * ce qui permet de rejouer un contrôle seul, sans passer par Gradle.
  *
- * La lecture est **partagée** par les contrôles qui portent sur la coquille — l'entrée du lecteur,
- * celle du tableau de bord — au lieu d'être recopiée chez chacun. Deux copies d'un résolveur de
- * chemin finiraient par diverger : celle qu'on ne relit pas chercherait un fichier qui a bougé, et
- * son contrôle échouerait pour une raison qui n'a rien à voir avec ce qu'il surveille.
+ * La lecture est **partagée** par tous les contrôles de forme du module au lieu d'être recopiée
+ * chez chacun. Deux copies d'un résolveur de chemin finiraient par diverger : celle qu'on ne
+ * relit pas chercherait un fichier qui a bougé, et son contrôle échouerait pour une raison qui
+ * n'a rien à voir avec ce qu'il surveille.
  */
-internal fun sourceDeLaCoquille(): String {
-    val relatif = "src/main/kotlin/com/msoumaya/deepseekandroid/navigation/AppScaffold.kt"
-    val candidats = listOf(File(relatif), File("navigation/$relatif"))
+internal fun sourceDe(cheminRelatif: String): String {
+    val candidats = listOf(File(cheminRelatif), File("navigation/$cheminRelatif"))
     val fichier = candidats.firstOrNull { it.isFile }
         ?: error(
-            "AppScaffold.kt introuvable. Chemins essayés : " +
+            "$cheminRelatif introuvable. Chemins essayés : " +
                 candidats.joinToString { it.absolutePath },
         )
     return fichier.readText()
 }
+
+/** Le source de la coquille. */
+internal fun sourceDeLaCoquille(): String = sourceDe(CHEMIN_COQUILLE)
+
+/**
+ * Le source du bandeau de connectivité.
+ *
+ * Il a son propre lecteur, et non une copie du résolveur : le bandeau vit dans le même module que
+ * la coquille, donc les deux chemins essayés sont les mêmes, et une seconde copie de cette règle
+ * finirait par en diverger.
+ */
+internal fun sourceDuBandeau(): String = sourceDe(CHEMIN_BANDEAU)
+
+private const val CHEMIN_COQUILLE =
+    "src/main/kotlin/com/msoumaya/deepseekandroid/navigation/AppScaffold.kt"
+
+private const val CHEMIN_BANDEAU =
+    "src/main/kotlin/com/msoumaya/deepseekandroid/navigation/ConnectivityBanner.kt"
 
 /**
  * Le bloc qui **suit** [marqueur], borné au prochain `composable(` de la pile.

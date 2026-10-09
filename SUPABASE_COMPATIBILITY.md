@@ -127,7 +127,8 @@ modifiées :
 
 | Élément | État | Remarque |
 |---|---|---|
-| `user_state` (lecture, écriture, fusion) | **fait et éprouvé** | 219 tests sur la couche de données |
+| `user_state` (lecture, écriture, fusion) | **fait et éprouvé** | 221 tests sur la couche de données |
+| Connectivité — décision et observation | **fait et éprouvé** | la règle de lecture, la transition, la fenêtre du bandeau et ses deux textes sont portées **sans appareil** (`core/domain/Connectivity.kt`) ; l'observation lit `ConnectivityManager` et **relit** au lieu de déclarer la panne sur `onLost`. Le retour du réseau est **le seul** des quatre moments du Quiz d'origine qui passe ici : il pousse l'état **puis** relit le Quiz, ce qui vide la file d'attente. Les trois autres moments — ouverture, premier plan, toutes les 30 s — appartiennent à la tranche du Quiz |
 | Authentification (connexion, inscription, déconnexion) | **code écrit**, éprouvé contre le serveur pour l'inscription | la clé `publisable` est en place ; reste à exercer une **connexion** avec un compte réel |
 | Réinitialisation du mot de passe par courriel | **code écrit** | `resetPasswordForEmail`, sans `redirectUrl` tant que le lien profond n'existe pas. Le message affiché reste neutre : le serveur répond « succès » même pour une adresse inconnue, pour empêcher l'énumération des comptes |
 | Renvoi du courriel de confirmation | **code écrit** | `resendEmail(OtpType.Email.SIGNUP, …)`, même réserve sur la redirection |

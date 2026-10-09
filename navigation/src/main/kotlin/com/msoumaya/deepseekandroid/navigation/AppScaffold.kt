@@ -102,6 +102,22 @@ fun AppScaffold(
                     },
                 ),
         ) {
+            // Le bandeau de connectivité est le **premier** enfant de la colonne, comme dans
+            // l'original où il précède la barre supérieure et tout écran. Il ne dessine rien
+            // tant que le réseau va bien, et n'occupe donc aucune place le reste du temps.
+            //
+            // Il porte lui-même la marge de la barre d'état sur les écrans qui vont jusqu'aux
+            // bords : la colonne n'en pose pas pour eux, et sans cette marge le bandeau
+            // s'afficherait **sous** l'heure et les icônes du système — illisible exactement
+            // quand il a quelque chose à dire.
+            ConnectivityBanner(
+                modifier = if (AppRoutes.isEdgeToEdge(route)) {
+                    Modifier.windowInsetsPadding(WindowInsets.statusBars)
+                } else {
+                    Modifier
+                },
+            )
+
             if (!AppRoutes.isFullScreen(route)) {
                 AppTopBar(
                     title = utilityTitle ?: DEFAULT_TITLE,

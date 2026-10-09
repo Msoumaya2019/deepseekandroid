@@ -76,5 +76,15 @@ class DeepSeekApplication : Application() {
         // test. `:app` fournit toujours un `ExoAudioOutput`, donc les deux sont non nuls ici ;
         // mais l'expression dit ce dont elle depend, et ne suppose rien.
         container.playback?.player?.let { PlaybackBridge.publish(it) }
+
+        // L'observation du reseau demarre **ici**, et non dans une activite : le bandeau doit
+        // dire la verite des le premier ecran, y compris celui de la porte d'entree, et une
+        // observation liee a une activite s'arreterait a chaque rotation pour ne reprendre
+        // qu'apres un rendu — c'est-a-dire apres avoir affiche un etat peut-etre faux.
+        //
+        // L'inscription est silencieuse en cas d'echec (voir `ConnectivityObserver.start`) :
+        // un appareil qui refuse l'inscription n'affiche pas de bandeau, et c'est le bon defaut
+        // — annoncer une panne qu'on n'a pas mesuree serait pire que de ne rien annoncer.
+        container.connectivity.start()
     }
 }

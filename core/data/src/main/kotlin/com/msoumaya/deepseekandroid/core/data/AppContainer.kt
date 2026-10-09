@@ -39,6 +39,7 @@ import com.msoumaya.deepseekandroid.core.data.repository.RecitationRepository
 import com.msoumaya.deepseekandroid.core.data.repository.SocialRepository
 import com.msoumaya.deepseekandroid.core.data.repository.UserRepository
 import com.msoumaya.deepseekandroid.core.data.security.SecretVault
+import com.msoumaya.deepseekandroid.core.data.system.ConnectivityObserver
 import com.msoumaya.deepseekandroid.core.domain.Dates
 import com.msoumaya.deepseekandroid.core.domain.Quran
 import com.msoumaya.deepseekandroid.core.domain.QuranArchive
@@ -265,6 +266,38 @@ class AppContainer(
             nowIso = { Dates.nowIso() },
         ),
         scope = scope,
+    )
+
+    /**
+     * L'état du réseau, et le bandeau qui le montre.
+     *
+     * Il est **observé** et non interrogé à la demande : le bandeau doit s'allumer et s'éteindre
+     * tout seul, et un écran qui poserait la question au moment de se dessiner ne verrait jamais
+     * la coupure survenue pendant qu'il est ouvert.
+     *
+     * **Ce que le retour du réseau déclenche.** L'original appelle `flushPendingSync()` à cet
+     * instant — la file des modifications d'état —, et son propre observateur de Quiz relit à ce
+     * moment-là. Les deux sont donc appelés ici, dans cet ordre : l'état d'abord, parce qu'une
+     * modification faite hors ligne est ce qui risque de se perdre, et parce qu'une relecture du
+     * Quiz sur un état non poussé montrerait une progression que le serveur n'a pas encore.
+     *
+     * **Ce qui reste à faire, et qui est nommé pour ne pas être cru fait.** L'observateur du Quiz
+     * de l'original se déclenche à **quatre** moments : à l'ouverture, au retour du réseau, au
+     * passage au premier plan, et toutes les trente secondes. Seul le retour du réseau passe par
+     * ici ; les trois autres appartiennent à la tranche du Quiz.
+     *
+     * **Aucun effet si le projet Supabase n'est pas configuré.** `sync` rend alors
+     * `NotConfigured` sans qu'aucune requête ne parte, et `refresh` fait de même : le bandeau
+     * annonce une coupure de réseau qui est réelle, et la reprise ne tente rien qui ne puisse
+     * aboutir.
+     */
+    val connectivity: ConnectivityObserver = ConnectivityObserver(
+        context = appContext,
+        scope = scope,
+        onRestore = {
+            userState.sync()
+            quiz.refresh()
+        },
     )
 
     /**
