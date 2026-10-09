@@ -5299,6 +5299,23 @@ CAS: list[dict] = [
         "tache": ":core:data:testDebugUnitTest --tests *AppContainerWiringTest*",
         "attendus": ["le conteneur donne a la boite la lecture du reseau du bandeau"],
     },
+    {
+        # Le compteur d'operations en vol du Quiz devient menteur : il dit toujours « rien en
+        # vol ». C'est la regression exacte qui a fait tomber l'integration continue, remise dans
+        # le harnais : `settle` ne peut plus distinguer « le depot travaille » de « le depot a
+        # fini », rend la main au milieu du rafraichissement, et le test lit l'instantane du
+        # disque avant la fusion.
+        #
+        # Le cas est **deterministe**, et c'est ce qui le rend utile : la porte de la doublure
+        # maintient le rafraichissement en vol, donc l'attente ne peut pas « tomber juste » par
+        # chance comme elle le faisait sur une machine rapide.
+        "nom": "quiz : le depot ne se dit plus en vol",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/QuizRepository.kt",
+        "avant": "    val enTravail: Boolean get() = enVol.get() > 0",
+        "apres": "    val enTravail: Boolean get() = false",
+        "tache": ":core:data:testDebugUnitTest --tests *QuizRepositoryTest*",
+        "attendus": ["l'attente ne rend pas la main avant la fusion"],
+    },
 ]
 
 

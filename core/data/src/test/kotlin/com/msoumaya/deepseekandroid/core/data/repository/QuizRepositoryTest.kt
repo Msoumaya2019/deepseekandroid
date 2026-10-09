@@ -77,9 +77,11 @@ import kotlin.test.assertTrue
  * rafraîchissement, et deux d'entre elles passaient quand même — celles qui demandent de
  * constater une absence. C'est la bonne manière d'apprendre que le harnais mentait.
  *
- * On attend donc que l'état publié **cesse de bouger**, avec un délai de garde qui échoue en le
- * disant. Un `Thread.sleep` fixe aurait rendu le harnais instable au lieu de le rendre juste, et
- * une attente sans condition n'aurait pas su dire si le travail avait abouti.
+ * On attend donc que le dépôt n'ait plus rien **en vol** ([QuizRepository.enTravail]), avec un
+ * délai de garde qui échoue en le disant. Un `Thread.sleep` fixe aurait rendu le harnais instable
+ * au lieu de le rendre juste, et une attente sans condition n'aurait pas su dire si le travail
+ * avait abouti. **Sonder une accalmie de l'état ne suffit pas**, et c'est la seconde leçon de ce
+ * fichier : voir [settle].
  */
 class QuizRepositoryTest {
 
@@ -134,29 +136,38 @@ class QuizRepositoryTest {
     )
 
     /**
-     * Laisse le travail de fond aboutir, en attendant que l'état publié cesse de bouger.
+     * Laisse le travail de fond aboutir, en attendant que le dépôt n'ait plus rien **en vol**.
      *
-     * Les trois lectures stables qui terminent l'attente ne sont pas une précaution : entre deux
-     * étapes du rafraîchissement — la publication du disque, la purge de la file, la lecture, la
-     * fusion — l'état ne bouge pas pendant l'aller-retour réseau, et s'arrêter à la première
-     * accalmie reviendrait à lire l'état du milieu.
+     * **On sonde le dépôt, et non une accalmie de l'état**, et c'est une leçon d'intégration
+     * continue. La version précédente guettait trois lectures stables de l'état publié : elle
+     * passait sur une machine rapide, et elle est tombée en CI sur « la fusion garde une réponse
+     * locale que le serveur ne connaît pas », qui attendait `[jour, 2026-10-05]` et lisait
+     * `[jour]`.
+     *
+     * La raison est dans le dépôt lui-même : il publie l'instantané du **disque** avant d'appeler
+     * le serveur — c'est délibéré, un appareil hors connexion doit afficher le quiz quand même —,
+     * et pendant l'aller-retour **rien ne bouge plus**. Trois lectures stables pouvaient donc
+     * toutes tomber au milieu du travail, et l'attente rendait la main avant la fusion. C'est le
+     * même piège que `RecitationRepositoryTest`, résolu de la même façon :
+     * [QuizRepository.enTravail].
+     *
+     * Deux tours sans rien en vol, et non un seul : le rafraîchissement recommence tant que la
+     * file n'est pas vide — la purge précède la lecture, et la boucle repart —, donc un tour calme
+     * peut être un tour **entre** deux travaux. Le sommeil n'est plus l'attente, il n'en est que
+     * le pas d'échantillonnage.
      */
     private fun TestScope.settle(repository: QuizRepository, millis: Long = 1_000) {
         advanceTimeBy(millis)
-        runCurrent()
 
         val limite = System.nanoTime() + DELAI_DE_GARDE_NANOS
-        var vue: QuizState? = null
-        var stables = 0
-        while (stables < 3 && System.nanoTime() < limite) {
+        var tours = 0
+        while (tours < 2 && System.nanoTime() < limite) {
             runCurrent()
-            val courante = repository.state.value
-            stables = if (courante == vue) stables + 1 else 0
-            vue = courante
+            tours = if (repository.enTravail) 0 else tours + 1
             Thread.sleep(2)
         }
 
-        if (stables < 3) {
+        if (tours < 2) {
             error(
                 "le travail de fond n'a pas abouti dans le delai : le harnais ne peut pas dire " +
                     "si le depot est fautif ou si l'attente est trop courte",
@@ -525,6 +536,80 @@ class QuizRepositoryTest {
         premier.join()
         assertFalse(repository.state.value.busy)
         assertEquals(1, source.sentNotifications.size, "un seul appel doit etre parti")
+    }
+
+    // ------------------------------------------------------------------
+    // L'attente du harnais
+    // ------------------------------------------------------------------
+
+    @Test
+    fun `l'attente ne rend pas la main avant la fusion, et le depot se dit en vol`() = runTest {
+        // Ce test est ne d'un echec d'integration continue, et il tient les deux choses qui le
+        // rendent impossible.
+        //
+        // La version precedente de [settle] guettait une **accalmie de l'etat** — trois lectures
+        // stables. Elle passait sur une machine rapide et tombait en CI, parce que l'etat ne bouge
+        // plus pendant l'aller-retour reseau : l'instantane du **disque** est deja publie, et
+        // c'est delibere — un appareil hors connexion doit afficher le quiz quand meme. L'attente
+        // rendait donc la main avant la fusion, et le test lisait `[jour]` au lieu de
+        // `[jour, 2026-10-05]`.
+        //
+        // La porte rend le cas **deterministe** : tant qu'elle n'est pas franchie, le
+        // rafraichissement est en vol et l'etat publie est stable — les deux conditions du bug,
+        // reunies sans dependre d'une horloge.
+        val porte = CompletableDeferred<Unit>()
+        val source = FakeQuizSource().apply {
+            gate = porte
+            snapshotValue = QuizSnapshot(
+                day = jour,
+                responses = listOf(
+                    DailyResponse(
+                        "q0",
+                        "2026-10-05",
+                        "b",
+                        "2026-10-05T09:00:00Z",
+                        question("q0", "2026-10-05"),
+                    ),
+                ),
+            )
+        }
+        nouveauCache().accountFor(moi).update {
+            it.copy(
+                responses = listOf(
+                    DailyResponse("q1", jour, "a", "2026-10-06T09:00:00Z", question(), pending = true),
+                ),
+            )
+        }
+        val repository = quiz(source, FakeOwners(moi))
+
+        // On sonde le **depot** pour savoir que le serveur a ete appele : la lecture du disque
+        // passe par un vrai fil, donc `runCurrent()` seul ne suffit pas a faire avancer le
+        // rafraichissement jusqu'a l'appel.
+        val limite = System.nanoTime() + DELAI_DE_GARDE_NANOS
+        while (source.snapshotCalls == 0 && System.nanoTime() < limite) {
+            runCurrent()
+            Thread.sleep(2)
+        }
+        assertEquals(1, source.snapshotCalls, "le serveur doit avoir ete appele")
+        assertTrue(
+            repository.enTravail,
+            "le depot doit se declarer en vol tant que le serveur n'a pas repondu",
+        )
+        assertEquals(
+            listOf(jour),
+            repository.state.value.snapshot?.responses.orEmpty().map { it.day },
+            "l'instantane du disque est publie avant la fusion, et c'est delibere",
+        )
+
+        porte.complete(Unit)
+        settle(repository)
+
+        assertFalse(repository.enTravail, "le rafraichissement est fini : plus rien en vol")
+        assertEquals(
+            listOf(jour, "2026-10-05"),
+            repository.state.value.snapshot?.responses.orEmpty().map { it.day },
+            "l'attente doit avoir laisse la fusion aboutir",
+        )
     }
 
     private companion object {

@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.util.concurrent.atomic.AtomicInteger
 
 // ---------------------------------------------------------------------------
 // Dépôt « Quiz »
@@ -132,6 +133,55 @@ class QuizRepository(
      */
     private val lock = Mutex()
 
+    /**
+     * Nombre de rafraîchissements **en vol**.
+     *
+     * Ce compteur existe à cause d'un échec d'intégration continue qu'il a fallu expliquer, et non
+     * contourner — le même que celui de [RecitationRepository.enTravail], pour la même raison.
+     * **L'état publié ne dit pas qu'un travail est en cours.** Le rafraîchissement publie
+     * l'instantané du **disque** avant d'appeler le serveur, et c'est délibéré : un appareil sans
+     * connexion doit afficher le quiz quand même. Mais entre cette publication et la fusion, rien
+     * ne change plus dans l'état — l'aller-retour réseau ne se voit pas —, donc « l'état ne bouge
+     * plus » se produit aussi **au milieu** du travail. Une attente fondée là-dessus rend la main
+     * avant la fusion, et le test qui suit lit l'instantané local seul.
+     *
+     * Ce que ça coûtait, mesuré : `QuizRepositoryTest` est tombé en intégration continue sur « la
+     * fusion garde une réponse locale que le serveur ne connaît pas », qui attendait
+     * `[jour, 2026-10-05]` et lisait `[jour]` — la publication locale, lue avant la fusion. Le
+     * test passait sur une machine rapide, où l'accalmie de trois lectures durait plus longtemps
+     * que l'aller-retour.
+     *
+     * Le compte est incrémenté **avant la première suspension** de l'opération et décrémenté après
+     * la dernière, dans la coroutine appelante : il ne peut donc pas valoir zéro pendant qu'un
+     * travail vit encore, sur quelque fil que ce soit. Il enveloppe aussi l'attente du verrou —
+     * un rafraîchissement qui attend son tour est un travail en vol, et le taire rendrait
+     * l'attente menteuse.
+     *
+     * Un compteur atomique et non un `Int` : deux rafraîchissements peuvent se chevaucher — le
+     * changement de compte et la fin d'un geste —, et une incrémentation non atomique en perdrait
+     * un.
+     */
+    private val enVol = AtomicInteger()
+
+    /**
+     * Vrai si un rafraîchissement est en cours.
+     *
+     * Publique parce que l'attente d'un test ne peut pas se fonder sur l'état publié (voir
+     * [enVol]). Aucun écran ne s'en sert : la coquille affiche `loading`, qui est une autre
+     * question — « le premier instantané est-il arrivé ? » —, et non « un travail tourne-t-il ? ».
+     */
+    val enTravail: Boolean get() = enVol.get() > 0
+
+    /** Compte une opération, de sa première à sa dernière suspension. */
+    private suspend fun <T> compte(bloc: suspend () -> T): T {
+        enVol.incrementAndGet()
+        try {
+            return bloc()
+        } finally {
+            enVol.decrementAndGet()
+        }
+    }
+
     private val _state = MutableStateFlow(QuizState())
 
     /** État affichable. */
@@ -148,9 +198,20 @@ class QuizRepository(
     /**
      * Relit l'instantané : file d'abord, serveur ensuite, fusion en dernier.
      *
+     * Le corps est dans [refreshVerrouille] pour que le compteur [enVol] enveloppe **aussi**
+     * l'attente du verrou : un rafraîchissement qui attend son tour est un travail en vol, et le
+     * taire rendrait [enTravail] menteur.
+     *
      * @return vrai si la lecture a abouti.
      */
-    suspend fun refresh(): Boolean = lock.withLock {
+    suspend fun refresh(): Boolean = compte { refreshVerrouille() }
+
+    /**
+     * Le rafraîchissement lui-même, sérialisé par [lock].
+     *
+     * @return vrai si la lecture a abouti.
+     */
+    private suspend fun refreshVerrouille(): Boolean = lock.withLock {
         val api = source
         val owner = session.currentOwner()
         if (api == null || owner == null) {
