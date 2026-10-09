@@ -110,6 +110,16 @@ chaîne à analyser, donc plus d'analyse qui puisse échouer, et un document ill
 côté** par le magasin au lieu d'être perdu — c'est ce qui remplace la garantie qu'un `JSON.parse`
 réussi donnait.
 
+**Un brouillon dans le cache, qui n'existe que le temps du geste.** Le sélecteur d'images d'Android
+ne rend pas un fichier mais une adresse `content://` — une autorisation de lecture, révocable, dont
+la taille peut être inconnue. Le portage lit donc le flux, le **copie** sous
+`cacheDir/problem-report-pick/<uuid>.<extension>`, puis mesure **la copie** : c'est la taille sur le
+disque qui décide, comme au moment de l'envoi. Ce brouillon est jetable — le système peut l'effacer,
+et un refus de format ou de taille le supprime aussitôt —, et il n'est **pas** retiré après un envoi
+réussi : c'est un cache, Android le récupère quand la place manque, et rien ne s'y rattache. La copie
+qui compte est celle que le dépôt range ensuite sous `filesDir/state/problem-reports/`, par un
+`copyTo` et non un déplacement, et c'est elle que porte `QueuedProblemReport.localPath`.
+
 ---
 
 ## Les clés AsyncStorage

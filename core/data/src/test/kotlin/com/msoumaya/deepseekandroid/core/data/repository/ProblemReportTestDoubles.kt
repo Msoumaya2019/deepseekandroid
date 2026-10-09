@@ -2,6 +2,7 @@ package com.msoumaya.deepseekandroid.core.data.repository
 
 import com.msoumaya.deepseekandroid.core.data.remote.ProblemReportRow
 import com.msoumaya.deepseekandroid.core.data.remote.ProblemReportSender
+import kotlinx.coroutines.CompletableDeferred
 
 // ---------------------------------------------------------------------------
 // Doublure des tests du dépôt « Signalements »
@@ -46,6 +47,16 @@ internal class FakeProblemReportSender : ProblemReportSender {
     /** Refus de l'écriture de la ligne, ou `null`. */
     var refuseInsert: Throwable? = null
 
+    /**
+     * Une porte qui retient l'écriture de la ligne, ou `null`.
+     *
+     * Elle existe pour observer un envoi **en vol** sans dépendre du temps : un test qui veut
+     * vérifier ce qui se passe pendant qu'un signalement part doit pouvoir tenir la passe ouverte,
+     * et une attente en millisecondes ferait un test qui passe sur une machine rapide et échoue
+     * ailleurs — c'est exactement le défaut qui a fait échouer l'intégration continue du Quiz.
+     */
+    var porte: CompletableDeferred<Unit>? = null
+
     /** Refus de la **lecture** de confirmation, ou `null`. Ce n'est pas la même chose que `false`. */
     var refuseConfirm: Throwable? = null
 
@@ -60,6 +71,7 @@ internal class FakeProblemReportSender : ProblemReportSender {
 
     override suspend fun insert(row: ProblemReportRow) {
         calls += "ligne"
+        porte?.await()
         refuseInsert?.let { throw it }
         rows += row
     }

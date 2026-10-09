@@ -218,6 +218,12 @@ private fun HomeContent(
                     onAction = onOpenProgress,
                 )
                 WeekCard(week = state.week)
+
+                // Le signalement de problème, **en dernier**, et c'est sa place dans l'original
+                // (`MainScreens.tsx`, `<ProblemReportCard/>` après le bandeau de la semaine). Une
+                // porte vers l'administrateur n'a pas à passer devant le Coran — ni devant le
+                // programme du jour, ni devant la progression.
+                ProblemReportCard()
             }
         }
     }

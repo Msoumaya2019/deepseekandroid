@@ -12,10 +12,10 @@ package com.msoumaya.deepseekandroid.core.domain
  * (`'`) nulle part. La distinction n'est pas cosmétique : c'est le caractère que l'original
  * affiche, et le remplacer changerait le texte rendu. Un test le fige.
  *
- * **Ce fichier grandira avec ses tranches.** Il ne porte ici que les mots de la **file** — ceux
- * qu'un envoi fait apparaître, et ceux qu'une panne d'envoi fait dire. Les mots de l'écran de
- * signalement — le titre de la carte, les cinq natures, le compteur, les deux libellés de la
- * capture — viendront avec lui, comme `RecitationText` a reçu les siens tranche par tranche.
+ * **Ce fichier grandit avec ses tranches.** Il porte les mots de la **file** — ceux qu'un envoi
+ * fait apparaître, et ceux qu'une panne d'envoi fait dire —, et ceux de l'**écran** — le titre de
+ * la carte, l'invite du champ, le compteur, les deux libellés de la capture —, arrivés avec lui.
+ * C'est le mouvement qu'a suivi `RecitationText`.
  */
 object ProblemReportText {
 
@@ -134,4 +134,99 @@ object ProblemReportText {
         ProblemReportOutcome.SENT -> SENT
         ProblemReportOutcome.QUEUED -> QUEUED
     }
+
+    // -------------------------------------------------------------------------------------------
+    // Les mots de l'écran de signalement
+    // -------------------------------------------------------------------------------------------
+    // Portés depuis `src/ui/ProblemReport.tsx`. Ils sont ici, et non dans l'écran, pour la même
+    // raison que ceux de la file : le titre de la carte est aussi l'étiquette que lit un lecteur
+    // d'écran, et deux écrans — l'accueil et, un jour, un écran d'administration — pourraient
+    // écrire les mêmes phrases.
+    // -------------------------------------------------------------------------------------------
+
+    /** Titre de la carte de l'accueil. **C'est aussi l'étiquette d'accessibilité de son geste.** */
+    const val CARD_TITLE: String = "Un problème avec l’application ?"
+
+    /** Sous-titre de la carte : ce que le geste permet de faire. */
+    const val CARD_SUBTITLE: String =
+        "Signaler une erreur, un bug ou un dysfonctionnement à l’administrateur"
+
+    /** Titre de la feuille ouverte. */
+    const val SHEET_TITLE: String = "Signaler un problème"
+
+    /** Sous-titre de la feuille ouverte. */
+    const val SHEET_SUBTITLE: String = "Envoyez un signalement à l’administrateur"
+
+    /**
+     * Le bouton qui referme.
+     *
+     * **Une seule phrase pour trois gestes** : le bouton de la barre de titre, celui de l'écran de
+     * confirmation, et l'étiquette du bouton de fermeture. C'est ce que fait l'original, qui écrit
+     * `Fermer` aux trois endroits — et les trois gestes font bien la même chose.
+     */
+    const val CLOSE: String = "Fermer"
+
+    /**
+     * L'étiquette du **fond** de la feuille, qui la referme aussi.
+     *
+     * Elle est distincte de [CLOSE] parce que l'original l'écrit différemment
+     * (`accessibilityLabel="Fermer le signalement"`) : un lecteur d'écran annonce ainsi ce qu'on
+     * ferme, au lieu d'un « Fermer » qui pourrait désigner le clavier ouvert par-dessus.
+     */
+    const val DISMISS: String = "Fermer le signalement"
+
+    /** Intertitre du groupe des cinq natures. */
+    const val TYPE_LABEL: String = "Type de problème"
+
+    /** Intertitre du champ de description. */
+    const val DESCRIPTION_LABEL: String = "Décrivez le problème"
+
+    /**
+     * L'invite du champ de description.
+     *
+     * Elle **énumère ce qui est utile** — la description, les étapes de reproduction —, et elle
+     * finit par un caractère de suspension (`…`), comme l'original.
+     */
+    const val DESCRIPTION_PLACEHOLDER: String =
+        "Décrivez le problème rencontré, les étapes pour le reproduire, ou toute information utile…"
+
+    /**
+     * Le compteur de caractères, sous le champ.
+     *
+     * Il compte le texte **brut**, et non rogné : c'est `{description.length}/500` de l'original.
+     * La différence avec la règle d'envoi n'est pas une incohérence, elle est visible — on compte
+     * ce qu'on a tapé, on refuse sur ce qui reste une fois les bords enlevés.
+     *
+     * La borne vient de [ProblemReports.DESCRIPTION_MAX], et non d'un `500` recopié : la phrase
+     * [DESCRIPTION_INVALID] et le `maxLength` du champ disent le même nombre, et trois copies
+     * finiraient par diverger.
+     */
+    fun counter(length: Int): String = "$length/${ProblemReports.DESCRIPTION_MAX}"
+
+    /** Titre de la ligne de capture quand il n'y en a pas. */
+    const val ATTACH_ADD: String = "Ajouter une capture"
+
+    /** Titre de la ligne de capture quand il y en a une. */
+    const val ATTACH_ADDED: String = "Capture ajoutée"
+
+    /** Sous-titre de la ligne de capture quand il n'y en a pas. */
+    const val ATTACH_HINT: String = "Photo ou capture d’écran (optionnel)"
+
+    /** Sous-titre de la ligne de capture quand il y en a une. */
+    const val ATTACH_REPLACE: String = "Toucher pour la remplacer"
+
+    /** Le bouton qui détache la capture choisie. */
+    const val ATTACH_REMOVE: String = "Retirer la capture"
+
+    /** Le bouton d'envoi. */
+    const val SEND: String = "Envoyer à l’administrateur"
+
+    /**
+     * Le bouton d'envoi pendant l'envoi.
+     *
+     * Il dit ce qui se passe **et** empêche le second appui : le bouton est désactivé, et son
+     * libellé l'explique. Un bouton désactivé qui garderait « Envoyer » laisserait croire à une
+     * panne plutôt qu'à un travail en cours.
+     */
+    const val SENDING: String = "Envoi…"
 }

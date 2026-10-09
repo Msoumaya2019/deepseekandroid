@@ -360,4 +360,76 @@ class ProblemReportsTest {
         // refus qui en exige 600.
         assertTrue(ProblemReportText.DESCRIPTION_INVALID.contains(ProblemReports.DESCRIPTION_MAX.toString()))
     }
+
+    // ---------------------------------------------------------------- les mots de l'écran
+
+    @Test
+    fun `les mots de l'ecran sont ceux de l'original`() {
+        // Mesurés dans `src/ui/ProblemReport.tsx`, chaîne par chaîne. Le titre porte une **espace
+        // avant le point d'interrogation** — c'est la typographie française, et l'original
+        // l'écrit ainsi ; la retirer produirait un texte presque juste, et rien ne le signalerait.
+        assertEquals("Un problème avec l’application ?", ProblemReportText.CARD_TITLE)
+        assertEquals(
+            "Signaler une erreur, un bug ou un dysfonctionnement à l’administrateur",
+            ProblemReportText.CARD_SUBTITLE,
+        )
+        assertEquals("Signaler un problème", ProblemReportText.SHEET_TITLE)
+        assertEquals("Envoyez un signalement à l’administrateur", ProblemReportText.SHEET_SUBTITLE)
+        assertEquals("Fermer", ProblemReportText.CLOSE)
+        assertEquals("Fermer le signalement", ProblemReportText.DISMISS)
+        assertEquals("Type de problème", ProblemReportText.TYPE_LABEL)
+        assertEquals("Décrivez le problème", ProblemReportText.DESCRIPTION_LABEL)
+        assertEquals(
+            "Décrivez le problème rencontré, les étapes pour le reproduire, ou toute " +
+                "information utile…",
+            ProblemReportText.DESCRIPTION_PLACEHOLDER,
+        )
+        assertEquals("Ajouter une capture", ProblemReportText.ATTACH_ADD)
+        assertEquals("Capture ajoutée", ProblemReportText.ATTACH_ADDED)
+        assertEquals("Photo ou capture d’écran (optionnel)", ProblemReportText.ATTACH_HINT)
+        assertEquals("Toucher pour la remplacer", ProblemReportText.ATTACH_REPLACE)
+        assertEquals("Retirer la capture", ProblemReportText.ATTACH_REMOVE)
+        assertEquals("Envoyer à l’administrateur", ProblemReportText.SEND)
+        assertEquals("Envoi…", ProblemReportText.SENDING)
+    }
+
+    @Test
+    fun `les apostrophes de l'ecran sont typographiques`() {
+        // Les quatre mots de l'écran qui en portent une, et c'est le même contrôle que pour
+        // l'accusé de réception : le caractère est U+2019 dans l'original, et une apostrophe
+        // droite produirait un texte qui a l'air juste.
+        for (mot in listOf(
+            ProblemReportText.CARD_TITLE,
+            ProblemReportText.CARD_SUBTITLE,
+            ProblemReportText.SHEET_SUBTITLE,
+            ProblemReportText.ATTACH_HINT,
+            ProblemReportText.SEND,
+        )) {
+            assertTrue(mot.contains('\u2019'), "apostrophe typographique absente de « $mot »")
+            assertFalse(mot.contains('\''), "apostrophe droite dans « $mot »")
+        }
+    }
+
+    @Test
+    fun `le compteur porte la borne du domaine`() {
+        // Le compteur, le `maxLength` du champ et la phrase de refus disent le même nombre. Un
+        // `500` écrit ici en plus ferait trois copies, et trois copies divergent.
+        assertEquals("0/500", ProblemReportText.counter(0))
+        assertEquals(
+            "500/${ProblemReports.DESCRIPTION_MAX}",
+            ProblemReportText.counter(ProblemReports.DESCRIPTION_MAX),
+        )
+        assertEquals(
+            "12/${ProblemReports.DESCRIPTION_MAX}",
+            ProblemReportText.counter(12),
+        )
+    }
+
+    @Test
+    fun `les deux libelles d'envoi sont distincts`() {
+        // Le bouton change de texte pendant l'envoi, et c'est ce qui explique un bouton grisé. Les
+        // confondre afficherait « Envoyer » sur un bouton inerte, c'est-à-dire une panne.
+        assertTrue(ProblemReportText.SEND != ProblemReportText.SENDING)
+        assertTrue(ProblemReportText.CLOSE != ProblemReportText.DISMISS)
+    }
 }

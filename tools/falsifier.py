@@ -5316,6 +5316,222 @@ CAS: list[dict] = [
         "tache": ":core:data:testDebugUnitTest --tests *QuizRepositoryTest*",
         "attendus": ["l'attente ne rend pas la main avant la fusion"],
     },
+    # -----------------------------------------------------------------------------------------
+    # ------------------------------------------- l'ecran de signalement (phase E)
+    # -----------------------------------------------------------------------------------------
+    # Vingt mutations, en quatre groupes : les **mots** (domaine), les **decisions** de l'ecran
+    # (renderer), le **branchement** (forme), et la **remise a zero** du depot.
+    #
+    # Deux mutations ont ete ecartees apres mesure, et sont nommees pour ne pas etre retentees :
+    #
+    #   - remplacer le `collectAsStateWithLifecycle()` du depot par un flux fige demanderait de
+    #     renommer la variable dans trente lignes, et le cas mesurerait la reecriture, pas la
+    #     regression ;
+    #   - retirer `ProblemReportCard()` **et** sa ligne laisserait un fichier qui compile, mais le
+    #     cas se confond avec celui du commentaire, qui dit la meme chose en moins de bruit.
+    {
+        # Le titre de la carte est aussi l'etiquette que lit un lecteur d'ecran. L'espace avant le
+        # point d'interrogation est la typographie francaise, et l'original l'ecrit : la retirer
+        # produit un texte qui a l'air juste.
+        "nom": "signalement : le titre de la carte perd l'espace avant le point d'interrogation",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/ProblemReportText.kt",
+        "avant": "    const val CARD_TITLE: String = \"Un problème avec l’application ?\"",
+        "apres": "    const val CARD_TITLE: String = \"Un problème avec l’application?\"",
+        "tache": ":core:domain:test --tests *ProblemReportsTest*",
+        "attendus": ["les mots de l'ecran sont ceux de l'original"],
+    },
+    {
+        # L'apostrophe du bouton d'envoi est typographique dans l'original (U+2019). La redresser
+        # donne un texte presque identique, et rien a l'ecran ne le signale.
+        "nom": "signalement : l'apostrophe de l'envoi devient droite",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/ProblemReportText.kt",
+        "avant": "    const val SEND: String = \"Envoyer à l’administrateur\"",
+        "apres": "    const val SEND: String = \"Envoyer à l'administrateur\"",
+        "tache": ":core:domain:test --tests *ProblemReportsTest*",
+        "attendus": ["les apostrophes de l'ecran sont typographiques"],
+    },
+    {
+        # Le compteur prend la borne d'un autre champ. Le chiffre affiche reste plausible — 32 au
+        # lieu de 500 —, et le champ, lui, laisserait toujours taper 500 caracteres.
+        "nom": "signalement : le compteur prend la borne de la version de l'application",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/ProblemReportText.kt",
+        "avant": "    fun counter(length: Int): String = \"$length/${ProblemReports.DESCRIPTION_MAX}\"",
+        "apres": "    fun counter(length: Int): String = \"$length/${ProblemReports.APP_VERSION_MAX}\"",
+        "tache": ":core:domain:test --tests *ProblemReportsTest*",
+        "attendus": ["le compteur porte la borne du domaine"],
+    },
+    {
+        # Les deux libelles d'envoi deviennent le meme. Le bouton grise pendant un envoi porterait
+        # alors « Envoyer a l'administrateur », c'est-a-dire une panne apparente.
+        "nom": "signalement : les deux libelles d'envoi sont confondus",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/ProblemReportText.kt",
+        "avant": "    const val SENDING: String = \"Envoi…\"",
+        "apres": "    const val SENDING: String = \"Envoyer à l’administrateur\"",
+        "tache": ":core:domain:test --tests *ProblemReportsTest*",
+        "attendus": ["les deux libelles d'envoi sont distincts"],
+    },
+    {
+        # La phrase du refus de format s'affaiblit : elle ne dit plus lequel est accepte, et la
+        # personne ne peut plus corriger son choix.
+        "nom": "signalement : la phrase du format ne dit plus lequel est accepte",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/ProblemReportText.kt",
+        "avant": "    const val ATTACHMENT_FORMAT: String = \"Choisis une capture au format JPEG ou PNG.\"",
+        "apres": "    const val ATTACHMENT_FORMAT: String = \"Choisis une capture.\"",
+        "tache": ":core:domain:test --tests *ProblemReportsTest*",
+        "attendus": ["les refus sont ceux de l'original"],
+    },
+    {
+        # Le format est juge **apres** la taille. Une image au mauvais format et trop lourde
+        # recevrait alors le message de la taille, et la personne chercherait a alleger un fichier
+        # que le compartiment refusera de toute facon.
+        "nom": "signalement : le format n'est plus juge avant la taille",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/ProblemReports.kt",
+        "avant": "        if (!isAcceptedMime(mime)) return ProblemReportAttachmentProblem.FORMAT_UNSUPPORTED\n        if (sizeBytes > SCREENSHOT_MAX_BYTES) return ProblemReportAttachmentProblem.TOO_LARGE",
+        "apres": "        if (sizeBytes > SCREENSHOT_MAX_BYTES) return ProblemReportAttachmentProblem.TOO_LARGE\n        if (!isAcceptedMime(mime)) return ProblemReportAttachmentProblem.FORMAT_UNSUPPORTED",
+        "tache": ":feature:home:testDebugUnitTest --tests *ProblemReportRendererTest*",
+        "attendus": ["le format est juge avant la taille"],
+    },
+    {
+        # L'ordre des cinq natures n'est plus celui de l'ecran. Rien ne casse : les cinq pastilles
+        # sont la, dans un autre ordre — et la nature cochee par defaut change avec elles.
+        "nom": "signalement : les natures ne suivent plus l'ordre du modele",
+        "fichier": "feature/home/src/main/kotlin/com/msoumaya/deepseekandroid/feature/home/ProblemReportRenderer.kt",
+        "avant": "        natures = ProblemReportType.all,",
+        "apres": "        natures = ProblemReportType.all.reversed(),",
+        "tache": ":feature:home:testDebugUnitTest --tests *ProblemReportRendererTest*",
+        "attendus": ["les cinq natures sont celles de l'ecran, dans l'ordre"],
+    },
+    {
+        # La nature cochee par defaut n'est plus la premiere de la liste mais la derniere. Le
+        # formulaire s'ouvre sur « Autre », et un signalement de bug part classe « Autre ».
+        "nom": "signalement : la nature cochee par defaut n'est plus la premiere",
+        "fichier": "feature/home/src/main/kotlin/com/msoumaya/deepseekandroid/feature/home/ProblemReportRenderer.kt",
+        "avant": "        initialType = ProblemReportType.all.first(),",
+        "apres": "        initialType = ProblemReportType.all.last(),",
+        "tache": ":feature:home:testDebugUnitTest --tests *ProblemReportRendererTest*",
+        "attendus": ["la nature cochee par defaut est la premiere de la liste"],
+    },
+    {
+        # Le compteur compte le texte rogne. Il **recule** alors quand on ajoute une espace, ce qui
+        # se voit et ne s'explique pas — et il ne dit plus ce que la personne a tape.
+        "nom": "signalement : le compteur compte le texte rogne",
+        "fichier": "feature/home/src/main/kotlin/com/msoumaya/deepseekandroid/feature/home/ProblemReportRenderer.kt",
+        "avant": "        counter = ProblemReportText.counter(description.length),",
+        "apres": "        counter = ProblemReportText.counter(description.trim().length),",
+        "tache": ":feature:home:testDebugUnitTest --tests *ProblemReportRendererTest*",
+        "attendus": ["le compteur compte le texte brut, et non le texte rogne"],
+    },
+    {
+        # Le bouton d'envoi s'allume sur une description faite d'espaces. Le serveur la refuse
+        # (`btrim(description) between 1 and 500`), et la personne l'apprend apres l'attente.
+        "nom": "signalement : le bouton s'allume sur une description faite d'espaces",
+        "fichier": "feature/home/src/main/kotlin/com/msoumaya/deepseekandroid/feature/home/ProblemReportRenderer.kt",
+        "avant": "        !busy && description.trim().isNotEmpty()",
+        "apres": "        !busy && description.isNotEmpty()",
+        "tache": ":feature:home:testDebugUnitTest --tests *ProblemReportRendererTest*",
+        "attendus": ["le bouton d'envoi s'allume sur un texte non vide, une fois rogne"],
+    },
+    {
+        # Le bouton reste allume pendant un envoi : le second appui part, et deux signalements sont
+        # ecrits pour un seul geste.
+        "nom": "signalement : le bouton d'envoi reste allume pendant un envoi",
+        "fichier": "feature/home/src/main/kotlin/com/msoumaya/deepseekandroid/feature/home/ProblemReportRenderer.kt",
+        "avant": "        !busy && description.trim().isNotEmpty()",
+        "apres": "        description.trim().isNotEmpty()",
+        "tache": ":feature:home:testDebugUnitTest --tests *ProblemReportRendererTest*",
+        "attendus": ["le bouton d'envoi est inactif pendant un envoi"],
+    },
+    {
+        # Le bouton ne dit plus l'envoi en cours : il garde « Envoyer » alors qu'il est desactive,
+        # et un bouton inerte qui ne s'explique pas se lit comme une panne.
+        "nom": "signalement : le libelle du bouton ne dit plus l'envoi",
+        "fichier": "feature/home/src/main/kotlin/com/msoumaya/deepseekandroid/feature/home/ProblemReportRenderer.kt",
+        "avant": "        sendLabel = if (busy) ProblemReportText.SENDING else ProblemReportText.SEND,",
+        "apres": "        sendLabel = ProblemReportText.SEND,",
+        "tache": ":feature:home:testDebugUnitTest --tests *ProblemReportRendererTest*",
+        "attendus": ["le libelle du bouton dit l'envoi en cours"],
+    },
+    {
+        # Les deux libelles de la capture sont echanges : une capture deja jointe annonce « Ajouter
+        # une capture », et la personne en ajoute une seconde en croyant remplacer la premiere.
+        "nom": "signalement : les deux libelles de la capture sont echanges",
+        "fichier": "feature/home/src/main/kotlin/com/msoumaya/deepseekandroid/feature/home/ProblemReportRenderer.kt",
+        "avant": "        attachTitle = if (hasAttachment) {\n            ProblemReportText.ATTACH_ADDED\n        } else {\n            ProblemReportText.ATTACH_ADD\n        },",
+        "apres": "        attachTitle = if (hasAttachment) {\n            ProblemReportText.ATTACH_ADD\n        } else {\n            ProblemReportText.ATTACH_ADDED\n        },",
+        "tache": ":feature:home:testDebugUnitTest --tests *ProblemReportRendererTest*",
+        "attendus": ["les deux libelles de la capture suivent la piece jointe"],
+    },
+    {
+        # L'issue de l'envoi gagne sur le refus de capture : « enregistre » s'afficherait sous une
+        # capture que personne n'a pu joindre.
+        "nom": "signalement : l'issue de l'envoi gagne sur le refus de capture",
+        "fichier": "feature/home/src/main/kotlin/com/msoumaya/deepseekandroid/feature/home/ProblemReportRenderer.kt",
+        "avant": "        notice = attachNotice ?: notice,",
+        "apres": "        notice = notice ?: attachNotice,",
+        "tache": ":feature:home:testDebugUnitTest --tests *ProblemReportRendererTest*",
+        "attendus": ["l'echec du choix de capture l'emporte sur l'issue de l'envoi"],
+    },
+    {
+        # La carte de signalement n'est plus composee. L'accueil s'affiche, tout le reste marche, et
+        # le signalement n'a plus aucune porte : c'est le defaut que le controle de forme existe
+        # pour attraper.
+        "nom": "signalement : l'accueil ne compose plus la carte",
+        "fichier": "feature/home/src/main/kotlin/com/msoumaya/deepseekandroid/feature/home/HomeScreen.kt",
+        "avant": "                ProblemReportCard()",
+        "apres": "                // carte retiree",
+        "tache": ":feature:home:testDebugUnitTest --tests *ProblemReportScreenWiringTest*",
+        "attendus": ["l'accueil compose la carte de signalement"],
+    },
+    {
+        # Le champ porte une borne ecrite dans l'ecran. Elle marche aujourd'hui, et divergera le
+        # jour ou le domaine changera la sienne : le champ laisserait taper au-dela de la regle.
+        "nom": "signalement : le champ porte une borne ecrite dans l'ecran",
+        "fichier": "feature/home/src/main/kotlin/com/msoumaya/deepseekandroid/feature/home/ProblemReportSheet.kt",
+        "avant": "                                maxLength = ui.descriptionMax,",
+        "apres": "                                maxLength = 500,",
+        "tache": ":feature:home:testDebugUnitTest --tests *ProblemReportScreenWiringTest*",
+        "attendus": ["le champ porte la borne du domaine, et non un nombre ecrit ici"],
+    },
+    {
+        # La nature cochee par defaut est ecrite en dur. Elle ne suivrait plus l'ordre du modele, et
+        # designerait peut-etre une autre nature le jour ou l'ordre changerait.
+        "nom": "signalement : la nature cochee par defaut est ecrite en dur",
+        "fichier": "feature/home/src/main/kotlin/com/msoumaya/deepseekandroid/feature/home/ProblemReportSheet.kt",
+        "avant": "    var type by remember { mutableStateOf(ProblemReportType.all.first()) }",
+        "apres": "    var type by remember { mutableStateOf(ProblemReportType.BUG) }",
+        "tache": ":feature:home:testDebugUnitTest --tests *ProblemReportScreenWiringTest*",
+        "attendus": ["les cinq natures viennent du modele, et non d'une liste ecrite ici"],
+    },
+    {
+        # Le fond de la feuille ne passe plus par la garde : un appui a cote referme la feuille en
+        # plein envoi, et la personne reste sans reponse sur un geste qu'elle a fait.
+        "nom": "signalement : le fond de la feuille ne passe plus par la garde",
+        "fichier": "feature/home/src/main/kotlin/com/msoumaya/deepseekandroid/feature/home/ProblemReportSheet.kt",
+        "avant": "                        onClick = fermer,",
+        "apres": "                        onClick = onClose,",
+        "tache": ":feature:home:testDebugUnitTest --tests *ProblemReportScreenWiringTest*",
+        "attendus": ["la feuille ne se referme pas pendant un envoi"],
+    },
+    {
+        # La remise a zero s'applique meme pendant un envoi. `busy` retombe, le bouton se rallume,
+        # et deux signalements partent pour un seul geste.
+        "nom": "signalement : la remise a zero s'applique pendant un envoi",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/ProblemReportRepository.kt",
+        "avant": "        if (_state.value.busy) return\n",
+        "apres": "        if (false) return\n",
+        "tache": ":core:data:testDebugUnitTest --tests *ProblemReportRepositoryTest*",
+        "attendus": ["la remise a zero est refusee pendant un envoi"],
+    },
+    {
+        # La remise a zero garde l'issue du geste precedent. Une feuille rouverte montre alors la
+        # confirmation du signalement d'avant, et personne n'ecrit le suivant.
+        "nom": "signalement : la remise a zero garde l'issue du geste precedent",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/ProblemReportRepository.kt",
+        "avant": "        _state.value = ProblemReportState()",
+        "apres": "        _state.value = _state.value.copy(busy = false)",
+        "tache": ":core:data:testDebugUnitTest --tests *ProblemReportRepositoryTest*",
+        "attendus": ["la remise a zero efface ce que le dernier geste a laisse"],
+    },
 ]
 
 

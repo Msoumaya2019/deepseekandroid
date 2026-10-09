@@ -20,8 +20,10 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 
 /**
@@ -508,5 +510,73 @@ class ProblemReportRepositoryTest {
         assertEquals(1, sender.rows.size, "le signalement ne doit partir qu'une fois")
         assertEquals(1, sender.uploads.size, "les octets ne doivent partir qu'une fois")
         assertTrue(store.all().isEmpty())
+    }
+
+    // ------------------------------------------------------------------
+    // La remise à zéro de l'écran
+    // ------------------------------------------------------------------
+
+    @Test
+    fun `la remise a zero efface ce que le dernier geste a laisse`() = runTest {
+        // L'écran de signalement est transitoire : il est monté à l'ouverture et démonté à la
+        // fermeture, donc ses `remember` renaissent vides. Ceux du dépôt, non — et sans cette
+        // remise à zéro, une feuille rouverte montrerait la confirmation du signalement d'avant,
+        // si bien que personne n'écrirait le suivant.
+        val sender = FakeProblemReportSender()
+        val depot = depot(FakeOwners(moi), sender)
+
+        assertEquals(ProblemReportOutcome.SENT, depot.send(ProblemReportType.BUG, "Un bug.", null))
+        assertTrue(depot.state.value.done, "le premier envoi doit atteindre la confirmation")
+        assertNotNull(depot.state.value.notice)
+
+        depot.reset()
+
+        assertFalse(depot.state.value.done, "la feuille rouverte montrerait la confirmation")
+        assertNull(depot.state.value.notice, "la phrase du geste precedent resterait affichee")
+        assertFalse(depot.state.value.busy)
+    }
+
+    @Test
+    fun `la remise a zero est refusee pendant un envoi`() = runTest {
+        // `busy` est ce qui empêche un second appui : le remettre à zéro en pleine passe rouvrirait
+        // le bouton, et deux signalements partiraient pour un seul geste. La porte tient la passe
+        // ouverte **sans dépendre du temps** — une attente en millisecondes ferait un test qui
+        // passe ici et échoue ailleurs.
+        val sender = FakeProblemReportSender()
+        val porte = CompletableDeferred<Unit>()
+        sender.porte = porte
+        val depot = depot(FakeOwners(moi), sender)
+
+        val envoi = backgroundScope.async { depot.send(ProblemReportType.BUG, "Un bug.", null) }
+        attendre("l'ecriture de la ligne") { sender.calls.isNotEmpty() }
+        assertTrue(depot.state.value.busy, "le depot doit se dire en vol")
+
+        depot.reset()
+
+        assertTrue(depot.state.value.busy, "un effacement en pleine passe rouvrirait le bouton")
+
+        porte.complete(Unit)
+        assertEquals(ProblemReportOutcome.SENT, envoi.await())
+        assertTrue(store.all().isEmpty(), "le signalement doit partir malgre l'effacement refuse")
+    }
+
+    /**
+     * Attend qu'un prédicat devienne vrai, avec une borne.
+     *
+     * Une boucle sans borne ne dit rien quand elle échoue : elle bloque le test jusqu'au délai de
+     * l'exécuteur, et le rapport ne nomme pas ce qui manquait. Ici, l'échec est explicite.
+     */
+    private fun TestScope.attendre(quoi: String, predicat: () -> Boolean) {
+        val limite = System.nanoTime() + DELAI_DE_GARDE_NANOS
+        while (!predicat()) {
+            if (System.nanoTime() > limite) error("$quoi n'est pas arrive dans le delai")
+            runCurrent()
+            Thread.sleep(2)
+        }
+    }
+
+    private companion object {
+        /** La borne d'une attente, en nanosecondes. Large : elle n'agit que sur un test qui échoue. */
+        const val DELAI_DE_GARDE_NANOS = 5_000_000_000L
     }
 }

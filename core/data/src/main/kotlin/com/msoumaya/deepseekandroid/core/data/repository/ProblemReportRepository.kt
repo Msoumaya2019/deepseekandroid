@@ -155,6 +155,25 @@ class ProblemReportRepository(
     val state: StateFlow<ProblemReportState> = _state.asStateFlow()
 
     /**
+     * Efface ce que le dernier geste a laissé à l'écran.
+     *
+     * L'écran de signalement est **transitoire** : il est monté à l'ouverture et démonté à la
+     * fermeture. L'original porte son `done` et sa `notice` dans un `useState` de la feuille, qui
+     * renaît donc vide à chaque ouverture. Ici, ces deux valeurs vivent dans le dépôt — parce que
+     * c'est lui qui les produit —, et sans cet effacement une feuille rouverte montrerait l'écran
+     * de confirmation du geste **précédent** : la personne croirait son nouveau signalement déjà
+     * envoyé, et n'écrirait rien.
+     *
+     * **Un effacement pendant un envoi est refusé.** `busy` est ce qui empêche un second appui :
+     * le remettre à zéro en pleine passe rouvrirait le bouton, et deux envois partiraient. La
+     * feuille, elle, ne se referme pas pendant un envoi — les deux gardes se répondent.
+     */
+    fun reset() {
+        if (_state.value.busy) return
+        _state.value = ProblemReportState()
+    }
+
+    /**
      * Lance le vidage périodique, et en tente un tout de suite.
      *
      * C'est le `setInterval(sync,30000)` de l'original, suivi de son `sync()` immédiat. Le

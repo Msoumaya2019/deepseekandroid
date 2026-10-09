@@ -38,6 +38,9 @@ dependencies {
 
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
+    // Le sélecteur d'images du système est un résultat d'`Activity` : il ne s'installe que par un
+    // lanceur, donc `rememberLauncherForActivityResult`. Le module n'en avait pas besoin jusqu'ici.
+    implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material.icons.extended)
 
     testImplementation(libs.junit)
