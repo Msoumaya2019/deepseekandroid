@@ -48,6 +48,22 @@ internal fun Throwable.restMessage(): String? = when (this) {
 internal fun Throwable.restCode(): String? = (this as? PostgrestRestException)?.code
 
 /**
+ * Le code d'état HTTP d'un refus du serveur, **en texte**, ou `null` si l'erreur n'en porte pas.
+ *
+ * Rend une chaîne et non un `Int` parce que c'est ainsi que le client d'origine la compare :
+ * `['409','Duplicate'].includes(String(error.statusCode))`. Le `String(...)` de JavaScript est
+ * exactement ce que fait `toString()` ici, et le portage garde donc la comparaison textuelle
+ * plutôt que d'en inventer une numérique — une conversion des deux côtés ferait diverger les deux
+ * clients sur ce qui est tolérable, et la divergence serait muette.
+ *
+ * **Un seul type d'exception en porte un.** Relevé par `javap` sur
+ * `supabase-kt-android-3.8.0.aar` : `RestException` déclare `getStatusCode(): int`, et
+ * `HttpRequestException` — la panne réseau — n'en a pas. Une requête qui n'a pas atteint le
+ * serveur n'a donc **pas** de code, ce qui est la vérité : il n'y a pas eu de réponse.
+ */
+internal fun Throwable.restStatusCode(): String? = (this as? RestException)?.statusCode?.toString()
+
+/**
  * Vrai quand la requête **n'a pas atteint** le serveur.
  *
  * Les deux formes sont celles que `SupabaseAuthGateway` traite déjà comme « hors ligne » : le

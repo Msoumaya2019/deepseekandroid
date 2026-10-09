@@ -463,7 +463,7 @@ et un vert de forme ne dit rien de l'apparence. Les quarante-trois autres tests 
 | Contenus quotidiens | `src/DailyContentsScreen.tsx`, `src/services/dailyContents.ts` | `feature:home` | `daily_contents`, `daily_content_schedule`, `content_categories`, `content_favorites` | **À faire** (phase D) |
 | Médias de contenus | `src/services/dailyContentMedia.ts` | — | `daily_contents` | **À faire** (phase D) |
 | Récitations partagées | `src/RecitationsScreen.tsx`, `src/services/recitations.ts` | — | `recitations` | **À faire** (phase D) |
-| Signalement de problème | `src/ui/ProblemReport.tsx`, `src/services/problemReports.ts` | — | `app_problem_reports` | **À faire** (phase E) |
+| Signalement de problème | `src/ui/ProblemReport.tsx`, `src/services/problemReports.ts` | `core/domain/ProblemReports.kt`, `core/data/…/ProblemReportRepository.kt` | `app_problem_reports`, compartiment `problem-report-screenshots` | **L'envoi est porté** (phase E) — l'**écran** reste à porter |
 
 ---
 
@@ -502,7 +502,7 @@ restent les outils d'administration.
 | Coquille et règles de visibilité | `App.tsx` (sept booléens : `reader`, `quizOpen`, `utilityView`, `reviewOpen`…) | `navigation/AppScaffold.kt` + `AppRoutes` | **Porté** | les barres visibles se **déduisent** de la route : onglet → les deux, écran d'outil → haute avec retour seulement, plein écran → aucune. Un écran d'outil garde son en-tête, sinon il n'aurait plus de retour |
 | Écran d'accueil | `src/ui/MainScreens.tsx` (`Home`, `activity`, `TinyWeek`) | `feature/home/HomeRenderer.kt` + `HomeScreen.kt` | **Porté** | bande d'en-tête, « Continuer ma lecture », les deux tâches du jour, « Ma semaine ». Le calcul est **pur** et séparé du `ViewModel` : 36 tests, dont deux sur `scheduledDate` et un sur la période de chaque bandeau. Le **compte des versets** est délégué à `core:domain` (`ProgramText`) : l'accueil et le programme écrivent le même compte, et deux copies finiraient par diverger d'un mot |
 | Cartes de quiz de l'accueil | `QuizHomeCards` (`src/ui/QuizScreen.tsx`) | `feature/home/QuizHomeCards.kt` | **Porté** | la rangée de **deux** cartes — « Quiz du jour » et « Amis » — posée **entre** les deux tâches du jour et « Ma semaine », comme dans l'original. La carte de quiz porte sa **pastille rouge** quand la question du jour est publiée et **pas encore répondue** : les deux conditions de l'original — `done`, sur les réponses, et `available`, sur l'instantané — sont reproduites **séparément**, parce qu'elles ne sont pas la négation l'une de l'autre |
-| Contenus du jour, messages non lus, signalement | `TodayContents`, `ProblemReportCard` | — | **À faire** (phase D) | absents de l'accueil et **non remplacés** par un équivalent local : un contenu hors ligne n'aurait pas de contenu du jour à poser |
+| Contenus du jour, messages non lus, signalement | `TodayContents`, `ProblemReportCard` | — | **À faire** (phase D pour les contenus, phase E pour le signalement) | absents de l'accueil et **non remplacés** par un équivalent local : un contenu hors ligne n'aurait pas de contenu du jour à poser. La **file** du signalement, elle, est portée : ce qui manque à l'accueil est la **carte** qui l'ouvre |
 | Thèmes (blanc, classique, féminin, lilas, nuit) | `AppTheme` | `core/model/Enums.kt` | **Porté** (les valeurs) | l'esprit visuel est conservé, adapté aux usages Android |
 
 **Le principe retenu :** garder l'identité visuelle — blanc et crème, vert, touches d'or, thèmes

@@ -83,6 +83,33 @@ compte, ses défis et les quiz thématiques. La correction ne se lit donc que da
 enregistrée**, qui porte la question complète ; c'est pourquoi le repli de l'écran est
 `response?.question ?? daily`, et non `daily` seul.
 
+### La file des signalements, qui a sa propre base — et qui ne se migre pas
+
+Le client React Native ouvre une **troisième** base — `coran-problem-reports.db` —, avec une seule
+table :
+
+```sql
+CREATE TABLE problem_report_queue(id TEXT PRIMARY KEY, user_id TEXT NOT NULL, payload TEXT NOT NULL,
+                                  local_uri TEXT, mime TEXT);
+```
+
+| Table React Native | Équivalent Android | Remarque |
+|---|---|---|
+| `problem_report_queue` | `problem_reports.json`, **une file unique** | la file est **commune** à tous les comptes, comme la table, et chaque entrée porte son compte. `QueuedProblemReport.userId` est **lu sur la ligne** et non recopié à côté : la table d'origine porte `id` et `user_id` en colonnes **et** dans la charge utile, et deux copies d'un même fait finissent par diverger — ici, une divergence retirerait de la file l'entrée d'un autre compte |
+| `local_uri` | le chemin absolu, sous `filesDir/state/problem-reports/` | l'original range une URI `file://`, le portage un chemin **sans schéma** : `java.io.File` attend un chemin, et un préfixe `file://` construirait un fichier qui n'existe pas — silencieusement, puisqu'un `File` inexistant ne lève qu'à la lecture |
+
+**Ce qui n'est pas migré, et pourquoi c'est sans conséquence.** Un signalement qui n'est pas encore
+parti est un **geste en attente sur cet appareil**, et non une donnée de compte : rien ne le
+rattache à une progression, et la capture vit dans le dossier de documents de l'appareil qui l'a
+choisie. La file reste donc sur l'appareil, et le client React Native garde la sienne — c'est la
+même règle que pour les réglages de répétition audio.
+
+**Une différence de forme assumée.** L'original range le signalement dans une colonne `payload TEXT`
+et le relit par `JSON.parse`. Ici la charge utile est un objet `@Serializable` : il n'y a plus de
+chaîne à analyser, donc plus d'analyse qui puisse échouer, et un document illisible est **mis de
+côté** par le magasin au lieu d'être perdu — c'est ce qui remplace la garantie qu'un `JSON.parse`
+réussi donnait.
+
 ---
 
 ## Les clés AsyncStorage

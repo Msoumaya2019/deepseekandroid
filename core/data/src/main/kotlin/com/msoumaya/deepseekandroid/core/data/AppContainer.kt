@@ -11,6 +11,7 @@ import com.msoumaya.deepseekandroid.core.data.local.JsonFileStore
 import com.msoumaya.deepseekandroid.core.data.local.LocalStateStore
 import com.msoumaya.deepseekandroid.core.data.local.Outbox
 import com.msoumaya.deepseekandroid.core.data.local.OutboxStore
+import com.msoumaya.deepseekandroid.core.data.local.ProblemReportStore
 import com.msoumaya.deepseekandroid.core.data.local.QuizCacheStore
 import com.msoumaya.deepseekandroid.core.data.local.QuizOutbox
 import com.msoumaya.deepseekandroid.core.data.local.QuizOutboxStore
@@ -24,6 +25,7 @@ import com.msoumaya.deepseekandroid.core.data.remote.SessionPreferences
 import com.msoumaya.deepseekandroid.core.data.remote.SupabaseAuthGateway
 import com.msoumaya.deepseekandroid.core.data.remote.SupabaseConfig
 import com.msoumaya.deepseekandroid.core.data.remote.SupabaseProvider
+import com.msoumaya.deepseekandroid.core.data.remote.SupabaseProblemReportSender
 import com.msoumaya.deepseekandroid.core.data.remote.SupabaseQuizSource
 import com.msoumaya.deepseekandroid.core.data.remote.SupabaseRecitationSource
 import com.msoumaya.deepseekandroid.core.data.remote.SupabaseRecitationUploader
@@ -33,6 +35,7 @@ import com.msoumaya.deepseekandroid.core.data.remote.UnavailableAuthGateway
 import com.msoumaya.deepseekandroid.core.data.remote.VaultSessionManager
 import com.msoumaya.deepseekandroid.core.data.repository.AudioSettingsRepository
 import com.msoumaya.deepseekandroid.core.data.repository.AuthRepository
+import com.msoumaya.deepseekandroid.core.data.repository.ProblemReportRepository
 import com.msoumaya.deepseekandroid.core.data.repository.QuizRepository
 import com.msoumaya.deepseekandroid.core.data.repository.QuranArchiveStore
 import com.msoumaya.deepseekandroid.core.data.repository.RecitationRepository
@@ -130,6 +133,20 @@ class AppContainer(
      * que les deux peuvent se disputer le même haut-parleur.
      */
     val recorder: AudioRecorder? = null,
+    /**
+     * La version de l'application, telle qu'elle part dans un signalement de problème.
+     *
+     * Elle est **reçue**, et non lue ici : `core:data` n'a pas de `BuildConfig`, et le seul module
+     * qui connaisse le paquet est `:app`. C'est la même règle que pour les lecteurs natifs — ce
+     * qui demande le contexte d'une application est construit par elle.
+     *
+     * **Le défaut est vide, et il est inerte.** La colonne `app_version` est bornée à 32
+     * caractères et n'exige rien de plus (`supabase/problem-reports.sql`, ligne 8) : une version
+     * absente ne fait donc pas refuser le signalement, elle le prive seulement d'un renseignement
+     * de diagnostic. C'est le bon défaut pour un conteneur construit sans application — et
+     * `:app`, lui, fournit toujours la vraie.
+     */
+    private val appVersion: String = "",
 ) {
 
     private val appContext = context.applicationContext
@@ -269,6 +286,35 @@ class AppContainer(
     )
 
     /**
+     * Les signalements de problème : la boîte d'envoi, et son dépôt.
+     *
+     * Construit **sans expéditeur** quand aucun projet n'est configuré : le dépôt sait alors
+     * garder le signalement et le dire, sans qu'aucune requête ne parte — c'est la même règle que
+     * pour l'espace social, le Quiz et les récitations.
+     *
+     * **Sa lecture du réseau est celle du bandeau, et c'est une référence en avant.** Le dépôt
+     * reçoit une lambda qui lit l'état de l'observateur — déclaré **plus bas** —, et non une
+     * lecture `NetInfo` de plus : deux lectures de la même vérité finiraient par diverger, et le
+     * bandeau pourrait annoncer une coupure pendant que la file essaie quand même. La lambda n'est
+     * appelée qu'au moment d'un envoi, donc bien après la construction : la déclaration plus bas
+     * de l'observateur n'est pas un cycle, c'est un ordre de lecture.
+     *
+     * **L'observateur du réseau, lui, la rappelle** : c'est ce qui fait partir un signalement mis
+     * de côté hors connexion dès que le réseau revient. Les deux se référencent donc l'un l'autre,
+     * et c'est la même forme que celle du Quiz — à ceci près qu'elle est écrite à l'envers, parce
+     * que le signalement a besoin de l'état du réseau **pendant** un geste, alors que le Quiz n'en
+     * a besoin qu'au retour de celui-ci.
+     */
+    val problemReports: ProblemReportRepository = ProblemReportRepository(
+        store = ProblemReportStore(root),
+        sender = supabaseClient?.let { SupabaseProblemReportSender(it) },
+        session = session,
+        scope = scope,
+        appVersion = appVersion,
+        horsLigne = { connectivity.state.value.horsLigne },
+    )
+
+    /**
      * L'état du réseau, et le bandeau qui le montre.
      *
      * Il est **observé** et non interrogé à la demande : le bandeau doit s'allumer et s'éteindre
@@ -276,20 +322,26 @@ class AppContainer(
      * la coupure survenue pendant qu'il est ouvert.
      *
      * **Ce que le retour du réseau déclenche.** L'original appelle `flushPendingSync()` à cet
-     * instant — la file des modifications d'état —, et son propre observateur de Quiz relit à ce
-     * moment-là. Les deux sont donc appelés ici, dans cet ordre : l'état d'abord, parce qu'une
-     * modification faite hors ligne est ce qui risque de se perdre, et parce qu'une relecture du
-     * Quiz sur un état non poussé montrerait une progression que le serveur n'a pas encore.
+     * instant — la file des modifications d'état —, son propre observateur de Quiz relit à ce
+     * moment-là, et son observateur de signalements en fait autant. Les trois sont donc appelés
+     * ici, dans cet ordre : l'état d'abord, parce qu'une modification faite hors ligne est ce qui
+     * risque de se perdre, et parce qu'une relecture du Quiz sur un état non poussé montrerait une
+     * progression que le serveur n'a pas encore ; les signalements ensuite, et leur rang n'est
+     * qu'une commodité — la boîte est indépendante des deux autres, et l'original la vide depuis
+     * un écouteur à elle.
      *
      * **Ce qui reste à faire, et qui est nommé pour ne pas être cru fait.** L'observateur du Quiz
      * de l'original se déclenche à **quatre** moments : à l'ouverture, au retour du réseau, au
      * passage au premier plan, et toutes les trente secondes. Seul le retour du réseau passe par
-     * ici ; les trois autres appartiennent à la tranche du Quiz.
+     * ici ; les trois autres appartiennent à la tranche du Quiz. L'observateur des **signalements**
+     * a les mêmes quatre moments : l'ouverture et le minuteur sont pris par
+     * `ProblemReportRepository.start()`, le réseau par ici, et le **retour au premier plan** n'est
+     * pas porté — voir la documentation de `start()`, qui dit ce que cela coûte.
      *
      * **Aucun effet si le projet Supabase n'est pas configuré.** `sync` rend alors
-     * `NotConfigured` sans qu'aucune requête ne parte, et `refresh` fait de même : le bandeau
-     * annonce une coupure de réseau qui est réelle, et la reprise ne tente rien qui ne puisse
-     * aboutir.
+     * `NotConfigured` sans qu'aucune requête ne parte, `refresh` fait de même, et `flush` rend
+     * `false` sans expéditeur : le bandeau annonce une coupure de réseau qui est réelle, et la
+     * reprise ne tente rien qui ne puisse aboutir.
      */
     val connectivity: ConnectivityObserver = ConnectivityObserver(
         context = appContext,
@@ -297,6 +349,7 @@ class AppContainer(
         onRestore = {
             userState.sync()
             quiz.refresh()
+            problemReports.flush()
         },
     )
 

@@ -5082,6 +5082,223 @@ CAS: list[dict] = [
         "tache": ":core:data:testDebugUnitTest --tests *AppContainerWiringTest*",
         "attendus": ["la reprise pousse l'etat avant de relire le Quiz"],
     },
+    # ------------------------------------------- les signalements de probleme (phase E)
+    #
+    # Dix-huit mutations, en trois familles, et aucune ne casse la compilation.
+    #
+    # **Les regles pures** (`ProblemReports`) : chaque borne et chaque comparaison de l'original.
+    # Une borne inclusive, un ordre de controle inverse, un repli devenu sensible a la casse —
+    # chacun change une phrase affichee ou accepte une capture que le serveur refusera, et rien
+    # d'autre dans l'application ne le signalerait.
+    #
+    # **Les ordres du depot** : la capture avant la ligne, la ligne avant la confirmation, la
+    # confirmation avant le retrait. Les inverser ne leve rien et ne se voit pas a l'ecran — cela
+    # perd un signalement sur un doute, ou en ecrit un dont l'image n'existe pas.
+    #
+    # **Les branchements** : la reprise du reseau qui vide la boite, et la boite qui lit le reseau
+    # du bandeau. Deux lignes du conteneur, et leur disparition ne casse aucun test de comportement
+    # — c'est exactement la famille de defauts que ce banc existe pour attraper.
+    #
+    # **Deux mutations ont ete ecartees apres lecture, et c'est ecrit ici pour qu'on ne les
+    # reintroduise pas.** Retirer `store.remove(entry)` de `push` fait tourner `flush` a l'infini —
+    # la boucle reprend la meme tete, puisque rien ne la retire —, donc le cas serait « non
+    # concluant » par blocage et non par mesure. Retirer la garde de compte de `flush`
+    # (`if (session.currentOwner() != owner) break`) ne fait tomber **aucun** test : la seule garde
+    # de compte reellement eprouvee est celle du retrait dans `ProblemReportStore.remove`, et c'est
+    # elle qui a un cas. Une mutation qui ne change rien d'observable n'est pas gardee pour faire
+    # nombre.
+    {
+        # 500 caracteres suivis de deux espaces sont acceptes par l'original, qui rogne avant de
+        # mesurer. Sans rognage, le client refuserait ici ce que le serveur accepterait.
+        "nom": "signalement : la description n'est plus rognee avant d'etre mesuree",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/ProblemReports.kt",
+        "avant": "        val texte = description.trim()",
+        "apres": "        val texte = description",
+        "tache": ":core:domain:test --tests *ProblemReportsTest*",
+        "attendus": ["la borne se mesure sur le texte rogne"],
+    },
+    {
+        # La borne devient inclusive : une description de cinq cents caracteres — acceptee par le
+        # `between 1 and 500` du schema — serait refusee par le client.
+        "nom": "signalement : la borne de la description refuse les cinq cents caracteres",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/ProblemReports.kt",
+        "avant": "        if (texte.length > DESCRIPTION_MAX) return ProblemReportProblem.DESCRIPTION_TOO_LONG",
+        "apres": "        if (texte.length >= DESCRIPTION_MAX) return ProblemReportProblem.DESCRIPTION_TOO_LONG",
+        "tache": ":core:domain:test --tests *ProblemReportsTest*",
+        "attendus": ["la borne est de cinq cents caracteres"],
+    },
+    {
+        # L'ordre des deux controles est inverse. Une image de 6 Mo au format GIF recoit alors le
+        # message de taille au lieu du message de format : ce n'est pas le meme message, et la
+        # personne corrigerait la mauvaise chose.
+        "nom": "signalement : la taille est controlee avant le format",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/ProblemReports.kt",
+        "avant": "        if (!isAcceptedMime(mime)) return ProblemReportAttachmentProblem.FORMAT_UNSUPPORTED\n        if (sizeBytes > SCREENSHOT_MAX_BYTES) return ProblemReportAttachmentProblem.TOO_LARGE",
+        "apres": "        if (sizeBytes > SCREENSHOT_MAX_BYTES) return ProblemReportAttachmentProblem.TOO_LARGE\n        if (!isAcceptedMime(mime)) return ProblemReportAttachmentProblem.FORMAT_UNSUPPORTED",
+        "tache": ":core:domain:test --tests *ProblemReportsTest*",
+        "attendus": ["le format est controle avant la taille"],
+    },
+    {
+        # La comparaison devient inclusive, alors que le compartiment refuse ce qui **depasse** :
+        # une capture pile a 5 242 880 octets passerait l'ecran et serait refusee au depot.
+        "nom": "signalement : la borne de taille refuse la capture pile a cinq megaeoctets",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/ProblemReports.kt",
+        "avant": "        if (sizeBytes > SCREENSHOT_MAX_BYTES) return ProblemReportAttachmentProblem.TOO_LARGE",
+        "apres": "        if (sizeBytes >= SCREENSHOT_MAX_BYTES) return ProblemReportAttachmentProblem.TOO_LARGE",
+        "tache": ":core:domain:test --tests *ProblemReportsTest*",
+        "attendus": ["la borne de taille est de cinq megaeoctets"],
+    },
+    {
+        # `/\.png$/i` perd son `i` : une adresse en majuscules (`1000.PNG`) n'est plus reconnue, et
+        # la capture est **declaree** JPEG. Le nom du fichier garde son `.png`, donc le serveur
+        # recoit un type qui ne correspond pas a l'extension.
+        "nom": "signalement : le repli sur l'extension devient sensible a la casse",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/ProblemReports.kt",
+        "avant": "        declared ?: if (uri.endsWith(PNG_SUFFIX, ignoreCase = true)) MIME_PNG else MIME_JPEG",
+        "apres": "        declared ?: if (uri.endsWith(PNG_SUFFIX, ignoreCase = false)) MIME_PNG else MIME_JPEG",
+        "tache": ":core:domain:test --tests *ProblemReportsTest*",
+        "attendus": ["un type mime absent se deduit de l'extension"],
+    },
+    {
+        # Les deux segments sont echanges. L'adresse ne satisfait plus le `check` de la colonne :
+        # l'insertion serait refusee, et le signalement resterait dans la file pour toujours.
+        "nom": "signalement : l'adresse de la capture met l'identifiant en tete",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/ProblemReports.kt",
+        "avant": "        \"$userId/$id.$extension\"",
+        "apres": "        \"$id/$userId.$extension\"",
+        "tache": ":core:domain:test --tests *ProblemReportsTest*",
+        "attendus": ["l'adresse de la capture porte le compte en tete"],
+    },
+    {
+        # Un message absent est tenu pour benin. La ligne serait alors ecrite vers une capture dont
+        # rien ne prouve qu'elle est arrivee.
+        "nom": "signalement : un echec de depot sans texte est tenu pour benin",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/ProblemReports.kt",
+        "avant": "        if (message.isNullOrEmpty()) return false",
+        "apres": "        if (message.isNullOrEmpty()) return true",
+        "tache": ":core:domain:test --tests *ProblemReportsTest*",
+        "attendus": ["un echec sans texte n'est jamais tenu pour benin"],
+    },
+    {
+        # La condition est inversee : la file tente un depot hors connexion, et l'attente se paie
+        # pour rien.
+        "nom": "signalement : hors ligne, on tente quand meme",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/ProblemReports.kt",
+        "avant": "    fun shouldAttempt(horsLigne: Boolean): Boolean = !horsLigne",
+        "apres": "    fun shouldAttempt(horsLigne: Boolean): Boolean = horsLigne",
+        "tache": ":core:domain:test --tests *ProblemReportsTest*",
+        "attendus": ["hors ligne, on ne tente pas"],
+    },
+    {
+        # Les deux issues sont echangees : un signalement garde est annonce « envoye ».
+        "nom": "signalement : les deux issues sont echangees",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/ProblemReports.kt",
+        "avant": "        if (stillQueued) ProblemReportOutcome.QUEUED else ProblemReportOutcome.SENT",
+        "apres": "        if (stillQueued) ProblemReportOutcome.SENT else ProblemReportOutcome.QUEUED",
+        "tache": ":core:domain:test --tests *ProblemReportsTest*",
+        "attendus": ["l'issue se lit sur la file, et non sur la tentative"],
+    },
+    {
+        # La garde est inversee : une capture qui **existe** n'est plus deposee, et la ligne est
+        # ecrite quand meme — elle designe alors un fichier que le compartiment ne contient pas, et
+        # rien ne lie la colonne au fichier.
+        #
+        # La mutation garde `adresse != null` dans la condition, et ce n'est pas un detail : la
+        # remplacer par `if (false)` **ne compile pas** — mesure faite —, parce que le compilateur
+        # perd le *smart cast* qui rend `adresse` non nulle dans le bloc, et l'appel
+        # `uploadScreenshot(adresse, …)` devient un `String?` la ou un `String` est attendu. Un cas
+        # de falsification qui ne compile pas ne mesure rien : il ferait rendre « non concluant »
+        # pour une raison qui n'a rien a voir avec la regle visee.
+        "nom": "signalement : la capture n'est plus deposee avant la ligne",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/ProblemReportRepository.kt",
+        "avant": "        if (entry.localPath != null && adresse != null) {",
+        "apres": "        if (entry.localPath == null && adresse != null) {",
+        "tache": ":core:data:testDebugUnitTest --tests *ProblemReportRepositoryTest*",
+        "attendus": ["la capture part avant la ligne, et la confirmation apres"],
+    },
+    {
+        # La ligne n'est plus ecrite : la confirmation suffit a retirer l'entree de la file, et le
+        # signalement disparait sans jamais etre arrive.
+        "nom": "signalement : la ligne n'est plus ecrite sur le serveur",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/ProblemReportRepository.kt",
+        "avant": "        api.insert(ligne)",
+        "apres": "",
+        "tache": ":core:data:testDebugUnitTest --tests *ProblemReportRepositoryTest*",
+        "attendus": ["la ligne porte le compte, la version, la plateforme et le statut"],
+    },
+    {
+        # La confirmation est exigee a l'envers : une ligne non confirmee est retiree de la file.
+        # C'est le defaut qui perd un signalement sur un doute.
+        "nom": "signalement : la confirmation est exigee a l'envers",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/ProblemReportRepository.kt",
+        "avant": "        if (!api.confirm(ligne.id, owner)) {",
+        "apres": "        if (api.confirm(ligne.id, owner)) {",
+        "tache": ":core:data:testDebugUnitTest --tests *ProblemReportRepositoryTest*",
+        "attendus": ["une ligne non confirmee garde le signalement"],
+    },
+    {
+        # Le retrait remonte **avant** la confirmation. Les trois gestes sont tous la, et l'ordre
+        # est faux : un serveur qui accepte la ligne sans la rendre fait disparaitre un signalement
+        # que personne ne pourra plus renvoyer.
+        "nom": "signalement : l'entree est retiree avant la confirmation",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/ProblemReportRepository.kt",
+        "avant": "        api.insert(ligne)\n\n        if (!api.confirm(ligne.id, owner)) {\n            throw IllegalStateException(ProblemReportText.CONFIRMATION_PENDING)\n        }\n\n        store.remove(entry)",
+        "apres": "        api.insert(ligne)\n\n        store.remove(entry)\n\n        if (!api.confirm(ligne.id, owner)) {\n            throw IllegalStateException(ProblemReportText.CONFIRMATION_PENDING)\n        }",
+        "tache": ":core:data:testDebugUnitTest --tests *ProblemReportRepositoryTest*",
+        "attendus": ["une ligne non confirmee garde le signalement"],
+    },
+    {
+        # L'issue est lue sur la tentative au lieu de la file : le depot echoue, et l'ecran annonce
+        # pourtant « envoye » sur un signalement qui attend encore.
+        "nom": "signalement : l'issue est lue sur la tentative, et non sur la file",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/ProblemReportRepository.kt",
+        "avant": "            val issue = ProblemReports.outcome(stillQueued(owner, entry.id))",
+        "apres": "            val issue = ProblemReports.outcome(false)",
+        "tache": ":core:data:testDebugUnitTest --tests *ProblemReportRepositoryTest*",
+        "attendus": ["hors ligne, le signalement est garde et annonce comme tel"],
+    },
+    {
+        # La description est rangee telle qu'elle a ete saisie, espaces compris. Le serveur, lui,
+        # mesure `length(btrim(description))` : le client aurait valide une longueur et en
+        # enverrait une autre.
+        "nom": "signalement : la description est rangee sans etre rognee",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/local/ProblemReportStore.kt",
+        "avant": "                description = draft.description.trim(),",
+        "apres": "                description = draft.description,",
+        "tache": ":core:data:testDebugUnitTest --tests *ProblemReportStoreTest*",
+        "attendus": ["la description est rognee avant d'etre rangee"],
+    },
+    {
+        # Le filtre du retrait ne verifie plus le couple (identifiant, compte) : la ligne d'un autre
+        # compte survit, mais **sa capture** est effacee. C'est le cas ou l'entree et le fichier
+        # divergent, et ou rien a l'ecran ne le dit.
+        "nom": "signalement : le retrait ne verifie plus le couple identifiant et compte",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/local/ProblemReportStore.kt",
+        "avant": "        if (!connue) return",
+        "apres": "        if (false) return",
+        "tache": ":core:data:testDebugUnitTest --tests *ProblemReportStoreTest*",
+        "attendus": ["le retrait ne touche pas l'entree d'un autre compte"],
+    },
+    {
+        # La reprise du reseau ne vide plus la boite : un signalement ecrit hors connexion reste
+        # dans la file jusqu'au prochain tic du minuteur, trente secondes plus tard.
+        "nom": "branchement : la reprise du reseau ne vide plus la boite des signalements",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/AppContainer.kt",
+        "avant": "            userState.sync()\n            quiz.refresh()\n            problemReports.flush()",
+        "apres": "            userState.sync()\n            quiz.refresh()",
+        "tache": ":core:data:testDebugUnitTest --tests *AppContainerWiringTest*",
+        "attendus": ["la reprise du reseau vide la boite des signalements"],
+    },
+    {
+        # La boite ne lit plus le reseau du bandeau : elle tente un depot a chaque geste, meme hors
+        # connexion, et les deux lectures de la meme verite peuvent diverger.
+        "nom": "branchement : la boite des signalements n'ecoute plus le reseau du bandeau",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/AppContainer.kt",
+        "avant": "        horsLigne = { connectivity.state.value.horsLigne },",
+        "apres": "        horsLigne = { false },",
+        "tache": ":core:data:testDebugUnitTest --tests *AppContainerWiringTest*",
+        "attendus": ["le conteneur donne a la boite la lecture du reseau du bandeau"],
+    },
 ]
 
 

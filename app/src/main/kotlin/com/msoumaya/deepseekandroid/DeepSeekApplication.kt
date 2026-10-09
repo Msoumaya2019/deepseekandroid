@@ -64,6 +64,12 @@ class DeepSeekApplication : Application() {
                 context = applicationContext,
                 directory = File(applicationContext.cacheDir, "recitations"),
             ),
+            // La version part dans chaque signalement de probleme, et elle ne peut venir que
+            // d'ici : `core:data` n'a pas de `BuildConfig`, et le seul module qui connaisse le
+            // paquet est celui-ci. C'est `versionName` — « 0.1.0 » en debug comme en release —,
+            // et non `versionCode`, parce que c'est la forme que la personne peut reconnaitre
+            // dans un magasin ou dans un rapport.
+            appVersion = BuildConfig.VERSION_NAME,
         )
         // Le lecteur unique est **depose** pour le service : celui-ci peut etre reveille par
         // Android alors que l'application n'existe plus en memoire, et n'a donc aucun autre
@@ -86,5 +92,11 @@ class DeepSeekApplication : Application() {
         // un appareil qui refuse l'inscription n'affiche pas de bandeau, et c'est le bon defaut
         // — annoncer une panne qu'on n'a pas mesuree serait pire que de ne rien annoncer.
         container.connectivity.start()
+
+        // La boite d'envoi des signalements demarre ici pour la meme raison : un signalement
+        // ecrit hors connexion lors d'une session precedente doit partir des l'ouverture, sans
+        // qu'un ecran ait a etre visite. L'original branche cet observateur dans `App.tsx`, a la
+        // vie de l'application, et non dans un ecran.
+        container.problemReports.start()
     }
 }

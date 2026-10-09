@@ -10,7 +10,7 @@ import kotlin.test.assertTrue
  * ## Pourquoi lire le source, alors que le reste est éprouvé par le comportement
  *
  * Le conteneur ne se construit qu'avec un `Context` Android : dans une épreuve JVM, il n'y a pas
- * de `Context`, et rien de ce qu'il fait au démarrage ne peut être exécuté. Or deux choses y sont
+ * de `Context`, et rien de ce qu'il fait au démarrage ne peut être exécuté. Or quatre choses y sont
  * invisibles à l'exécution :
  *
  *  - **la relecture des réglages d'écoute au démarrage.** Sans elle, le lecteur part des valeurs
@@ -18,10 +18,16 @@ import kotlin.test.assertTrue
  *  - **l'emplacement du document.** Un fichier rangé dans un dossier de compte ferait changer de
  *    réglages en changeant de compte, alors que la façon d'écouter tient à l'appareil ;
  *  - **la reprise du réseau.** L'original pousse la file des modifications d'état quand le réseau
- *    revient, puis son observateur de Quiz relit. Un `onRestore = {}` compilerait parfaitement :
- *    le bandeau s'afficherait, annoncerait le retour, et la modification faite hors ligne
- *    resterait dans la file. C'est le défaut le plus silencieux de ce dépôt, parce qu'il ne se
- *    produit que sur une vraie coupure — donc presque jamais pendant qu'on écrit le code.
+ *    revient, puis son observateur de Quiz relit, et son observateur de signalements vide la boîte
+ *    d'envoi. Un `onRestore = {}` compilerait parfaitement : le bandeau s'afficherait, annoncerait
+ *    le retour, et la modification faite hors ligne resterait dans la file. C'est le défaut le plus
+ *    silencieux de ce dépôt, parce qu'il ne se produit que sur une vraie coupure — donc presque
+ *    jamais pendant qu'on écrit le code ;
+ *  - **la lecture du réseau que reçoit la boîte d'envoi.** Elle est une **référence en avant** vers
+ *    l'observateur, déclaré plus bas : une lambda qui lirait autre chose — une seconde lecture
+ *    `NetInfo` —, ou un `horsLigne = { false }` par défaut, compilerait aussi. La conséquence
+ *    serait une tentative d'envoi à chaque geste hors connexion, et une phrase « envoyé » sur un
+ *    signalement qui n'a pas bougé.
  *
  * Ce sont des branchements, pas des calculs : le comportement du dépôt est éprouvé par
  * [com.msoumaya.deepseekandroid.core.data.repository.AudioSettingsRepositoryTest], et c'est ici
@@ -90,6 +96,41 @@ class AppContainerWiringTest {
             etat < quiz,
             "La reprise relit le Quiz **avant** de pousser l'etat : la progression affichee " +
                 "serait calculee sur un etat que le serveur n'a pas encore recu.",
+        )
+    }
+
+    @Test
+    fun `la reprise du reseau vide la boite des signalements`() {
+        // Un `onRestore` qui pousse l'etat et relit le Quiz mais oublie la boite laisserait un
+        // signalement ecrit hors connexion dans la file jusqu'a la prochaine ouverture — et rien
+        // ne le dirait, puisque la boite ne s'affiche nulle part : elle n'est pas une liste qu'on
+        // relit, c'est une boite d'envoi.
+        val bloc = blocDeLaReprise()
+
+        assertTrue(
+            bloc.contains("problemReports.flush()"),
+            "La reprise du reseau ne vide plus la boite des signalements : un signalement ecrit " +
+                "hors connexion resterait dans la file sans que rien ne le signale.",
+        )
+    }
+
+    @Test
+    fun `le conteneur donne a la boite la lecture du reseau du bandeau`() {
+        // La boite ne doit pas porter une **seconde** lecture du reseau : deux lectures de la meme
+        // verite finiraient par diverger, et le bandeau pourrait annoncer une coupure pendant que
+        // la file essaie quand meme. Le defaut `horsLigne = { false }` compilerait aussi, et
+        // ferait tenter un envoi a chaque geste hors connexion.
+        val source = sourceDuConteneur()
+
+        assertTrue(
+            source.contains("connectivity.state.value.horsLigne"),
+            "La boite des signalements ne lit plus l'etat du reseau publie par l'observateur : " +
+                "elle porte une seconde lecture de la meme verite, ou aucune.",
+        )
+        assertTrue(
+            source.contains("ProblemReportStore(root)"),
+            "La boite des signalements doit vivre sous la racine de l'etat, hors de tout dossier " +
+                "de compte : c'est le document qui porte le compte de chaque entree.",
         )
     }
 
