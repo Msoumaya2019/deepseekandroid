@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Manifeste de `core:data`, et ce module n'en portait aucun.
+
+  Il existe pour **une seule ligne**, et c'est le lint qui l'a exigee. `ConnectivityObserver`
+  appelle `ConnectivityManager.getActiveNetwork()`, `getNetworkCapabilities()` et
+  `registerDefaultNetworkCallback()`, dont les trois portent
+  `@RequiresPermission(ACCESS_NETWORK_STATE)`. Or le lint evalue le manifeste de **chaque module**,
+  jamais le manifeste fusionne : la permission etait bien declaree dans
+  `app/src/main/AndroidManifest.xml`, et `:core:data:lint` echouait tout de meme sur trois erreurs
+  « Missing permissions required by ConnectivityManager... ». La CI l'a montre — l'etape de lint
+  est rouge, et l'APK n'est donc jamais assemble.
+
+  La declaration est **repetee** ici a dessein, et non par megarde : une bibliotheque qui appelle
+  une API sous permission declare cette permission elle-meme, sans quoi elle ne fonctionne que
+  dans une application qui a pense a le faire pour elle. Le manifeste fusionne deduplique les deux
+  declarations — il n'y a donc ni doublon dans l'APK, ni avertissement —, et retirer l'une des deux
+  ferait rougir le lint du module prive.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Detection de la connectivite : lire l'etat du reseau, et etre prevenu de son retour. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+</manifest>

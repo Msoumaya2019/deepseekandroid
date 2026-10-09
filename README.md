@@ -157,13 +157,16 @@ la mesure.
 
 Le chemin du SDK se règle dans `local.properties` (`sdk.dir=...`).
 
-> **Le lint sort en `BUILD SUCCESSFUL` avec 22 avertissements, et il faut le savoir avant de
-> croire à un zéro.** Mesuré sur les 14 rapports `build/reports/lint-results-*.xml` : 22
-> avertissements, **tous** de la famille « une version plus récente est disponible » — 3 sur le
-> plugin Android et le lanceur Gradle, 19 sur les dépendances du catalogue. **Aucun** ne porte sur
-> du code. Ils sont laissés en place volontairement : passer à AGP 9.4.1 est une migration, pas
-> une mise à jour. Le chiffre est noté ici pour qu'un relevé **supérieur** se remarque : sans
-> repère, vingt-deux avertissements de bruit finissent par cacher le vingt-troisième.
+> **Le lint sort en `BUILD SUCCESSFUL` avec 24 avertissements, et il faut le savoir avant de
+> croire à un zéro.** Le repère était de **22** depuis la phase A ; le dernier relevé en compte
+> **24**, tous dans le rapport du module `app`. Vingt-trois sont de la famille « une version plus
+> récente est disponible » — 3 sur le plugin Android et le lanceur Gradle, 20 sur les dépendances
+> du catalogue —, et **un** porte sur `PlaybackService` : un service exporté sans permission, ce
+> qui est voulu et justifié dans `app/src/main/AndroidManifest.xml` — c'est le système, et non
+> l'application, qui le lie pour l'écran verrouillé. **Aucun** ne porte sur du code Kotlin. Ils
+> sont laissés en place volontairement : passer à AGP 9.4.1 est une migration, pas une mise à
+> jour. Le chiffre est noté ici pour qu'un relevé **supérieur** se remarque : sans repère,
+> vingt-quatre avertissements de bruit finissent par cacher le vingt-cinquième.
 
 > **Un build vert ne prouve pas que les tests ont tourné.** Le compte se lit dans les rapports
 > XML du coureur, pas dans la sortie de Gradle : `tools/compter-tests.py` existe pour cela, et il
