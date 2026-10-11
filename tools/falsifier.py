@@ -5846,6 +5846,23 @@ CAS: list[dict] = [
         "tache": ":core:data:testDebugUnitTest --tests *AppContainerWiringTest*",
         "attendus": ["les deux observateurs absorbent l'echec de leur reprise"],
     },
+    # ------------------------------------------------------------------ le message d'erreur social
+    #
+    # Un seul cas, et il ne peut etre vu que par un controle de **forme**. Le comportement ne
+    # change pour aucune exception ordinaire : `restMessage()` retombe sur `message`, donc les
+    # deux implementations rendent la meme chose, et tous les tests de comportement du depot
+    # restent verts. Ce qui change, c'est ce qu'on lit quand le serveur **a** repondu — le bloc
+    # de debogage et l'adresse du projet, au lieu du texte que la fonction a ecrit.
+    {
+        # Le depot relit `message` : l'ecran affiche le bloc de debogage **et l'adresse du
+        # projet**, et quelqu'un qui perd sa connexion lit une URL au lieu de la raison du refus.
+        "nom": "social : le message d'erreur relit le bloc de debogage",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/SocialRepository.kt",
+        "avant": "        Social.errorText(message = error.restMessage(), code = error.restCode())",
+        "apres": "        Social.errorText(message = error.message, code = error.restCode())",
+        "tache": ":core:data:testDebugUnitTest --tests *SocialSourceShapeTest*",
+        "attendus": ["le message d'erreur lit le champ du serveur, pas le bloc de debogage"],
+    },
 ]
 
 

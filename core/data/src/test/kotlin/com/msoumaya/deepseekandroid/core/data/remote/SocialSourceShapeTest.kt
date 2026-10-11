@@ -5,18 +5,24 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 
 /**
- * Tient la **source unique** de la taille d'une page de messages.
+ * Tient, par la **source**, les règles du dépôt social qu'aucun test de comportement ne peut voir.
+ *
+ * Trois contrôles, et chacun protège une règle qui ne se voit pas autrement :
+ *
+ *  - la **taille d'une page de messages** n'est pas recopiée mais lue au domaine, sans quoi la
+ *    requête et la règle « en reste-t-il ? » divergeraient en silence ;
+ *  - un **partage** s'écrit dans une conversation, jamais dans un cercle, sans quoi le serveur le
+ *    refuserait après que l'écran a annoncé un envoi ;
+ *  - le **message d'erreur** est lu sur le champ que le serveur a écrit (`restMessage()`), et non
+ *    sur `message`, qui y accole un bloc de débogage **et l'adresse du projet**.
  *
  * ## Pourquoi un contrôle de forme, et non un test de comportement
  *
- * Le nombre vit dans `Social.MESSAGE_PAGE`, et il sert deux fois : la requête le demande au
- * serveur, et la règle « reste-t-il des messages plus anciens ? » le relit pour savoir si la page
- * reçue est **pleine**. Les deux lectures passent par le même `const val` — mais seulement tant
- * que la source ne le recopie pas.
- *
- * Aucun test de comportement ne peut le voir : les tests du dépôt remplacent la source par une
- * doublure, donc la requête réelle n'est jamais construite. Un contrôle qui lit le source est ici
- * le seul outil qui mesure la bonne chose.
+ * Les deux premières règles vivent dans une requête que les tests du dépôt ne construisent
+ * jamais : la source y est remplacée par une doublure. La troisième, elle, **ne change pas le
+ * comportement** — pour une exception ordinaire, `restMessage()` retombe sur `message`, donc les
+ * deux lectures rendent la même chose, et tous les tests de comportement restent verts. Un
+ * contrôle qui lit le source est ici le seul outil qui mesure la bonne chose.
  *
  * ## Ce qui disparaîtrait sans un mot
  *
@@ -81,6 +87,75 @@ class SocialSourceShapeTest {
                 "l'envoi echouerait sans que rien ne l'ait annonce.",
         )
     }
+
+    @Test
+    fun `le message d'erreur lit le champ du serveur, pas le bloc de debogage`() {
+        // Le constructeur de `RestException` dereference `request.url` : une telle exception ne
+        // s'instancie pas en test, et la lecture du champ `error` est etablie par `javap` sur
+        // l'artefact installe (voir `RestError.kt`). Ce qui se mesure **ici** est autre chose, et
+        // aucune doublure ne le verrait : que le depot **appelle** le helper qui lit ce champ.
+        val source = sourceDepot()
+        val bloc = blocDescribe(source)
+
+        // L'ancre d'abord : sans elle, les controles qui suivent pourraient porter sur un fichier
+        // qui n'a plus de `describe` du tout, et ne mesureraient rien.
+        assertTrue(
+            bloc.contains("private fun describe(error: Throwable): String"),
+            "L'ancre a bouge : `describe` n'existe plus sous cette forme dans le depot. Ce " +
+                "controle ne mesure donc plus rien, et doit etre repris avant d'etre cru.",
+        )
+        assertTrue(
+            bloc.contains("error.restMessage()"),
+            "Le depot lit de nouveau `message`, qui accole au texte du serveur un bloc de " +
+                "debogage et l'adresse du projet : quelqu'un qui perd sa connexion lira une URL " +
+                "au lieu de la raison du refus.",
+        )
+        assertTrue(
+            bloc.contains("error.restCode()"),
+            "Le depot ne transmet plus le code du serveur : un refus sans texte perd son " +
+                "diagnostic d'installation, et l'ecran retombe sur le message generique.",
+        )
+        assertTrue(
+            !bloc.contains("error.message"),
+            "Le depot est revenu a `error.message` : l'ecran affichera le bloc de debogage.",
+        )
+    }
+
+    /**
+     * Le bloc de `describe`, borné à sa **propre** déclaration.
+     *
+     * `error.message` est un jeton qu'un `contains` sur le fichier entier satisferait par une
+     * occurrence étrangère : la borne est donc ce qui donne son sens au contrôle. Le second
+     * `check` est le témoin qu'elle a bien mordu — sans lui, une ancre déplacée ferait lire tout
+     * le fichier, et le contrôle passerait pour la mauvaise raison.
+     */
+    private fun blocDescribe(source: String): String {
+        val ancre = "private fun describe(error: Throwable): String"
+        val debut = source.indexOf(ancre)
+        check(debut >= 0) { "l'ancre de `describe` est introuvable dans SocialRepository.kt" }
+        val bloc = source.substring(debut).take(FENETRE_DESCRIBE).substringBefore("\n}")
+        check(bloc.length < source.length) {
+            "la borne n'a pas mordu : le bloc couvre tout le fichier, donc le controle ne " +
+                "distingue plus l'appel de `describe` d'une occurrence ailleurs."
+        }
+        return bloc
+    }
+
+    /** Le source du dépôt social, cherché depuis le module **et** depuis la racine. */
+    private fun sourceDepot(): String {
+        val relatif =
+            "src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/SocialRepository.kt"
+        val candidats = listOf(File(relatif), File("core/data/$relatif"))
+        val fichier = candidats.firstOrNull { it.isFile }
+            ?: error(
+                "SocialRepository.kt introuvable. Chemins essayés : " +
+                    candidats.joinToString { it.absolutePath },
+            )
+        return fichier.readText()
+    }
+
+    /** Assez de caractères pour couvrir le KDoc de `describe` et son corps. */
+    private val FENETRE_DESCRIBE = 1500
 
     /** Le source de la source Supabase, cherché depuis le module **et** depuis la racine. */
     private fun sourceSupabase(): String {

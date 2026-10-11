@@ -3,6 +3,8 @@ package com.msoumaya.deepseekandroid.core.data.repository
 import com.msoumaya.deepseekandroid.core.data.remote.ChatRoom
 import com.msoumaya.deepseekandroid.core.data.remote.OwnerStore
 import com.msoumaya.deepseekandroid.core.data.remote.SocialSource
+import com.msoumaya.deepseekandroid.core.data.remote.restCode
+import com.msoumaya.deepseekandroid.core.data.remote.restMessage
 import com.msoumaya.deepseekandroid.core.domain.Social
 import com.msoumaya.deepseekandroid.core.domain.SocialText
 import com.msoumaya.deepseekandroid.core.model.ChatMessage
@@ -716,10 +718,16 @@ class SocialRepository(
     /**
      * Message lisible d'une erreur.
      *
-     * Seul `message` est lu. Le client d'origine inspectait aussi `details` et `code`, qui sont
-     * les champs d'un objet d'erreur JavaScript : le client Supabase de Kotlin ne les présente
-     * pas de la même façon, et fabriquer un « code » à partir d'un texte serait pire que de ne
-     * pas en avoir — c'est le rôle de [Social.errorText], qui retombe sur un message générique.
+     * Le texte vient de [restMessage], qui lit le champ que le serveur a écrit — et non
+     * `message`, qui y accole un bloc de débogage **et l'adresse du projet** : quelqu'un qui
+     * perd sa connexion lirait une URL au lieu de la raison du refus. Le code vient de
+     * [restCode], et sert au diagnostic d'installation, comme pour le Quiz : voir
+     * [Social.errorText].
+     *
+     * Le client d'origine inspectait aussi `details`, qui est le champ d'un objet d'erreur
+     * JavaScript sans équivalent ici : en fabriquer un à partir d'un texte serait pire que de ne
+     * pas en avoir, puisque [Social.errorText] retombe déjà sur un message générique.
      */
-    private fun describe(error: Throwable): String = Social.errorText(message = error.message)
+    private fun describe(error: Throwable): String =
+        Social.errorText(message = error.restMessage(), code = error.restCode())
 }
