@@ -98,5 +98,13 @@ class DeepSeekApplication : Application() {
         // qu'un ecran ait a etre visite. L'original branche cet observateur dans `App.tsx`, a la
         // vie de l'application, et non dans un ecran.
         container.problemReports.start()
+
+        // Le retour au premier plan est observe ici pour la meme raison, et il est le **seul**
+        // moment ou une file qui attend le retour de la personne peut se vider sans attendre le
+        // minuteur : une recitation enregistree hors connexion part des que l'application revient
+        // au premier plan. L'original branche cet ecouteur dans `App.tsx`, a la vie de
+        // l'application, et non dans un ecran — une inscription liee a une activite s'arreterait a
+        // chaque rotation.
+        container.premierPlan.start()
     }
 }

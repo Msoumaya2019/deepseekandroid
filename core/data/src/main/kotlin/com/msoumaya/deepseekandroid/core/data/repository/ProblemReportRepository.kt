@@ -180,13 +180,13 @@ class ProblemReportRepository(
      * premier vidage est utile au démarrage : un signalement écrit hors connexion lors de la
      * session précédente part dès que l'application s'ouvre avec du réseau.
      *
-     * **Ce que ce minuteur ne remplace pas, et qui est nommé pour ne pas être cru fait.**
-     * L'original branche **quatre** déclencheurs : l'ouverture, le retour du réseau, le retour au
-     * premier plan, et le minuteur. Les deux premiers sont ici — l'ouverture par cet appel, le
-     * réseau par le conteneur ; le **retour au premier plan** ne l'est pas encore, parce qu'il
-     * demande d'observer le cycle de vie du processus, ce que ce module ne fait pas. La
-     * conséquence est bornée et connue : un signalement mis en attente pendant que l'application
-     * était en arrière-plan part au plus tard à la fin du délai ci-dessous.
+     * **Les quatre déclencheurs de l'original, et où ils vivent.** L'original en branche quatre :
+     * l'ouverture, le retour du réseau, le retour au premier plan, et le minuteur. L'ouverture et
+     * le minuteur sont **ici** — c'est le `sync()` immédiat suivi du `setInterval(sync,30000)` ; le
+     * réseau passe par `ConnectivityObserver.onRestore`, et le **retour au premier plan** par
+     * `ForegroundObserver`, qui appelle `flush` dès que la personne revient. Aucun des quatre ne
+     * manque : ce qui vit hors de ce fichier n'y manque pas, il vit chez l'observateur qui en
+     * connaît la source.
      */
     fun start() {
         scope.launch {

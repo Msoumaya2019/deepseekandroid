@@ -43,6 +43,7 @@ import com.msoumaya.deepseekandroid.core.data.repository.SocialRepository
 import com.msoumaya.deepseekandroid.core.data.repository.UserRepository
 import com.msoumaya.deepseekandroid.core.data.security.SecretVault
 import com.msoumaya.deepseekandroid.core.data.system.ConnectivityObserver
+import com.msoumaya.deepseekandroid.core.data.system.ForegroundObserver
 import com.msoumaya.deepseekandroid.core.domain.Dates
 import com.msoumaya.deepseekandroid.core.domain.Quran
 import com.msoumaya.deepseekandroid.core.domain.QuranArchive
@@ -330,13 +331,14 @@ class AppContainer(
      * qu'une commodité — la boîte est indépendante des deux autres, et l'original la vide depuis
      * un écouteur à elle.
      *
-     * **Ce qui reste à faire, et qui est nommé pour ne pas être cru fait.** L'observateur du Quiz
-     * de l'original se déclenche à **quatre** moments : à l'ouverture, au retour du réseau, au
-     * passage au premier plan, et toutes les trente secondes. Seul le retour du réseau passe par
-     * ici ; les trois autres appartiennent à la tranche du Quiz. L'observateur des **signalements**
-     * a les mêmes quatre moments : l'ouverture et le minuteur sont pris par
-     * `ProblemReportRepository.start()`, le réseau par ici, et le **retour au premier plan** n'est
-     * pas porté — voir la documentation de `start()`, qui dit ce que cela coûte.
+     * **Ce qui reste, et qui est nommé pour ne pas être cru fait.** L'observateur du Quiz de
+     * l'original se déclenche à **quatre** moments : à l'ouverture, au retour du réseau, au
+     * passage au premier plan, et toutes les trente secondes. Le réseau passe par ici et le retour
+     * au premier plan par [premierPlan] ; l'ouverture et le minuteur relèvent de la tranche du
+     * Quiz, dont le dépôt décide quand relire (voir `QuizSource`). L'observateur des
+     * **signalements** a les mêmes quatre moments, et **les quatre sont portés** : l'ouverture et
+     * le minuteur par `ProblemReportRepository.start()`, le réseau par ici, et le retour au premier
+     * plan par [premierPlan].
      *
      * **Aucun effet si le projet Supabase n'est pas configuré.** `sync` rend alors
      * `NotConfigured` sans qu'aucune requête ne parte, `refresh` fait de même, et `flush` rend
@@ -401,6 +403,49 @@ class AppContainer(
             serializer = StoredAudioSettings.serializer(),
             default = { StoredAudioSettings() },
         ),
+    )
+
+    /**
+     * Le retour au premier plan, et ce qu'il réveille.
+     *
+     * **Le seul moment qui réveille une file endormie sans attendre.** Le minuteur des
+     * signalements passe toutes les trente secondes, et l'observateur du réseau part au retour de
+     * la connexion : ni l'un ni l'autre ne sait que la personne vient de revenir. Une récitation
+     * enregistrée hors connexion dans le métro, ou un signalement écrit en avion, attendent donc le
+     * retour **réel** — c'est ce que l'original branche dans `App.tsx`
+     * (`AppState.addEventListener('change', …)`), et ce que ce déclencheur porte.
+     *
+     * **Ce qu'il appelle, et dans quel ordre.** Les quatre files que l'original réveille à ce
+     * moment : l'état, les récitations, le Quiz et les signalements. L'état vient **d'abord**, et
+     * c'est la règle de la reprise du réseau — relire le Quiz avant aurait montré une progression
+     * que le serveur n'a pas encore reçue. Le rang des trois autres n'est qu'une commodité : leurs
+     * files sont indépendantes.
+     *
+     * **L'échec ne remonte pas, et n'arrête pas non plus la séquence.** L'observateur absorbe
+     * l'exception : un dépôt de fond qui échoue n'a rien à dire à la personne qui vient de revenir,
+     * et ne doit pas faire tomber l'application. Un appel qui lève interrompt en revanche les
+     * suivants, qui attendent la prochaine occasion — au plus tard le minuteur des signalements,
+     * trente secondes plus tard. C'est la forme et la conséquence de la reprise du réseau.
+     *
+     * **Aucun effet si le projet Supabase n'est pas configuré.** Les quatre appels savent alors
+     * répondre sans qu'aucune requête ne parte : `sync` rend `NotConfigured`, `refresh` fait de
+     * même, et les deux files gardent leurs entrées.
+     *
+     * **Déclaré en dernier, et ce n'est pas un hasard.** Il réveille quatre objets déclarés
+     * au-dessus de lui : il n'a donc besoin d'**aucune** référence en avant, contrairement à la
+     * boîte des signalements qui lit l'observateur du réseau. Une lambda qui capturerait un objet
+     * non encore construit compilerait et ne se verrait pas ; ici, l'ordre des déclarations suffit
+     * à l'interdire.
+     */
+    val premierPlan: ForegroundObserver = ForegroundObserver(
+        context = appContext,
+        scope = scope,
+        onReprise = {
+            userState.sync()
+            recitations.syncInBackground()
+            quiz.refresh()
+            problemReports.flush()
+        },
     )
 
     // -----------------------------------------------------------------------

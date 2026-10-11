@@ -134,6 +134,162 @@ class AppContainerWiringTest {
         )
     }
 
+    // ---------------------------------------------------------------- le retour au premier plan
+
+    @Test
+    fun `le conteneur branche le retour au premier plan sur les quatre files`() {
+        // `onReprise = {}` compilerait : l'observateur s'inscrirait, compterait les activites, et
+        // ne reveillerait rien. C'est le defaut le plus silencieux de la tranche — rien ne se
+        // plaint, et une recitation enregistree hors connexion attend le minuteur.
+        val bloc = blocDeLaReprisePremierPlan()
+
+        for (appel in listOf(
+            "userState.sync()",
+            "recitations.syncInBackground()",
+            "quiz.refresh()",
+            "problemReports.flush()",
+        )) {
+            assertTrue(
+                bloc.contains(appel),
+                "Le retour au premier plan n'appelle plus `$appel` : la file correspondante " +
+                    "attendrait la prochaine occasion, et rien ne le dirait.",
+            )
+        }
+    }
+
+    @Test
+    fun `le retour au premier plan pousse l'etat avant de relire le Quiz`() {
+        // Meme regle que pour la reprise du reseau : relire le Quiz d'abord montrerait une
+        // progression que le serveur n'a pas encore recue.
+        val bloc = blocDeLaReprisePremierPlan()
+        val etat = bloc.indexOf("userState.sync()")
+        val quiz = bloc.indexOf("quiz.refresh()")
+
+        assertTrue(etat >= 0 && quiz >= 0, "Les deux appels de la reprise doivent etre presents.")
+        assertTrue(
+            etat < quiz,
+            "Le retour au premier plan relit le Quiz **avant** de pousser l'etat : la progression " +
+                "affichee serait calculee sur un etat que le serveur n'a pas encore recu.",
+        )
+    }
+
+    @Test
+    fun `l'application demarre l'observation du premier plan`() {
+        // Sans cet appel, l'observateur n'est jamais inscrit : le compteur reste a zero, aucune
+        // reprise n'a lieu, et **tous les autres controles de ce fichier restent verts** — ils
+        // lisent le conteneur, pas l'application.
+        val application = sourceDeLApplication()
+
+        assertTrue(
+            application.contains("container.premierPlan.start()"),
+            "L'application ne demarre pas l'observation du premier plan : le declencheur existe " +
+                "et n'est jamais branche.",
+        )
+    }
+
+    @Test
+    fun `les deux observateurs absorbent l'echec de leur reprise`() {
+        // Le defaut que ce controle tient, et qui a ete **trouve** en ecrivant cette tranche :
+        // `onRestore` et `onReprise` touchent des files qui **propagent** un echec non tolere —
+        // `QuizRepository.refresh` par son `compte { }`, et `ProblemReportRepository.flush` par son
+        // `push`. Sans capture, l'exception remonte a une portee sans `CoroutineExceptionHandler`,
+        // et l'application s'arrete au moment precis ou la personne revient.
+        for ((observateur, rappel) in listOf(
+            "ConnectivityObserver" to "onRestore",
+            "ForegroundObserver" to "onReprise",
+        )) {
+            val bloc = blocDuRappelDeFond(observateur, rappel)
+
+            assertTrue(
+                bloc.contains("catch (cancelled: CancellationException)"),
+                "`$observateur` ne relance plus l'annulation : avaler `CancellationException` " +
+                    "casserait l'annulation cooperative, et la portee croirait le travail fini.",
+            )
+            assertTrue(
+                bloc.contains("catch (_: Exception)"),
+                "`$observateur` ne capture plus l'echec de son rappel : une panne au moment du " +
+                    "retour remonterait a une portee sans gestionnaire, et l'application " +
+                    "s'arreterait au moment precis ou la personne revient.",
+            )
+        }
+    }
+
+    /**
+     * Le bloc de `onReprise`, borne a la declaration de l'observateur.
+     *
+     * Meme raison que [blocDeLaReprise] : `userState.sync()` et `quiz.refresh()` figurent aussi
+     * dans la reprise du reseau, quelques lignes plus haut. Une assertion sur le fichier entier
+     * serait satisfaite par **cet autre** bloc, et resterait verte sur un `onReprise` vide.
+     */
+    private fun blocDeLaReprisePremierPlan(): String {
+        val bloc = sourceDuConteneur().substringAfter("val premierPlan").take(FENETRE_REPRISE)
+        check(bloc.contains("onReprise")) {
+            "Le bloc de `onReprise` est introuvable apres `val premierPlan` : la fenetre de " +
+                "lecture ne delimite plus l'observateur, et une assertion ecrite dessus " +
+                "mesurerait autre chose que la reprise."
+        }
+        return bloc
+    }
+
+    /**
+     * Le corps du `scope.launch` d'un observateur de fond, borne a ce lancement.
+     *
+     * Le controle d'absorption porte sur une capture ecrite **dans** ce bloc ; une assertion sur le
+     * fichier entier serait satisfaite par une capture ecrite ailleurs, ou par la **prose** d'un
+     * commentaire qui nommerait `catch (_: Exception)`. La garde refuse de mesurer tout le fichier
+     * quand la borne n'a pas mordu, et refuse un bloc qui ne contient plus le rappel attendu — les
+     * deux facons dont cette assertion pourrait devenir vraie pour la mauvaise raison.
+     */
+    private fun blocDuRappelDeFond(observateur: String, rappel: String): String {
+        val source = sourceDeLObservateur(observateur)
+        val apres = source.substringAfter("scope.launch {")
+        check(apres.length < source.length) {
+            "Aucun `scope.launch` dans $observateur : le rappel de fond n'est plus lance."
+        }
+        val bloc = apres.substringBefore("}\n    }")
+        check(bloc.length < apres.length) {
+            "La borne du bloc `scope.launch` n'a pas mordu dans $observateur : le controle " +
+                "mesurerait tout le fichier, et serait satisfait par une capture ecrite ailleurs."
+        }
+        check(bloc.contains(rappel)) {
+            "Le bloc de `scope.launch` de $observateur ne contient plus `$rappel` : la borne ne " +
+                "delimite plus le rappel de fond."
+        }
+        return bloc
+    }
+
+    /** Le source de `DeepSeekApplication`, depuis le repertoire du module `core:data`. */
+    private fun sourceDeLApplication(): String =
+        sourceDe("src/main/kotlin/com/msoumaya/deepseekandroid/DeepSeekApplication.kt", "app")
+
+    /** Le source d'un observateur de `core:data/system`, depuis le repertoire du module. */
+    private fun sourceDeLObservateur(nom: String): String =
+        sourceDe("src/main/kotlin/com/msoumaya/deepseekandroid/core/data/system/$nom.kt", "core/data")
+
+    /**
+     * Lit un fichier du depot depuis le repertoire du module.
+     *
+     * Un test de `:core:data` s'execute avec le repertoire du module pour origine
+     * (`deepseekandroid/core/data`), et non la racine du depot : c'est ce que Gradle donne a `Test`
+     * par defaut. Les fichiers vises vivent donc un ou deux crans plus haut. Les chemins sont
+     * essayes dans l'ordre, et l'erreur nomme **tous** les candidats, pour qu'un deplacement futur
+     * se diagnostique en une lecture plutot qu'en une chasse.
+     */
+    private fun sourceDe(cheminRelatif: String, prefixe: String): String {
+        val candidats = listOf(
+            File(cheminRelatif),
+            File("$prefixe/$cheminRelatif"),
+            File("../$prefixe/$cheminRelatif"),
+            File("../../$prefixe/$cheminRelatif"),
+        )
+        val fichier = candidats.firstOrNull { it.isFile }
+            ?: error(
+                "$cheminRelatif introuvable. Chemins essayes : " +
+                    candidats.joinToString { it.absolutePath },
+            )
+        return fichier.readText()
+    }
+
     /**
      * Le bloc de `onRestore`, borné à la déclaration de l'observateur.
      *

@@ -5762,6 +5762,90 @@ CAS: list[dict] = [
         "tache": ":navigation:testDebugUnitTest --tests *ReaderRouteRecorderTest*",
         "attendus": ["le partage est branche sur la sortie du lecteur"],
     },
+    # ------------------------------------------------------------------ le retour au premier plan
+    #
+    # Six cas pour une tranche qui comble un ecart **nomme dans trois KDoc** : le retour au premier
+    # plan. Trois visent le domaine (la reduction du cycle de vie), trois le cablage (le
+    # declencheur branche, et l'echec absorbe). Le troisieme cas du cablage — `onRestore` sans
+    # capture — est le defaut **trouve** en ecrivant la tranche, et non un cas d'ecole.
+    {
+        # Le declencheur n'est jamais inscrit : le compteur reste a zero, aucune reprise n'a lieu,
+        # et **tous les autres controles du cablage restent verts** — ils lisent le conteneur, pas
+        # l'application. C'est le defaut le plus silencieux de la tranche.
+        "nom": "premier plan : l'application ne demarre plus l'observation",
+        "fichier": "app/src/main/kotlin/com/msoumaya/deepseekandroid/DeepSeekApplication.kt",
+        "avant": "        container.premierPlan.start()\n",
+        "apres": "        // mutation : plus d'inscription au cycle de vie\n",
+        "tache": ":core:data:testDebugUnitTest --tests *AppContainerWiringTest*",
+        "attendus": ["l'application demarre l'observation du premier plan"],
+    },
+    {
+        # La reprise ne reveille plus rien : le declencheur s'inscrit, compte les activites, et
+        # laisse les quatre files attendre le minuteur. `onReprise = {}` compile parfaitement.
+        "nom": "premier plan : la reprise ne reveille plus aucune file",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/AppContainer.kt",
+        "avant": (
+            "        onReprise = {\n"
+            "            userState.sync()\n"
+            "            recitations.syncInBackground()\n"
+            "            quiz.refresh()\n"
+            "            problemReports.flush()\n"
+            "        },\n"
+        ),
+        "apres": "        onReprise = {\n        },\n",
+        "tache": ":core:data:testDebugUnitTest --tests *AppContainerWiringTest*",
+        "attendus": [
+            "le conteneur branche le retour au premier plan sur les quatre files",
+            "le retour au premier plan pousse l'etat avant de relire le Quiz",
+        ],
+    },
+    {
+        # Toute activite demande la reprise, y compris la seconde : l'application viderait sa file
+        # a l'ouverture d'un lien profond ou dans une fenetre partagee, la ou l'original ne dit
+        # rien. C'est le piege que le **compteur** existe pour fermer.
+        "nom": "premier plan : toute activite demande la reprise",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Foreground.kt",
+        "avant": "            effets = if (etat.activitesVisibles == 0) {",
+        "apres": "            effets = if (true) {",
+        "tache": ":core:domain:test --tests *ForegroundTest*",
+        "attendus": ["une seconde activite ne demande aucune reprise"],
+    },
+    {
+        # Le compteur descend sous zero : un `onActivityStopped` recu sans demarrage laisse -1, et
+        # le prochain demarrage rend 0 — **aucune** reprise n'a plus lieu, sans qu'aucun ecran ne
+        # le montre. Le defaut le plus silencieux du domaine.
+        "nom": "premier plan : le compteur descend sous zero",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/Foreground.kt",
+        "avant": "        etat = ForegroundState((etat.activitesVisibles - 1).coerceAtLeast(0)),",
+        "apres": "        etat = ForegroundState(etat.activitesVisibles - 1),",
+        "tache": ":core:domain:test --tests *ForegroundTest*",
+        "attendus": [
+            "un arret sans demarrage ne rend pas le compteur negatif",
+            "apres un arret orphelin la reprise a toujours lieu",
+        ],
+    },
+    {
+        # La capture est trop etroite : une panne reseau au moment du retour n'est plus absorbee,
+        # remonte a une portee sans gestionnaire, et l'application s'arrete quand la personne
+        # revient. Le defaut ne se produit que sur une vraie coupure, donc presque jamais pendant
+        # qu'on ecrit le code.
+        "nom": "premier plan : la reprise du reseau n'absorbe plus l'echec",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/system/ConnectivityObserver.kt",
+        "avant": "                } catch (_: Exception) {",
+        "apres": "                } catch (_: IllegalArgumentException) {",
+        "tache": ":core:data:testDebugUnitTest --tests *AppContainerWiringTest*",
+        "attendus": ["les deux observateurs absorbent l'echec de leur reprise"],
+    },
+    {
+        # Meme mutation, sur l'observateur du premier plan : le defaut est **ecrit deux fois**, et
+        # corriger un seul des deux fichiers laisserait l'autre tomber.
+        "nom": "premier plan : la reprise au premier plan n'absorbe plus l'echec",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/system/ForegroundObserver.kt",
+        "avant": "                } catch (_: Exception) {",
+        "apres": "                } catch (_: IllegalArgumentException) {",
+        "tache": ":core:data:testDebugUnitTest --tests *AppContainerWiringTest*",
+        "attendus": ["les deux observateurs absorbent l'echec de leur reprise"],
+    },
 ]
 
 

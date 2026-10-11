@@ -9,6 +9,7 @@ import com.msoumaya.deepseekandroid.core.domain.ConnectivityEffect
 import com.msoumaya.deepseekandroid.core.domain.ConnectivityReading
 import com.msoumaya.deepseekandroid.core.domain.ConnectivityState
 import com.msoumaya.deepseekandroid.core.domain.transition
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -135,7 +136,25 @@ class ConnectivityObserver(
         if (ConnectivityEffect.DemanderSynchronisation in suite.effets) {
             // Lancé, et non attendu : `onAvailable` s'exécute sur le fil du système, et y faire
             // une requête réseau bloquerait la livraison des événements suivants.
-            scope.launch { onRestore() }
+            scope.launch {
+                try {
+                    onRestore()
+                } catch (cancelled: CancellationException) {
+                    // L'annulation passe **avant** la capture : l'avaler ferait croire à la portée
+                    // que le travail est fini alors qu'il vient d'être interrompu.
+                    throw cancelled
+                } catch (_: Exception) {
+                    // **La capture n'est pas décorative, et elle manquait.** La reprise touche trois
+                    // files, dont deux **propagent** un échec non toléré : `QuizRepository.refresh`
+                    // par son `compte { }`, et `ProblemReportRepository.flush` par son `push`. Sans
+                    // elle, un serveur qui refuse — ou qui n'aboutit pas — au moment même du retour
+                    // faisait remonter l'exception à une portée sans `CoroutineExceptionHandler` :
+                    // l'application s'arrêtait au moment précis où le réseau revenait, et cela
+                    // n'arrivait que sur une vraie coupure, donc presque jamais pendant qu'on écrit
+                    // le code. Un déclencheur de fond n'a rien à dire d'un échec ; chaque file garde
+                    // ce qui n'a pas pu partir, et la prochaine occasion le reprendra.
+                }
+            }
         }
     }
 
