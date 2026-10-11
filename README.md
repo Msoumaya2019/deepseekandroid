@@ -268,6 +268,23 @@ Voir [ARCHITECTURE.md](ARCHITECTURE.md) pour les raisons de ce découpage.
 | [ANDROID_MIGRATION.md](ANDROID_MIGRATION.md) | fonctionnalité par fonctionnalité : source React Native, équivalent Android, état |
 | [SUPABASE_COMPATIBILITY.md](SUPABASE_COMPATIBILITY.md) | le backend partagé, ce qui est lu, ce qui est écrit, ce qui ne doit pas changer |
 | [LOCAL_DATA_MIGRATION.md](LOCAL_DATA_MIGRATION.md) | données locales du client React Native et leur équivalent Android |
+| [NOTICE.md](NOTICE.md) | ressources tierces embarquées et leurs conditions — polices QCF v4, corpus, polices OFL |
+
+---
+
+## Ressources tierces
+
+Le paquet embarque des ressources qui **ne sont pas les nôtres** : les **polices QCF v4**
+(48,85 Mo, dont le rendu par police fait la source immersive), le **corpus** et ses onze JSON, et
+deux **polices OFL**. `NOTICE.md` les nomme, recopie leurs conditions et documente leur
+provenance — dont celle de la déclaration du propriétaire, qui vivait jusqu'ici **dans le dépôt
+d'origine** et ne suivait donc pas les octets.
+
+`tools/verifier-licences.py` vérifie que ce fichier reste vrai : il refuse de sortir en 0 si une
+famille embarquée n'y est pas nommée, si `provenance.json` ne couvre plus les 604 polices
+livrées, si une police de page a perdu ses tables couleur, ou si une **dépendance publicitaire**
+apparaît. C'est la condition 1 des termes QCF/QUL, et elle est **mesurée** dans les dépendances
+déclarées plutôt que promise. L'intégration continue rejoue ce contrôle.
 
 ---
 

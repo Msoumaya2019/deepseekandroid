@@ -142,6 +142,18 @@ n'ont ni le même support, ni le même coût :
 | **Tajweed** (`tajweedPages`) | 604 PNG, une par page | `assets/mushaf-tajweed/`, non importées | 138,5 Mo, non repris |
 | **Coran Test** (`coranTest`) | 607 polices `.woff2` : 604 (une par page) et 3 nommées | `assets/coran-test/`, **versionnées** — les 604 et les 2 nommées que l'original consomme | 48,85 Mo ; la troisième nommée, qu'**aucun** module de l'original n'importe, est **écartée** (105 520 octets, soit l'écart exact entre les deux dossiers). Rendu par police, pas par image |
 
+> **Ce que pèsent ces 48,85 Mo, et pourquoi ils ne se réduisent pas.** Mesuré sur les 604 polices
+> livrées : 51 039 264 octets sur disque pour **167 166 086 octets de tables décompressées** — soit
+> **×3,28** de compression déjà acquise —, dont **96,9 % de contours de glyphes** (`glyf`) et
+> **0,9 % de tables couleur** (`COLR` + `CPAL`). Chaque police ne porte donc **déjà** que les
+> glyphes de sa page : il n'y a rien à sous-ensembler de plus, et retirer le Tajwid ne ferait pas
+> maigrir le paquet — le poids est le dessin, pas la couleur. L'alternative « une seule police »
+> n'est pas équivalente pour autant : le candidat de la source, `UthmanicHafs_V20.woff2`, ne porte
+> **ni `COLR` ni `CPAL`** — mesuré sur les deux fichiers —, c'est une police de texte, et l'adopter
+> remplacerait le rendu, pas la taille. Les conditions de redistribution de ces polices, leur
+> provenance et la déclaration du propriétaire sont recopiées dans `NOTICE.md`, et
+> `tools/verifier-licences.py` les tient.
+
 Trois conséquences qui décident de l'architecture du lecteur :
 
 1. **La source 1441 n'est pas une page, c'est une ligne.** Le lecteur ne peut pas se contenter

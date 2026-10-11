@@ -30,6 +30,16 @@ import com.msoumaya.deepseekandroid.core.domain.TestPageHtml
  * `1.woff2`, et non `001.woff2` : c'est le nom produit par le script d'import de l'original, et
  * celui des fichiers livrés. Le nommage des **images** du moushaf de Médine, lui, est complété
  * sur trois chiffres — deux conventions voisines qui ne se recopient pas.
+ *
+ * ## Ces octets ne sont pas les nôtres
+ *
+ * Les 606 polices viennent d'une **archive tierce**, et leurs conditions — « aucune publicité
+ * distrayante », « respecter les conditions amont » — s'imposent à qui les redistribue. Elles
+ * sont recopiées dans `NOTICE.md`, à la racine, avec la provenance et la raison pour laquelle ces
+ * 48,85 Mo ne se réduisent pas : le poids est à **96,9 % des contours de glyphes**, et chaque
+ * police ne porte **déjà** que ceux de sa page. `tools/verifier-licences.py` tient ce fichier, et
+ * l'intégration continue le rejoue — c'est ce qui empêche la déclaration de se perdre à nouveau
+ * dans le dépôt d'origine.
  */
 internal object TestPageFonts {
 

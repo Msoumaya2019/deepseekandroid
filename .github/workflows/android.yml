@@ -17,9 +17,15 @@
 #      avait sept tests de retard, et le nombre de cas du falsificateur était resté à 272. Cette
 #      étape relit les rapports écrits par l'étape précédente — elle doit donc venir **après**
 #      les tests — et refuse si un compteur annoncé n'est pas celui du banc ;
-#   3. **le lint ensuite.** Il attrape ce que les tests ne voient pas — permission manquante,
+#   3. **les licences des ressources embarquées.** Le paquet redistribue 48,85 Mo de polices
+#      QCF v4 qui ne sont pas les nôtres, et leurs conditions — « aucune publicité distrayante »,
+#      « respecter les conditions amont » — s'imposent à qui les distribue. L'étape vérifie que
+#      le `NOTICE.md` nomme chaque famille embarquée, que `provenance.json` couvre encore les 604
+#      polices livrées, et qu'aucune régie publicitaire n'est déclarée. Elle ne dépend pas des
+#      tests, mais elle suit les deux autres contrôles d'outil pour que ceux-ci restent groupés ;
+#   4. **le lint ensuite.** Il attrape ce que les tests ne voient pas — permission manquante,
 #      API trop récente pour le `minSdk`, ressource inutilisée ;
-#   4. **l'APK de test enfin.** C'est la preuve que l'application est réellement assemblable,
+#   5. **l'APK de test enfin.** C'est la preuve que l'application est réellement assemblable,
 #      et l'artefact est joint pour être installé sans reconstruire.
 #
 # Aucun secret n'est **nécessaire** : sans `SUPABASE_ANON_KEY`, l'application se compile en mode
@@ -112,6 +118,16 @@ jobs:
         # nombre de cas du falsificateur par son propre `--verifier`. Elle ne lance pas Gradle :
         # elle ajoute quelques secondes, pas une compilation.
         run: python3 tools/verifier-compteurs-documents.py
+
+      - name: Vérifier les licences des ressources embarquées
+        # Le paquet redistribue 48,85 Mo de polices QCF v4 qui viennent d'une archive tierce.
+        # Leurs conditions s'imposent à qui les distribue, et la condition « aucune publicité »
+        # se lit dans les dépendances déclarées — le seul chemin par lequel une régie peut
+        # entrer. L'étape vérifie que `NOTICE.md` nomme chaque famille embarquée, que
+        # `provenance.json` couvre encore les 604 polices livrées, que les polices de page
+        # portent toujours leurs tables couleur, et qu'aucune dépendance publicitaire n'est
+        # déclarée. Sans réseau, sans secret, quelques secondes.
+        run: python3 tools/verifier-licences.py
 
       - name: Lint
         run: ./gradlew lint --console=plain
