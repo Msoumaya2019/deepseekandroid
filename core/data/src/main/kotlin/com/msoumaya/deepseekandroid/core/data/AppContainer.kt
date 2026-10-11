@@ -6,6 +6,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
 import com.msoumaya.deepseekandroid.core.data.local.BlobFile
+import com.msoumaya.deepseekandroid.core.data.local.DailyContentCacheStore
 import com.msoumaya.deepseekandroid.core.data.local.HttpArchiveTransport
 import com.msoumaya.deepseekandroid.core.data.local.JsonFileStore
 import com.msoumaya.deepseekandroid.core.data.local.LocalStateStore
@@ -24,6 +25,7 @@ import com.msoumaya.deepseekandroid.core.data.remote.RemoteStateSource
 import com.msoumaya.deepseekandroid.core.data.remote.SessionPreferences
 import com.msoumaya.deepseekandroid.core.data.remote.SupabaseAuthGateway
 import com.msoumaya.deepseekandroid.core.data.remote.SupabaseConfig
+import com.msoumaya.deepseekandroid.core.data.remote.SupabaseDailyContentSource
 import com.msoumaya.deepseekandroid.core.data.remote.SupabaseProvider
 import com.msoumaya.deepseekandroid.core.data.remote.SupabaseProblemReportSender
 import com.msoumaya.deepseekandroid.core.data.remote.SupabaseQuizSource
@@ -35,6 +37,7 @@ import com.msoumaya.deepseekandroid.core.data.remote.UnavailableAuthGateway
 import com.msoumaya.deepseekandroid.core.data.remote.VaultSessionManager
 import com.msoumaya.deepseekandroid.core.data.repository.AudioSettingsRepository
 import com.msoumaya.deepseekandroid.core.data.repository.AuthRepository
+import com.msoumaya.deepseekandroid.core.data.repository.DailyContentRepository
 import com.msoumaya.deepseekandroid.core.data.repository.ProblemReportRepository
 import com.msoumaya.deepseekandroid.core.data.repository.QuizRepository
 import com.msoumaya.deepseekandroid.core.data.repository.QuranArchiveStore
@@ -378,6 +381,30 @@ class AppContainer(
     )
 
     /**
+     * Les contenus du jour : les rappels et les invocations.
+     *
+     * Construit **sans source** quand aucun projet n'est configuré : le dépôt publie alors le
+     * document du disque et n'essaie rien — c'est la même règle que pour l'espace social, le Quiz,
+     * les récitations et les signalements, et elle évite d'annoncer une panne réseau là où il n'y a
+     * simplement pas de réseau à atteindre.
+     *
+     * **Il ne reçoit pas la session, et ce n'est pas un oubli.** Les contenus du jour sont
+     * **publics** : `supabase/daily-contents.sql` ouvre leur lecture à `anon`, et le document est
+     * donc le même pour tout le monde. L'identifiant du compte n'entrera ici qu'avec les
+     * **favoris**, qui sont, eux, une table par compte — et c'est aussi pourquoi le cache n'est pas
+     * un fichier par compte, contrairement à celui du Quiz.
+     *
+     * **Son cache vit à la racine de l'état**, à côté de celui des réglages d'écoute et pour une
+     * raison plus forte : il ne porte aucun compte, donc il n'a rien à assainir et rien à déplacer
+     * quand un compte s'ouvre ou se ferme.
+     */
+    val dailyContents: DailyContentRepository = DailyContentRepository(
+        source = supabaseClient?.let { SupabaseDailyContentSource(it) },
+        cache = DailyContentCacheStore(root),
+        scope = scope,
+    )
+
+    /**
      * Ce que l'appareil retient des notices de récitation déjà lues, **par compte**.
      *
      * Il est ici, à côté du registre, parce qu'il porte la même règle de partage : une récitation
@@ -415,11 +442,18 @@ class AppContainer(
      * retour **réel** — c'est ce que l'original branche dans `App.tsx`
      * (`AppState.addEventListener('change', …)`), et ce que ce déclencheur porte.
      *
-     * **Ce qu'il appelle, et dans quel ordre.** Les quatre files que l'original réveille à ce
-     * moment : l'état, les récitations, le Quiz et les signalements. L'état vient **d'abord**, et
-     * c'est la règle de la reprise du réseau — relire le Quiz avant aurait montré une progression
-     * que le serveur n'a pas encore reçue. Le rang des trois autres n'est qu'une commodité : leurs
-     * files sont indépendantes.
+     * **Ce qu'il appelle, et dans quel ordre.** Les cinq lectures que ce portage réveille à ce
+     * moment : l'état, les récitations, le Quiz, les signalements et les **contenus du jour**.
+     * L'état vient **d'abord**, et c'est la règle de la reprise du réseau — relire le Quiz avant
+     * aurait montré une progression que le serveur n'a pas encore reçue. Le rang des quatre autres
+     * n'est qu'une commodité : leurs lectures sont indépendantes.
+     *
+     * **Les contenus du jour sont le cinquième, et l'original ne les met pas là.** Son
+     * `TodayContents` recharge à l'ouverture, au retour au premier plan et au changement de date —
+     * **pas** au retour du réseau. C'est ce dernier moment qui manque à ce portage : aucune tranche
+     * ne porte encore le minuteur, et l'ouverture appartient à l'écran, qui n'existe pas. Le retour
+     * au premier plan est donc, aujourd'hui, le seul moment où les contenus du jour sont relus — et
+     * c'est ce qui fait que `ConnectivityObserver`, lui, ne les appelle pas.
      *
      * **L'échec ne remonte pas, et n'arrête pas non plus la séquence.** L'observateur absorbe
      * l'exception : un dépôt de fond qui échoue n'a rien à dire à la personne qui vient de revenir,
@@ -427,9 +461,9 @@ class AppContainer(
      * suivants, qui attendent la prochaine occasion — au plus tard le minuteur des signalements,
      * trente secondes plus tard. C'est la forme et la conséquence de la reprise du réseau.
      *
-     * **Aucun effet si le projet Supabase n'est pas configuré.** Les quatre appels savent alors
-     * répondre sans qu'aucune requête ne parte : `sync` rend `NotConfigured`, `refresh` fait de
-     * même, et les deux files gardent leurs entrées.
+     * **Aucun effet si le projet Supabase n'est pas configuré.** Les cinq appels savent alors
+     * répondre sans qu'aucune requête ne parte : `sync` rend `NotConfigured`, les deux `refresh`
+     * font de même, et les deux files gardent leurs entrées.
      *
      * **Déclaré en dernier, et ce n'est pas un hasard.** Il réveille quatre objets déclarés
      * au-dessus de lui : il n'a donc besoin d'**aucune** référence en avant, contrairement à la
@@ -445,6 +479,7 @@ class AppContainer(
             recitations.syncInBackground()
             quiz.refresh()
             problemReports.flush()
+            dailyContents.refresh()
         },
     )
 

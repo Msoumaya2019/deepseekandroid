@@ -129,6 +129,7 @@ qui compte est celle que le dépôt range ensuite sous `filesDir/state/problem-r
 | `audio-reciter-hafs` | le récitant choisi | `state/audio.json` (local) — `AppState.audioPreferences.reciterId` une fois le chemin branché | **pas encore** |
 | `audio-repeat-preferences` | répétition (1x/2x/3x/5x), plage X→Y, pause entre versets | `state/audio.json` (local) | **non** — comme dans le client d'origine |
 | `guest-content-favorites` | favoris de contenus créés sans compte | `content_favorites` (Supabase) une fois connecté | non en mode invité |
+| `daily-content:<date>` | le contenu du jour mis en cache | `state/daily-content.json` (local) — **un seul fichier**, et **non par compte** | non — le contenu est **public**, et le même pour tout le monde |
 | `notification-installation-id` | identifiant d'installation pour les notifications | **recréé** sur Android | non — il est propre à l'installation |
 | `notifications-requested-on-device` | « a-t-on déjà demandé l'autorisation sur cet appareil ? » | indicateur local | non — propre à l'appareil |
 | `audio-reciter-legacy-owner` | marqueur de migration d'un ancien format | sans objet | — |

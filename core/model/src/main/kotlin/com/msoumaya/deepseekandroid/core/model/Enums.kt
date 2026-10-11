@@ -359,4 +359,21 @@ enum class DailyContentType {
 
     @SerialName("invocation")
     INVOCATION,
+    ;
+
+    /**
+     * La valeur écrite dans la colonne `type` de `daily_contents` et `content_categories`.
+     *
+     * Elle est **lue sur le descripteur**, comme `MushafSource.persistedKey`, et non recopiée
+     * dans une seconde table : une table recopiée finirait par diverger du format réellement
+     * écrit, et la divergence serait **muette**. La valeur sert de filtre PostgREST
+     * (`eq("type", …)`) ; une chaîne fausse ne lèverait rien — elle demanderait simplement des
+     * lignes qui n'existent pas, donc une liste vide, c'est-à-dire l'affichage « Aucun rappel
+     * disponible » sur une base qui en contient.
+     *
+     * À ne pas confondre avec la propriété Kotlin `type` de `ContentCategory` et
+     * `DailyContent` : celle-ci porte l'énumération, celle-là porte le littéral qui voyage.
+     */
+    val key: String
+        get() = DailyContentType.serializer().descriptor.getElementName(ordinal)
 }

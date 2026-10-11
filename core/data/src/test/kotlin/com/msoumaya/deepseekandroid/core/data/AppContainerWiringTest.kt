@@ -137,10 +137,15 @@ class AppContainerWiringTest {
     // ---------------------------------------------------------------- le retour au premier plan
 
     @Test
-    fun `le conteneur branche le retour au premier plan sur les quatre files`() {
+    fun `le conteneur branche le retour au premier plan sur les cinq files`() {
         // `onReprise = {}` compilerait : l'observateur s'inscrirait, compterait les activites, et
         // ne reveillerait rien. C'est le defaut le plus silencieux de la tranche — rien ne se
         // plaint, et une recitation enregistree hors connexion attend le minuteur.
+        //
+        // **Le retour au premier plan est le seul moment qui relit les contenus du jour.** C'est
+        // l'original qui le dit : son `TodayContents` recharge a l'ouverture, au retour au premier
+        // plan et au changement de date, mais **pas** au retour du reseau. La reprise du reseau,
+        // elle, ne les appelle donc pas — et c'est une decision, pas un oubli.
         val bloc = blocDeLaReprisePremierPlan()
 
         for (appel in listOf(
@@ -148,6 +153,7 @@ class AppContainerWiringTest {
             "recitations.syncInBackground()",
             "quiz.refresh()",
             "problemReports.flush()",
+            "dailyContents.refresh()",
         )) {
             assertTrue(
                 bloc.contains(appel),

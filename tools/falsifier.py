@@ -5781,7 +5781,7 @@ CAS: list[dict] = [
     },
     {
         # La reprise ne reveille plus rien : le declencheur s'inscrit, compte les activites, et
-        # laisse les quatre files attendre le minuteur. `onReprise = {}` compile parfaitement.
+        # laisse les cinq files attendre le minuteur. `onReprise = {}` compile parfaitement.
         "nom": "premier plan : la reprise ne reveille plus aucune file",
         "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/AppContainer.kt",
         "avant": (
@@ -5790,12 +5790,13 @@ CAS: list[dict] = [
             "            recitations.syncInBackground()\n"
             "            quiz.refresh()\n"
             "            problemReports.flush()\n"
+            "            dailyContents.refresh()\n"
             "        },\n"
         ),
         "apres": "        onReprise = {\n        },\n",
         "tache": ":core:data:testDebugUnitTest --tests *AppContainerWiringTest*",
         "attendus": [
-            "le conteneur branche le retour au premier plan sur les quatre files",
+            "le conteneur branche le retour au premier plan sur les cinq files",
             "le retour au premier plan pousse l'etat avant de relire le Quiz",
         ],
     },
@@ -5962,6 +5963,91 @@ CAS: list[dict] = [
         "apres": "                    container.userState.mutate { state ->\n                        Bookmarks.saveBookmark(\n                            state = state,\n                            id = verseId,\n                            sourcePage = source.persistedKey to page,\n                        )\n                    }",
         "tache": ":navigation:testDebugUnitTest --tests *ReaderRouteBookmarkTest*",
         "attendus": ["un echec d'ecriture n'emporte pas le lecteur"],
+    },
+    {
+        # Le document du disque decrit **un autre jour** que celui demande : le publier tel quel
+        # afficherait le rappel de la veille sous le titre « Rappel du jour ». `isFor` rend toujours
+        # vrai : plus aucune date n'est refusee, et la substitution disparait.
+        "nom": "contenus du jour : isFor ne refuse plus aucun jour",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/DailyContents.kt",
+        "avant": "fun isFor(snapshot: DailyContentsSnapshot, day: String = today()): Boolean = snapshot.day == day",
+        "apres": "fun isFor(snapshot: DailyContentsSnapshot, day: String = today()): Boolean = true",
+        "tache": ":core:domain:test --tests *DailyContentsTest*",
+        "attendus": ["un document d'une autre date n'est pas reconnu"],
+    },
+    {
+        # La taille d'une page decide de la fenetre demandee au serveur **et** de l'existence d'une
+        # suite a l'ecran. La changer d'une unite suffit a decaler les deux.
+        "nom": "contenus du jour : la taille d'une page n'est plus celle de l'original",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/DailyContents.kt",
+        "avant": "const val PAGE_SIZE = 30",
+        "apres": "const val PAGE_SIZE = 20",
+        "tache": ":core:domain:test --tests *DailyContentsTest*",
+        "attendus": ["la taille d'une page est celle de l'original"],
+    },
+    {
+        # Un document vide n'est plus reconnu comme vide : le partage entre « rien a montrer » et
+        # « rien n'a pu etre lu » disparait, et une lecture ratee publierait un avis au lieu d'une
+        # panne — donc « Aucun contenu disponible aujourd'hui » sur une lecture ratee.
+        "nom": "contenus du jour : isEmpty ne reconnait plus le document vide",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/DailyContents.kt",
+        "avant": "fun isEmpty(snapshot: DailyContentsSnapshot): Boolean = snapshot.entries.isEmpty()",
+        "apres": "fun isEmpty(snapshot: DailyContentsSnapshot): Boolean = false",
+        "tache": ":core:domain:test --tests *DailyContentsTest*",
+        "attendus": ["un document sans entree est vide"],
+    },
+    {
+        # `restMessage()` peut rendre un texte fait d'espaces. Sans le `takeIf`, ce texte est publie
+        # tel quel : l'ecran affiche un cadre vide la ou il y a une erreur a comprendre.
+        "nom": "contenus du jour : le repli du domaine perd son filtre de texte vide",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/DailyContentRepository.kt",
+        "avant": "error.restMessage()?.takeIf { it.isNotBlank() } ?: DailyContentsText.GENERIC_FAILURE",
+        "apres": "error.restMessage() ?: DailyContentsText.GENERIC_FAILURE",
+        "tache": ":core:data:testDebugUnitTest --tests *DailyContentRepositoryTest*",
+        "attendus": ["un echec dont le texte est vide publie le repli du domaine"],
+    },
+    {
+        # La substitution d'un document perime par un document **vide et du jour** est retiree : le
+        # document d'hier est publie tel quel, sous le titre « Rappel du jour ».
+        "nom": "contenus du jour : le document perime est publie tel quel",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/DailyContentRepository.kt",
+        "avant": "val snapshot = if (DailyContents.isFor(cached, day)) cached else DailyContents.emptySnapshot(day)",
+        "apres": "val snapshot = cached",
+        "tache": ":core:data:testDebugUnitTest --tests *DailyContentRepositoryTest*",
+        "attendus": ["un document d'une autre date n'est pas publie"],
+    },
+    {
+        # Le partage entre panne et avis est retire : tout echec publie une panne, meme quand le
+        # document porte encore quelque chose a lire — l'ecran prefererait alors le message d'erreur
+        # au contenu qu'il avait.
+        "nom": "contenus du jour : tout echec publie une panne, meme quand il reste a lire",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/DailyContentRepository.kt",
+        "avant": "failure = if (empty) text else null,",
+        "apres": "failure = text,",
+        "tache": ":core:data:testDebugUnitTest --tests *DailyContentRepositoryTest*",
+        "attendus": ["un document du jour est publie tel quel quand le reseau echoue"],
+    },
+    {
+        # Le client Postgrest est configure sans conversion de propriete : sans ce `@SerialName`, la
+        # cle `phonetic_text` est une cle inconnue, ignoree par `AppJson`, et la phonetique tombe a
+        # `null` sans que rien ne leve.
+        "nom": "contenus du jour : la colonne phonetique n'est plus nommee",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/remote/DailyContentSource.kt",
+        "avant": "@SerialName(\"phonetic_text\") val phoneticText: String? = null,",
+        "apres": "val phoneticText: String? = null,",
+        "tache": ":core:data:testDebugUnitTest --tests *DailyContentSourceShapeTest*",
+        "attendus": ["une ligne de daily_contents se lit dans le modele"],
+    },
+    {
+        # La cle ecrite dans la colonne `type` est recopiee du nom Kotlin au lieu d'etre lue sur le
+        # descripteur : `eq("type", "REMINDER")` ne rendrait aucune ligne, donc « Aucun rappel
+        # disponible » sur une base qui en contient.
+        "nom": "contenus du jour : la cle de type n'est plus celle de la migration",
+        "fichier": "core/model/src/main/kotlin/com/msoumaya/deepseekandroid/core/model/Enums.kt",
+        "avant": "get() = DailyContentType.serializer().descriptor.getElementName(ordinal)",
+        "apres": "get() = name",
+        "tache": ":core:model:test --tests *DailyContentTypeKeyTest*",
+        "attendus": ["les valeurs de type sont celles de la migration"],
     },
 ]
 
