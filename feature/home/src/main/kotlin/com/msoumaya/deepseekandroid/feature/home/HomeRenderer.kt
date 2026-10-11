@@ -1,5 +1,8 @@
 package com.msoumaya.deepseekandroid.feature.home
 
+import com.msoumaya.deepseekandroid.core.data.repository.DailyContentsState
+import com.msoumaya.deepseekandroid.core.domain.DailyContents
+import com.msoumaya.deepseekandroid.core.domain.DailyContentsText
 import com.msoumaya.deepseekandroid.core.domain.Dates
 import com.msoumaya.deepseekandroid.core.domain.Program
 import com.msoumaya.deepseekandroid.core.domain.ProgramText
@@ -10,6 +13,8 @@ import com.msoumaya.deepseekandroid.core.domain.StudyProgressCalculator
 import com.msoumaya.deepseekandroid.core.domain.StudySession
 import com.msoumaya.deepseekandroid.core.domain.WeeklyProgress
 import com.msoumaya.deepseekandroid.core.model.AppState
+import com.msoumaya.deepseekandroid.core.model.DailyContent
+import com.msoumaya.deepseekandroid.core.model.DailyContentType
 import com.msoumaya.deepseekandroid.core.model.MushafSource
 import com.msoumaya.deepseekandroid.core.model.QuizSnapshot
 import com.msoumaya.deepseekandroid.core.model.Range
@@ -51,8 +56,16 @@ internal object HomeRenderer {
      *   toujours hors configuration Supabase. **Facultatif à dessein** : l'accueil s'affiche sans
      *   le Quiz, et les deux cartes annoncent alors la question du jour, ce qui est exact
      *   puisqu'elles ne promettent rien de plus.
+     * @param daily état des contenus du jour. **Facultatif à dessein**, comme [quiz] : la valeur
+     *   par défaut est « en attente », donc un appelant qui n'aurait pas de dépôt sous la main
+     *   obtient la phrase de chargement, et non un carrousel vide qui affirmerait qu'il n'y a rien.
      */
-    fun render(state: AppState, at: String, quiz: QuizSnapshot? = null): HomeUiState {
+    fun render(
+        state: AppState,
+        at: String,
+        quiz: QuizSnapshot? = null,
+        daily: DailyContentsState = DailyContentsState(),
+    ): HomeUiState {
         val stats = Program.stats(state, at)
         val week = WeeklyProgress.weeklyProgress(state, at)
         val active = activity(state, at)
@@ -112,8 +125,92 @@ internal object HomeRenderer {
                 goalRatio = week.ratio.toFloat(),
             ),
             quiz = quizCards(quiz, at),
+            daily = dailyCarousel(daily),
         )
     }
+
+    /**
+     * Le carrousel des contenus du jour — ses vignettes, ou l'état vide qui les remplace.
+     *
+     * ## Deux formes, et non une liste plus un message
+     *
+     * [DailyCarousel] ne peut pas être « une liste vide avec un message facultatif » : l'appelant
+     * oublierait la phrase d'état, et un carrousel vide sans phrase se lirait comme une panne.
+     * Voir le KDoc du type.
+     *
+     * ## Les trois phrases, et les trois états du dépôt qui les produisent
+     *
+     * L'original écrit `loading ? 'Chargement…' : error ? 'hors connexion' : 'Aucun contenu'`, et
+     * le portage garde cet ordre. Les trois états sont ceux que le dépôt **publie** : avant la
+     * lecture du disque (`loading`, sans document), après une lecture ratée qui n'a rien laissé
+     * (`failure`, document vide), et après une lecture réussie qui n'a rien trouvé (document vide,
+     * ni `loading` ni `failure`). Le dépôt écrit le document et retire `loading` dans **la même**
+     * publication, donc les deux drapeaux ne se contredisent jamais : l'ordre des branches ne
+     * tranche aucun cas réel, il recopie celui de l'original.
+     *
+     * ## Le titre d'un carrousel vide
+     *
+     * [DailyContentsText.HOME_REMINDER], et non un titre vide : c'est l'`else` de l'original, qui
+     * couvre l'absence d'entrée comme le type rappel. La place du bloc reste annoncée.
+     *
+     * ## Ce qui n'est pas filtré ici
+     *
+     * `isActive` : la lecture du dépôt filtre déjà côté serveur, et le refaire donnerait deux
+     * vérités pour une seule règle. Voir `DailyContents.entries`.
+     */
+    internal fun dailyCarousel(state: DailyContentsState): DailyCarousel {
+        val entries = DailyContents.entries(state.snapshot?.entries.orEmpty())
+
+        if (entries.isEmpty()) {
+            return DailyCarousel.Empty(
+                title = DailyContentsText.HOME_REMINDER,
+                message = when {
+                    state.loading -> DailyContentsText.HOME_LOADING
+                    state.failure != null -> DailyContentsText.HOME_OFFLINE
+                    else -> DailyContentsText.HOME_EMPTY
+                },
+            )
+        }
+
+        return DailyCarousel.Slides(entries.map { slide(it) })
+    }
+
+    /**
+     * Une vignette, **entièrement résolue en texte**.
+     *
+     * Le titre vient de [DailyContentsText.homeTitle] et le libellé du lecteur d'écran de la même
+     * règle que l'original — `item.type === 'reminder' ? 'le rappel' : 'l’invocation'` —, ramenée
+     * ici à un choix binaire explicite : les deux règles de l'original sont écrites dans les deux
+     * sens (l'une teste `invocation`, l'autre `reminder`), et les recopier telles quelles
+     * laisserait croire à deux décisions là où il n'y en a qu'une.
+     */
+    private fun slide(content: DailyContent): DailySlide = DailySlide(
+        id = content.id,
+        title = DailyContentsText.homeTitle(content.type),
+        arabic = content.arabicText,
+        phonetic = content.phoneticText,
+        french = content.frenchText,
+        source = sourceLine(content),
+        label = if (content.type == DailyContentType.INVOCATION) {
+            DailyContentsText.OPEN_INVOCATION
+        } else {
+            DailyContentsText.OPEN_REMINDER
+        },
+    )
+
+    /**
+     * La ligne de provenance d'une vignette : `source`, ou `source · référence`.
+     *
+     * C'est `[item.source, item.reference].filter(Boolean).join(' · ')` de l'original. Le filtre
+     * n'est pas décoratif : sans lui, une référence absente laisserait un **séparateur orphelin** —
+     * « Sahih · » —, qui se lit comme une donnée manquante plutôt que comme une absence normale.
+     * Le séparateur est le point médian entouré d'espaces, celui de la source.
+     */
+    private fun sourceLine(content: DailyContent): String =
+        listOfNotNull(
+            content.source.takeIf { it.isNotEmpty() },
+            content.reference?.takeIf { it.isNotEmpty() },
+        ).joinToString(" · ")
 
     /**
      * Les deux cartes de quiz de l'accueil.

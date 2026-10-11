@@ -1,5 +1,7 @@
 package com.msoumaya.deepseekandroid.core.domain
 
+import com.msoumaya.deepseekandroid.core.model.DailyContent
+import com.msoumaya.deepseekandroid.core.model.DailyContentType
 import com.msoumaya.deepseekandroid.core.model.DailyContentsSnapshot
 
 /**
@@ -81,4 +83,35 @@ object DailyContents {
      * cette fonction — la même que `Quiz.isEmpty`.
      */
     fun isEmpty(snapshot: DailyContentsSnapshot): Boolean = snapshot.entries.isEmpty()
+
+    /**
+     * Les types que le carrousel de l'accueil affiche, **dans cet ordre**.
+     *
+     * C'est la liste écrite en clair par l'original — `['reminder','invocation']` —, et non
+     * `DailyContentType.entries`. La différence n'est pas cosmétique : coupler cet ordre à
+     * l'énumération ferait apparaître une vignette de plus le jour où le `check` de la base
+     * accepterait une troisième valeur. L'accueil d'origine n'en affiche que deux, et rien dans le
+     * code ne dirait que c'est un choix plutôt qu'un oubli.
+     */
+    private val CAROUSEL_TYPES = listOf(DailyContentType.REMINDER, DailyContentType.INVOCATION)
+
+    /**
+     * Les entrées du carrousel : **au plus une par type**, dans l'ordre de [CAROUSEL_TYPES].
+     *
+     * L'original écrit `['reminder','invocation'].flatMap(type => items.find(row => row.type ===
+     * type) ?: [])`. Deux règles s'y cachent, et aucune ne lève quand elle est fausse :
+     *
+     *  - **la première de chaque type**, et non toutes. `daily_content_for_date` rend au plus deux
+     *    lignes — une par type —, mais rien côté client ne le garantit, et trois vignettes pour
+     *    deux titres possibles feraient défiler deux fois le même en-tête ;
+     *  - **un type absent ne laisse pas de trou** : le carrousel peut n'avoir qu'une vignette, ou
+     *    aucune. C'est le cas courant d'une base où rien n'est publié, et c'est un état affiché et
+     *    non une absence de bloc.
+     *
+     * Ce qui n'est **pas** filtré ici : `isActive`. Les deux lectures du dépôt le filtrent déjà
+     * côté serveur, et le refaire ici donnerait deux vérités pour une seule règle — celle qui
+     * décide de ce qu'une base publie.
+     */
+    fun entries(contents: List<DailyContent>): List<DailyContent> =
+        CAROUSEL_TYPES.mapNotNull { type -> contents.firstOrNull { it.type == type } }
 }

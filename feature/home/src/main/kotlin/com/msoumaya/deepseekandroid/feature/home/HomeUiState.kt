@@ -53,6 +53,18 @@ data class HomeUiState(
     val quiz: QuizCards? = null,
 
     /**
+     * Le carrousel des contenus du jour.
+     *
+     * `null` décrit la même chose que pour [quiz] : « l'accueil n'a pas encore calculé son
+     * contenu », c'est-à-dire les deux états d'attente et de panne du référentiel coranique, où
+     * l'écran n'affiche de toute façon pas ce bloc. Une fois calculé, il est **toujours** présent :
+     * une base où rien n'est publié est un état **affiché** ([DailyCarousel.Empty]), pas une
+     * absence de bloc — et c'est toute la différence entre « il n'y a rien » et « je n'ai pas pu
+     * lire ».
+     */
+    val daily: DailyCarousel? = null,
+
+    /**
      * Message d'échec, ou `null`.
      *
      * Renseigné quand le référentiel coranique n'a pas pu être chargé : dans ce cas aucune
@@ -60,6 +72,74 @@ data class HomeUiState(
      * inexistant plutôt qu'à une panne.
      */
     val failure: String? = null,
+)
+
+/**
+ * Le carrousel des contenus du jour.
+ *
+ * **Deux formes, et non une liste plus un message facultatif.** Les deux états n'ont ni le même
+ * contenu ni le même titre : avec des vignettes, le titre suit celle qui est affichée ; sans
+ * vignette, il est celui du repli et le bloc porte une phrase d'état. Un `List` vide accompagné
+ * d'un `String?` laisserait ces deux invariants à la charge de l'appelant — et un `orEmpty()` posé
+ * dans un composable est exactement l'endroit où une phrase d'état se perd sans que rien ne le
+ * dise. La forme est celle de `QuranState`, pour la même raison.
+ */
+@Immutable
+sealed interface DailyCarousel {
+
+    /**
+     * Le carrousel a des vignettes : au plus un rappel, puis au plus une invocation.
+     *
+     * Il n'y a **pas** de titre global : chaque [DailySlide] porte le sien, et l'en-tête suit la
+     * vignette affichée. C'est le comportement de l'original, dont l'en-tête relit
+     * `entries[index]?.type` à chaque défilement.
+     */
+    @Immutable
+    data class Slides(val slides: List<DailySlide>) : DailyCarousel
+
+    /**
+     * Le carrousel n'a rien à montrer, et [message] dit pourquoi.
+     *
+     * [title] est le titre de repli — « Rappel du jour » —, celui que l'original affiche dans son
+     * `else`, et qui coiffe donc aussi bien un rappel absent qu'un carrousel vide. La place du
+     * bloc reste annoncée au lieu de disparaître.
+     */
+    @Immutable
+    data class Empty(val title: String, val message: String) : DailyCarousel
+}
+
+/**
+ * Une vignette du carrousel, **entièrement résolue en texte**.
+ *
+ * L'écran ne choisit aucun libellé et ne compose aucune ligne de source : c'est [HomeRenderer] qui
+ * décide, à partir du contenu et de son type. Un choix fait dans le composable serait rejoué à
+ * chaque recomposition — c'est-à-dire à chaque défilement du carrousel — et ne serait éprouvable
+ * qu'avec un hôte Compose.
+ *
+ * [source] est la ligne de provenance **déjà jointe** (`source · référence`), parce que les deux
+ * champs de l'original sont filtrés puis joints, et que la règle du filtre — une référence absente
+ * ne laisse pas de séparateur orphelin — se mesure sans appareil.
+ *
+ * [label] est le libellé du lecteur d'écran. L'original le pose sur la carte entière
+ * (`accessibilityLabel`), ce qui remplace les cinq textes par cette seule phrase : sans la fusion,
+ * TalkBack annoncerait le titre, l'arabe, la phonétique, le français et la source d'affilée pour
+ * une vignette qui s'ouvre d'un seul geste.
+ */
+@Immutable
+data class DailySlide(
+    val id: String,
+    /** Titre de la vignette — « Rappel du jour » ou « Invocation du jour ». */
+    val title: String,
+    /** Texte arabe, ou `null` si le contenu n'en porte pas. */
+    val arabic: String?,
+    /** Transcription phonétique, ou `null`. */
+    val phonetic: String?,
+    /** Traduction française. Jamais nulle : la base l'exige non vide. */
+    val french: String,
+    /** Ligne de provenance, déjà jointe : `source`, ou `source · référence`. */
+    val source: String,
+    /** Libellé du lecteur d'écran. */
+    val label: String,
 )
 
 /** Position de reprise de lecture. */

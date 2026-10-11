@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.msoumaya.deepseekandroid.core.data.AppContainer
 import com.msoumaya.deepseekandroid.core.data.QuranState
 import com.msoumaya.deepseekandroid.core.data.quranFailureMessage
+import com.msoumaya.deepseekandroid.core.data.repository.DailyContentsState
 import com.msoumaya.deepseekandroid.core.data.repository.QuizState
 import com.msoumaya.deepseekandroid.core.data.repository.UserRepository
 import com.msoumaya.deepseekandroid.core.domain.Dates
@@ -22,18 +23,20 @@ import kotlinx.coroutines.launch
 // `src/ui/MainScreens.tsx`.
 //
 // Ce fichier ne contient que le câblage : il relie l'état applicatif, l'avancement du référentiel
-// coranique et l'instantané du Quiz, puis délègue le calcul à `HomeRenderer`. Le calcul vit là-bas
-// parce qu'il est pur, donc éprouvable sans coroutine ni horloge.
+// coranique, l'instantané du Quiz et les contenus du jour, puis délègue le calcul à
+// `HomeRenderer`. Le calcul vit là-bas parce qu'il est pur, donc éprouvable sans coroutine ni
+// horloge.
 //
-// **Ce qui n'est pas encore là.** L'accueil d'origine porte aussi les contenus du jour
-// (`TodayContents`), le compteur de messages non lus et le signalement de problème
-// (`ProblemReportCard`). Les trois dépendent de Supabase et arrivent avec leur phase. Ils ne sont
-// pas remplacés par un équivalent local.
+// **Ce qui n'est pas encore là.** L'accueil d'origine porte aussi le compteur de messages non lus
+// (`unreadCount`), qui dépend de Supabase et arrive avec sa phase. Il n'est pas remplacé par un
+// équivalent local — et le signalement de problème, lui, est déjà porté par `HomeScreen`.
 //
-// **Les cartes de quiz, elles, y sont.** Elles ne demandent au Quiz que son instantané — le jour,
-// la question publiée et mes réponses —, que le dépôt publie depuis le disque **avant** tout appel
-// réseau. L'accueil n'attend donc rien du serveur pour les afficher, et il les affiche même sans
-// compte : elles annoncent alors la question du jour, ce qui est exact.
+// **Les cartes de quiz et le carrousel, eux, y sont.** Les unes ne demandent au Quiz que son
+// instantané — le jour, la question publiée et mes réponses —, l'autre ne demande au dépôt des
+// contenus que son document ; les deux dépôts publient **depuis le disque avant tout appel
+// réseau**. L'accueil n'attend donc rien du serveur pour les afficher, et il les affiche même
+// sans compte : les cartes annoncent alors la question du jour, ce qui est exact, et le carrousel
+// affiche ce qui est publié — ou son absence, qui est une information —, ce qui l'est aussi.
 // ---------------------------------------------------------------------------
 
 /**
@@ -47,12 +50,17 @@ import kotlinx.coroutines.launch
  * @param quizState instantané du Quiz. Il est **observé** pour la même raison que le référentiel :
  *   sa première valeur est « en attente », et l'afficher telle quelle donnerait deux cartes qui
  *   annoncent « Question du jour » alors que la réponse est déjà sur le disque.
+ * @param dailyState état des contenus du jour. Observé comme les deux autres, et pour la même
+ *   raison : sa première valeur est « en attente », donc l'afficher telle quelle ferait annoncer
+ *   « Chargement » à un carrousel dont le document est déjà sur le disque. **Aucun compte n'est
+ *   requis** : les contenus du jour sont publics, et le dépôt ne s'amorce par utilisateur.
  * @param today jour courant, injectable pour que les tests ne dépendent pas de l'horloge.
  */
 class HomeViewModel(
     repository: UserRepository,
     quranState: StateFlow<QuranState>,
     quizState: StateFlow<QuizState>,
+    dailyState: StateFlow<DailyContentsState>,
     private val today: () -> String = { Dates.todayLocal() },
 ) : ViewModel() {
 
@@ -63,22 +71,33 @@ class HomeViewModel(
 
     init {
         viewModelScope.launch {
-            // Les trois sources sont combinées en **une** collecte : trois collectes séparées
+            // Les quatre sources sont combinées en **une** collecte : des collectes séparées
             // publieraient un état intermédiaire où l'instantané du Quiz est celui du compte
-            // précédent, ou l'inverse. Le calcul, lui, a besoin des trois à la fois.
-            combine(repository.state, quranState, quizState) { appState, quran, quiz ->
-                Triple(appState, quran, quiz)
-            }.collect { (appState, quran, quiz) ->
-                _state.value = when (quran) {
+            // précédent, ou l'inverse. Le calcul, lui, a besoin des quatre à la fois — y compris
+            // du document des contenus du jour, qui se publie à son propre rythme et ne dépend
+            // d'aucune des trois autres.
+            combine(
+                repository.state,
+                quranState,
+                quizState,
+                dailyState,
+            ) { appState, quran, quiz, daily ->
+                when (quran) {
                     QuranState.Loading -> HomeUiState()
+
                     is QuranState.Failed -> HomeUiState(
                         loading = false,
                         failure = failureMessage(quran.cause),
                     )
 
-                    QuranState.Ready -> HomeRenderer.render(appState, today(), quiz.snapshot)
+                    // Les deux états d'attente et de panne du référentiel ne portent **pas** de
+                    // carrousel : `daily` y reste `null`, c'est-à-dire « pas calculé ». Un
+                    // carrousel vide y serait un mensonge — l'accueil n'a rien pu lire du tout,
+                    // et « Aucun contenu disponible aujourd'hui » serait une affirmation sur la
+                    // base alors que c'est le référentiel qui manque.
+                    QuranState.Ready -> HomeRenderer.render(appState, today(), quiz.snapshot, daily)
                 }
-            }
+            }.collect { _state.value = it }
         }
     }
 
@@ -100,6 +119,7 @@ class HomeViewModel(
                         container.userState,
                         container.quranState,
                         container.quiz.state,
+                        container.dailyContents.state,
                     ) as T
                 }
             }

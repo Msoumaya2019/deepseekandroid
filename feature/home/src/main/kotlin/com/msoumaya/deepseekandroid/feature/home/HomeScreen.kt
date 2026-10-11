@@ -85,6 +85,11 @@ import com.msoumaya.deepseekandroid.core.domain.StudySession
  * @param onOpenFriends bascule vers l'onglet « Amis ». Distinct de [onOpenQuiz] : l'une ouvre le
  *   Quiz, l'autre va chercher quelqu'un à défier — et c'est l'original qui les sépare, en donnant
  *   à chaque carte son propre geste.
+ * @param onOpenDaily ouverture de l'écran de liste des contenus du jour, **sur un contenu
+ *   précis**. C'est le geste du carrousel de l'accueil : l'original y branche `openDaily(id)`,
+ *   qui ouvre la liste avec un identifiant initial — et non une fiche, qui n'existe pas sur
+ *   l'accueil. Le repli est vide : l'écran de liste n'est pas encore porté, et un geste sans
+ *   destination doit rester inerte plutôt que de mener ailleurs.
  * @param viewModel état de l'écran. Par défaut, celui du conteneur applicatif.
  */
 @Composable
@@ -100,6 +105,7 @@ fun HomeScreen(
     onOpenReviews: () -> Unit = {},
     onOpenQuiz: () -> Unit = {},
     onOpenFriends: () -> Unit = {},
+    onOpenDaily: (String) -> Unit = {},
     viewModel: HomeViewModel = viewModel(factory = HomeViewModel.factory(LocalAppContainer.current)),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -114,6 +120,7 @@ fun HomeScreen(
         onOpenReviews = onOpenReviews,
         onOpenQuiz = onOpenQuiz,
         onOpenFriends = onOpenFriends,
+        onOpenDaily = onOpenDaily,
     )
 }
 
@@ -128,6 +135,7 @@ private fun HomeContent(
     onOpenReviews: () -> Unit = {},
     onOpenQuiz: () -> Unit = {},
     onOpenFriends: () -> Unit = {},
+    onOpenDaily: (String) -> Unit = {},
 ) {
     when {
         state.failure != null -> HomeFailure(message = state.failure, modifier = modifier)
@@ -210,6 +218,19 @@ private fun HomeContent(
                         onQuiz = onOpenQuiz,
                         onFriends = onOpenFriends,
                     )
+                }
+
+                // Le carrousel des contenus du jour, **entre** les cartes de quiz et « Ma
+                // semaine ». C'est sa place dans l'original (`MainScreens.tsx:26`), et elle n'est
+                // pas indifférente : le Coran d'abord, puis ce qui est daté du jour, puis la
+                // progression.
+                //
+                // Il n'est composé que si l'état le porte. `null` ne veut pas dire « aucun
+                // contenu » — cela s'affiche, et c'est `DailyCarousel.Empty` —, mais « pas encore
+                // calculé » : les deux états d'attente et de panne du référentiel, où l'accueil
+                // montre de toute façon autre chose.
+                state.daily?.let { carousel ->
+                    TodayContents(carousel = carousel, onOpen = onOpenDaily)
                 }
 
                 AppSectionHeader(

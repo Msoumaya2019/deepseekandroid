@@ -3041,10 +3041,16 @@ CAS: list[dict] = [
     {
         # `render` accepte l'instantane **facultativement** : l'oublier compile, et les cartes
         # annoncent alors « Question du jour » pour toujours — y compris apres une reponse.
+        #
+        # L'ancre porte les **quatre** arguments de l'appel, et non ses trois premiers. La tranche
+        # du carrousel a ajoute `daily` : une ancre arretee a `quiz.snapshot)` a cesse de
+        # correspondre, et le cas est devenu **injouable** sans que rien ne le dise — c'est
+        # `--verifier` qui l'a attrape, et c'est la raison d'etre de ce controle. Toute mutation qui
+        # retire l'instantane doit donc reecrire l'appel **entier**.
         "nom": "accueil : le ViewModel n'observe plus l'instantane du Quiz",
         "fichier": "feature/home/src/main/kotlin/com/msoumaya/deepseekandroid/feature/home/HomeViewModel.kt",
-        "avant": "                    QuranState.Ready -> HomeRenderer.render(appState, today(), quiz.snapshot)",
-        "apres": "                    QuranState.Ready -> HomeRenderer.render(appState, today())",
+        "avant": "                    QuranState.Ready -> HomeRenderer.render(appState, today(), quiz.snapshot, daily)",
+        "apres": "                    QuranState.Ready -> HomeRenderer.render(appState, today(), null, daily)",
         "tache": ":feature:home:testDebugUnitTest",
         "attendus": ["le renderer recoit l'instantane, et pas seulement l'etat applicatif"],
     },
@@ -6048,6 +6054,127 @@ CAS: list[dict] = [
         "apres": "get() = name",
         "tache": ":core:model:test --tests *DailyContentTypeKeyTest*",
         "attendus": ["les valeurs de type sont celles de la migration"],
+    },
+    {
+        # L'ordre du carrousel est celui de l'enumeration, et non celui de l'accueil : l'invocation
+        # passe en tete, sous un en-tete qui la nomme correctement. Rien ne leve, et l'accueil ne
+        # commence plus par le rappel.
+        "nom": "carrousel : l'ordre de l'accueil n'est plus celui de la lecture",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/DailyContents.kt",
+        "avant": "    private val CAROUSEL_TYPES = listOf(DailyContentType.REMINDER, DailyContentType.INVOCATION)",
+        "apres": "    private val CAROUSEL_TYPES = listOf(DailyContentType.INVOCATION, DailyContentType.REMINDER)",
+        "tache": ":feature:home:testDebugUnitTest --tests *HomeDailyCarouselTest*",
+        "attendus": ["l'ordre est rappel puis invocation meme si la base rend l'inverse"],
+    },
+    {
+        # Le carrousel garde **toutes** les lignes de chaque type au lieu de la premiere : le
+        # serveur n'en rend qu'une par type, mais rien cote client ne le garantit — et deux
+        # vignettes pour un seul titre font defiler deux fois le meme en-tete.
+        "nom": "carrousel : un type ne garde plus la premiere ligne",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/DailyContents.kt",
+        "avant": "        CAROUSEL_TYPES.mapNotNull { type -> contents.firstOrNull { it.type == type } }",
+        "apres": "        CAROUSEL_TYPES.flatMap { type -> contents.filter { it.type == type } }",
+        "tache": ":feature:home:testDebugUnitTest --tests *HomeDailyCarouselTest*",
+        "attendus": ["le premier de chaque type est garde et les suivants sont ecartes"],
+    },
+    {
+        # Le titre d'une vignette ne suit plus son type : les deux types rendent « Rappel du jour »,
+        # donc une invocation s'affiche sous le titre du rappel — et l'en-tete du carrousel aussi.
+        "nom": "carrousel : le titre d'une vignette ne suit plus son type",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/DailyContentsText.kt",
+        "avant": "    fun homeTitle(type: DailyContentType?): String =\n        if (type == DailyContentType.INVOCATION) HOME_INVOCATION else HOME_REMINDER",
+        "apres": "    fun homeTitle(type: DailyContentType?): String = HOME_REMINDER",
+        "tache": ":feature:home:testDebugUnitTest --tests *HomeDailyCarouselTest*",
+        "attendus": [
+            "une invocation seule donne une seule vignette",
+            "l'ordre est rappel puis invocation meme si la base rend l'inverse",
+        ],
+    },
+    {
+        # Un carrousel vide annonce « aucun contenu » avant meme d'avoir lu le disque : l'ecran
+        # affirme que la base ne publie rien alors qu'il n'a rien regarde.
+        "nom": "carrousel : le vide annonce « aucun contenu » avant toute lecture",
+        "fichier": "feature/home/src/main/kotlin/com/msoumaya/deepseekandroid/feature/home/HomeRenderer.kt",
+        "avant": "                    state.loading -> DailyContentsText.HOME_LOADING",
+        "apres": "                    state.loading -> DailyContentsText.HOME_EMPTY",
+        "tache": ":feature:home:testDebugUnitTest --tests *HomeDailyCarouselTest*",
+        "attendus": ["avant la premiere lecture le carrousel annonce le chargement"],
+    },
+    {
+        # Un echec qui ne laisse rien a lire publie la phrase de l'absence de contenu : le partage
+        # entre « il n'y a rien » et « je n'ai pas pu lire » disparait, et l'ecran fait une
+        # affirmation fausse sur ce que la base publie.
+        "nom": "carrousel : le vide dit « aucun contenu » des qu'une lecture a echoue",
+        "fichier": "feature/home/src/main/kotlin/com/msoumaya/deepseekandroid/feature/home/HomeRenderer.kt",
+        "avant": "                    state.failure != null -> DailyContentsText.HOME_OFFLINE",
+        "apres": "                    state.failure != null -> DailyContentsText.HOME_EMPTY",
+        "tache": ":feature:home:testDebugUnitTest --tests *HomeDailyCarouselTest*",
+        "attendus": [
+            "une lecture ratee qui ne laisse rien affiche la phrase hors connexion",
+            "l'echec et l'absence de contenu ne disent pas la meme chose",
+        ],
+    },
+    {
+        # Le filtre du repli est retire : une reference absente laisse un separateur orphelin —
+        # « Sahih al-Bukhari · » —, qui se lit comme une donnee manquante plutot que comme une
+        # absence normale.
+        "nom": "carrousel : la ligne de provenance laisse un separateur orphelin",
+        "fichier": "feature/home/src/main/kotlin/com/msoumaya/deepseekandroid/feature/home/HomeRenderer.kt",
+        "avant": "        listOfNotNull(\n            content.source.takeIf { it.isNotEmpty() },\n            content.reference?.takeIf { it.isNotEmpty() },\n        ).joinToString(\" · \")",
+        "apres": "        listOfNotNull(content.source, content.reference).joinToString(\" · \")",
+        "tache": ":feature:home:testDebugUnitTest --tests *HomeDailyCarouselTest*",
+        "attendus": ["la ligne de provenance ne laisse pas de separateur orphelin"],
+    },
+    {
+        # Le libelle du lecteur d'ecran ne distingue plus les deux types : TalkBack annonce un
+        # rappel pour une invocation, sur une vignette dont les cinq textes sont fusionnes.
+        "nom": "carrousel : le libelle du lecteur d'ecran ne distingue plus les types",
+        "fichier": "feature/home/src/main/kotlin/com/msoumaya/deepseekandroid/feature/home/HomeRenderer.kt",
+        "avant": "        label = if (content.type == DailyContentType.INVOCATION) {\n            DailyContentsText.OPEN_INVOCATION\n        } else {\n            DailyContentsText.OPEN_REMINDER\n        },",
+        "apres": "        label = DailyContentsText.OPEN_REMINDER,",
+        "tache": ":feature:home:testDebugUnitTest --tests *HomeDailyCarouselTest*",
+        "attendus": ["le libelle du lecteur d'ecran nomme le type de la vignette"],
+    },
+    {
+        # Les deux champs nullables de la vignette sont intervertis : l'arabe affiche la
+        # phonetique, et le bloc phonetique affiche l'arabe. Les deux sont nullables, donc rien
+        # ne leve.
+        "nom": "carrousel : les textes arabe et phonetique sont intervertis",
+        "fichier": "feature/home/src/main/kotlin/com/msoumaya/deepseekandroid/feature/home/HomeRenderer.kt",
+        "avant": "        arabic = content.arabicText,\n        phonetic = content.phoneticText,",
+        "apres": "        arabic = content.phoneticText,\n        phonetic = content.arabicText,",
+        "tache": ":feature:home:testDebugUnitTest --tests *HomeDailyCarouselTest*",
+        "attendus": ["les textes du contenu traversent la vignette"],
+    },
+    {
+        # L'accueil n'achemine plus le carrousel : `render` a une valeur par defaut, donc l'appel
+        # compile et le carrousel reste sur « Chargement du contenu du jour… » pour toujours.
+        "nom": "carrousel : l'accueil n'achemine plus le carrousel",
+        "fichier": "feature/home/src/main/kotlin/com/msoumaya/deepseekandroid/feature/home/HomeRenderer.kt",
+        "avant": "            daily = dailyCarousel(daily),",
+        "apres": "            daily = null,",
+        "tache": ":feature:home:testDebugUnitTest --tests *HomeDailyCarouselTest*",
+        "attendus": ["l'accueil calcule porte toujours son carrousel"],
+    },
+    {
+        # Le bloc du carrousel est compose, mais sa garde est morte : il n'apparait jamais a
+        # l'ecran. C'est le defaut le plus discret du lot — tout compile, et la ligne disparait.
+        "nom": "carrousel : l'accueil ne compose plus le carrousel",
+        "fichier": "feature/home/src/main/kotlin/com/msoumaya/deepseekandroid/feature/home/HomeScreen.kt",
+        "avant": "                state.daily?.let { carousel ->",
+        "apres": "                state.daily?.takeIf { false }?.let { carousel ->",
+        "tache": ":feature:home:testDebugUnitTest --tests *HomeScreenWiringTest*",
+        "attendus": ["l'ecran compose le carrousel des contenus du jour"],
+    },
+    {
+        # Le carrousel recoit une lambda vide au lieu de son geste : la vignette s'ouvre — au sens
+        # ou elle est cliquable —, mais elle ne mene nulle part.
+        "nom": "carrousel : le geste du carrousel est mort",
+        "fichier": "feature/home/src/main/kotlin/com/msoumaya/deepseekandroid/feature/home/HomeScreen.kt",
+        "avant": "                    TodayContents(carousel = carousel, onOpen = onOpenDaily)",
+        "apres": "                    TodayContents(carousel = carousel, onOpen = {})",
+        "tache": ":feature:home:testDebugUnitTest --tests *HomeScreenWiringTest*",
+        "attendus": ["le carrousel recoit son propre geste"],
     },
 ]
 

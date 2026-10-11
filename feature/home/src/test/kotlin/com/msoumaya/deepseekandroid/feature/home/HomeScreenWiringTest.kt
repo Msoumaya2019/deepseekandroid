@@ -5,19 +5,20 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 
 /**
- * Tient le **branchement des cartes de quiz** dans l'accueil.
+ * Tient le **branchement de l'accueil** : les deux cartes de quiz et le carrousel des contenus du
+ * jour.
  *
  * ## Pourquoi un contrôle de forme, et non un test de comportement
  *
  * `HomeScreen` est une fonction `@Composable` : la déclencher demande un hôte Compose, un appareil
  * ou un émulateur, et le projet n'a aucun outillage de test d'interface. Le branchement n'est donc
  * atteignable par aucun test de comportement — ce n'est pas un raccourci, c'est le seul moyen. Le
- * calcul, lui, est éprouvé pour de vrai dans `HomeQuizCardsTest` : ce fichier ne surveille que le
- * câblage.
+ * calcul, lui, est éprouvé pour de vrai dans `HomeQuizCardsTest` et `HomeDailyCarouselTest` : ce
+ * fichier ne surveille que le câblage.
  *
  * ## Ce qui disparaîtrait sans un mot
  *
- * Trois choses, et chacune laisserait l'application parfaitement fonctionnelle en apparence :
+ * Cinq choses, et chacune laisserait l'application parfaitement fonctionnelle en apparence :
  *
  *  - **la composition des cartes** : `onOpenQuiz` a une valeur par défaut vide, donc retirer
  *    l'appel compile, l'accueil s'affiche, et l'écran Quiz n'a plus **aucune** porte depuis
@@ -27,12 +28,19 @@ import kotlin.test.assertTrue
  *    passe bien de quoi ouvrir le Quiz — et un corps qui n'en fait rien ;
  *  - **l'observation de l'instantané** : sans `container.quiz.state` dans la fabrique, le
  *    `ViewModel` observerait un flux qui n'existe pas, ou lèverait à la construction. Le premier
- *    cas est le plus dangereux : les cartes seraient là, avec « Question du jour », pour toujours.
+ *    cas est le plus dangereux : les cartes seraient là, avec « Question du jour », pour toujours ;
+ *  - **la composition du carrousel** : `HomeUiState.daily` vaut `null` par défaut, donc retirer le
+ *    bloc compile et le carrousel quitte l'accueil en silence — rien d'autre ne dépend de lui ;
+ *  - **l'observation des contenus du jour** : sans `container.dailyContents.state`, le carrousel
+ *    resterait sur « Chargement du contenu du jour… » pour toujours. C'est le même défaut que pour
+ *    les cartes, et il est plus difficile à voir : un carrousel qui charge a l'air d'un carrousel
+ *    qui attend, et l'attente est un état normal.
  *
  * ## Ce qu'il ne prouve pas
  *
  * Il ne prouve pas que les cartes sont belles, ni que leurs libellés sont les bons : les mots
- * vivent dans `QuizText`, et c'est `HomeQuizCardsTest` qui les mesure.
+ * vivent dans `QuizText` et `DailyContentsText`, et ce sont `HomeQuizCardsTest` et
+ * `HomeDailyCarouselTest` qui les mesurent.
  */
 class HomeScreenWiringTest {
 
@@ -103,9 +111,59 @@ class HomeScreenWiringTest {
         // instantané facultatif, donc l'oublier compile et rend des cartes qui annoncent
         // éternellement la question du jour.
         assertTrue(
-            sourceDuViewModel().contains("HomeRenderer.render(appState, today(), quiz.snapshot)"),
+            sourceDuViewModel().contains("HomeRenderer.render(appState, today(), quiz.snapshot, daily)"),
             "Le `ViewModel` n'appelle plus `render` avec l'instantané : les cartes seraient " +
                 "figées sur « Question du jour », quoi qu'il arrive.",
+        )
+    }
+
+    // -----------------------------------------------------------------------
+    // Le carrousel des contenus du jour
+    // -----------------------------------------------------------------------
+
+    @Test
+    fun `l'ecran compose le carrousel des contenus du jour`() {
+        // `HomeUiState.daily` vaut `null` par défaut, donc retirer ce bloc compile, l'accueil
+        // s'affiche — et le carrousel disparaît de l'écran sans qu'aucune erreur ne le dise.
+        assertTrue(
+            sourceDeLEcran().contains("state.daily?.let { carousel ->"),
+            "L'accueil ne compose plus le carrousel des contenus du jour.",
+        )
+    }
+
+    @Test
+    fun `le carrousel recoit son propre geste`() {
+        // Le geste a une valeur par défaut vide : le remplacer par une lambda vide compile, et
+        // ferait une vignette qui s'ouvre — mais pas sur le contenu qu'elle annonce.
+        assertTrue(
+            sourceDeLEcran().contains("TodayContents(carousel = carousel, onOpen = onOpenDaily)"),
+            "Le carrousel n'ouvre plus le contenu qu'il annonce : ce serait une vignette morte.",
+        )
+    }
+
+    @Test
+    fun `l'ecran transmet le geste du carrousel au corps`() {
+        // Même défaut que pour les cartes de quiz : le rappel traverse deux fonctions, et une
+        // transmission oubliée laisserait la coquille correcte et le corps muet.
+        assertTrue(
+            sourceDeLEcran().contains("onOpenDaily = onOpenDaily,"),
+            "`HomeScreen` ne transmet plus `onOpenDaily` au corps : le carrousel serait inerte.",
+        )
+    }
+
+    @Test
+    fun `le ViewModel observe les contenus du jour`() {
+        // Sans cette ligne, le carrousel resterait sur « Chargement du contenu du jour… » pour
+        // toujours, quoi qu'il arrive — et c'est le seul défaut du carrousel qui ne lève rien.
+        val source = sourceDuViewModel()
+
+        assertTrue(
+            source.contains("dailyState: StateFlow<DailyContentsState>,"),
+            "Le `ViewModel` de l'accueil ne reçoit plus les contenus du jour.",
+        )
+        assertTrue(
+            source.contains("container.dailyContents.state,"),
+            "La fabrique ne branche plus le dépôt des contenus du jour.",
         )
     }
 
