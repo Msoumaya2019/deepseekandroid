@@ -6176,6 +6176,267 @@ CAS: list[dict] = [
         "tache": ":feature:home:testDebugUnitTest --tests *HomeScreenWiringTest*",
         "attendus": ["le carrousel recoit son propre geste"],
     },
+
+    # -------------------------------------------------------------- les donnees de la fiche
+    #
+    # La tranche ajoute deux objets de donnees — la resolution d'une adresse signee, et les
+    # favoris —, et leurs regles se paient en silence : une vignette absente, un cœur rempli a
+    # tort, une liste servie sous le mauvais compte. Les cas ci-dessous nomment chacun la regle
+    # qu'ils cassent, et le test qui doit tomber.
+
+    {
+        # **Le defaut le plus silencieux de la tranche.** `SupabaseConfig.PROJECT_URL` est le
+        # **repli** de `BuildConfig.SUPABASE_URL`, donc les deux valent la meme chose sur toute
+        # compilation ordinaire. Sur une compilation pointee ailleurs, la racine du compartiment
+        # ne correspond plus a celle des adresses rangees en base : `pathOf` refuse **toutes** les
+        # adresses, chacune est rendue telle quelle, et l'ecran demande un objet prive sans
+        # signature. Une vignette absente, aucune erreur levee, et rien qui nomme la cause.
+        "nom": "fiche : la racine des medias est composee sur la constante du projet",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/AppContainer.kt",
+        "avant": "SupabaseDailyContentMediaSource(it, supabase.url)",
+        "apres": "SupabaseDailyContentMediaSource(it, SupabaseConfig.PROJECT_URL)",
+        "tache": ":core:data:testDebugUnitTest --tests *AppContainerWiringTest*",
+        "attendus": ["le conteneur resout les medias sur l'adresse reellement configuree"],
+    },
+    {
+        # Le document des favoris du visiteur est range sous un dossier de compte. Le depot
+        # compile, l'ecriture reussit, et la liste d'un visiteur se retrouve sous un
+        # proprietaire qu'il n'a pas — elle disparait donc des qu'un compte s'ouvre.
+        "nom": "fiche : le document du visiteur est range sous un compte",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/AppContainer.kt",
+        "avant": "guest = GuestFavoritesStore(root),",
+        "apres": 'guest = GuestFavoritesStore(File(root, "guest")),',
+        "tache": ":core:data:testDebugUnitTest --tests *AppContainerWiringTest*",
+        "attendus": ["le conteneur donne la session aux favoris et range leur document hors des comptes"],
+    },
+    {
+        # La garde qui distingue « une adresse de notre compartiment » de « n'importe quelle
+        # adresse https ». Sans elle, l'application demande au serveur de signer des objets qui
+        # n'existent pas chez lui, et l'echec remplace une vignette qui s'affichait tres bien.
+        "nom": "fiche : une adresse etrangere est signee quand meme",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/DailyContentMedia.kt",
+        "avant": "        if (!url.startsWith(root)) return null",
+        "apres": "        if (false) return null",
+        "tache": ":core:domain:test --tests *DailyContentMediaTest*",
+        "attendus": [
+            "une adresse d'un autre compartiment est refusee",
+            "une adresse d'un autre projet est refusee",
+            "une adresse externe est refusee",
+        ],
+    },
+    {
+        # La racine seule designe le compartiment entier, et non un objet. L'original l'ecarte en
+        # deux temps (`?? null` puis `if(!path)`), le portage en un. Sans ce refus, l'application
+        # demande au serveur de signer un chemin vide, et l'enregistrement fautif — une vignette
+        # posee sans chemin — remonte une erreur au lieu de rester sans image.
+        "nom": "fiche : la racine seule designe un objet",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/DailyContentMedia.kt",
+        "avant": "        return url.removePrefix(root).takeIf { it.isNotEmpty() }",
+        "apres": "        return url.removePrefix(root)",
+        "tache": ":core:domain:test --tests *DailyContentMediaTest*",
+        "attendus": ["la racine seule ne designe aucun objet"],
+    },
+    {
+        # Le retour au `split(marker)[1]` de l'original, qui tronque le chemin a sa **seconde**
+        # occurrence du marqueur. Aucun depot ne peut produire un tel chemin, donc ce cas ne
+        # defend pas une panne reelle : il defend l'**ecart ecrit** dans le KDoc de `pathOf`.
+        # Sans ce cas, un retour au `split` passerait pour une simplification, et personne ne
+        # saurait que la difference avait ete mesuree.
+        "nom": "fiche : le chemin est tronque au marqueur",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/DailyContentMedia.kt",
+        "avant": "        return url.removePrefix(root).takeIf { it.isNotEmpty() }",
+        "apres": '        return url.removePrefix(root).substringAfter("/storage/v1/object/public/daily-content-media/").takeIf { it.isNotEmpty() }',
+        "tache": ":core:domain:test --tests *DailyContentMediaTest*",
+        "attendus": ["un chemin qui contient le marqueur n'est pas tronque"],
+    },
+    {
+        # La fenetre de reutilisation depasse la validite de la signature. Les deux constantes
+        # sont justes prises separement, et c'est leur **ordre** qui compte : une adresse servie
+        # apres son expiration fait disparaitre une vignette **apres** un rendu reussi, donc au
+        # moment ou personne ne regarde plus le code qui l'a posee.
+        "nom": "fiche : la reutilisation depasse la validite de la signature",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/DailyContentMedia.kt",
+        "avant": "    const val CACHE_MILLIS: Long = 3_300_000L",
+        "apres": "    const val CACHE_MILLIS: Long = 4_000_000L",
+        "tache": ":core:domain:test --tests *DailyContentMediaTest*",
+        "attendus": ["la reutilisation s'arrete avant l'expiration"],
+    },
+    {
+        # La signature est refaite a chaque affichage. L'application marche — c'est ce qui rend le
+        # defaut invisible —, et une liste de trente vignettes produit trente signatures
+        # identiques. Le test qui tombe compte les signatures, et il est le seul a pouvoir le faire.
+        "nom": "fiche : une signature fraiche n'est plus reutilisee",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/DailyContentMediaRepository.kt",
+        "avant": "        val cached = cache[url]",
+        "apres": "        val cached: Signed? = null",
+        "tache": ":core:data:testDebugUnitTest --tests *DailyContentMediaRepositoryTest*",
+        "attendus": [
+            "une signature fraiche est reutilisee",
+            "la fenetre est comptee depuis la signature et non depuis la lecture",
+        ],
+    },
+    {
+        # L'echec est avale et **retinu** : la resolution suivante rend une chaine vide sans
+        # jamais reessayer, et la vignette reste absente jusqu'a l'expiration d'une signature qui
+        # n'existe pas. Deux tests tombent, et le second est celui qui compte : il distingue
+        # « le cache n'est pas ecrit » de « le cache est ecrit avec une valeur vide ».
+        "nom": "fiche : un echec de signature est retenu dans le cache",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/DailyContentMediaRepository.kt",
+        "avant": (
+            "        val signed = api.signedUrl(path)\n"
+            "        cache[url] = Signed(signed, now() + DailyContentMedia.CACHE_MILLIS)\n"
+            "        return signed"
+        ),
+        "apres": (
+            "        val signed = runCatching { api.signedUrl(path) }.getOrNull()\n"
+            "        cache[url] = Signed(signed.orEmpty(), now() + DailyContentMedia.CACHE_MILLIS)\n"
+            "        return signed"
+        ),
+        "tache": ":core:data:testDebugUnitTest --tests *DailyContentMediaRepositoryTest*",
+        "attendus": [
+            "l'echec d'une signature remonte",
+            "un echec n'est pas retenu",
+        ],
+    },
+    {
+        # La fenetre ne se ferme plus : la liste lue une fois sert indefiniment. Le defaut est
+        # exactement celui de l'original dans l'autre sens — une liste perimee est servie a un
+        # ecran qui vient d'etre rouvert.
+        "nom": "fiche : la fenetre des favoris ne se ferme plus",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/DailyContentFavorites.kt",
+        "avant": "    fun isFresh(at: Long, now: Long): Boolean = now - at < CACHE_MILLIS",
+        "apres": "    fun isFresh(at: Long, now: Long): Boolean = true",
+        "tache": ":core:domain:test --tests *DailyContentFavoritesTest*",
+        "attendus": ["une liste n'est plus fraiche a la fin de la fenetre"],
+    },
+    {
+        # La liste des favoris n'est plus retenue : chaque affichage relit. Le plus instructif des
+        # tests qui tombent est le dernier — la carte du cache ne sert plus a rien, donc le retour
+        # sur un compte relit au lieu de rendre sa liste retenue.
+        #
+        # **La voie du visiteur n'est pas dans les attendus, et c'est une mesure.** Le magasin du
+        # visiteur s'appuie sur `JsonFileStore`, qui garde son document en memoire : une seconde
+        # lecture ne touche pas le disque, donc la fenetre du depot y est inobservable. Un controle
+        # ecrit pour la mesurer ne tombait pas sous cette mutation — la premiere campagne de
+        # falsification l'a declare faux, et il a ete retire plutot que garde comme une couverture
+        # apparente. La raison est ecrite dans le KDoc du depot.
+        "nom": "fiche : la liste des favoris n'est plus retenue",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/DailyContentFavoritesRepository.kt",
+        "avant": "        cache[key]?.let { if (DailyContentFavorites.isFresh(it.at, now())) return it.ids }",
+        "apres": "        cache[key]?.let { if (false) return it.ids }",
+        "tache": ":core:data:testDebugUnitTest --tests *DailyContentFavoritesRepositoryTest*",
+        "attendus": [
+            "une liste fraiche est reutilisee",
+            "poser un favori l'ecrit au serveur et remplit le cache",
+            "deux comptes ne partagent pas leurs favoris",
+        ],
+    },
+    {
+        # Le dedoublonnage disparait : deux lecteurs concurrents font deux requetes. Les deux
+        # tests qui tombent sont ceux qui tiennent la lecture **en vol** — sans eux, le cas ne se
+        # mesurerait qu'en relisant le source. Le second est le plus fort : il distingue le
+        # dedoublonnage d'une simple serialisation sous verrou, qui reessaierait apres l'echec.
+        "nom": "fiche : deux lectures concurrentes de favoris font deux requetes",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/DailyContentFavoritesRepository.kt",
+        "avant": (
+            "        val running = inFlight.putIfAbsent(key, mine)\n"
+            "        if (running != null) return running.await()"
+        ),
+        "apres": (
+            "        val running: CompletableDeferred<Set<String>>? = null\n"
+            "        if (running != null) return running.await()"
+        ),
+        "tache": ":core:data:testDebugUnitTest --tests *DailyContentFavoritesRepositoryTest*",
+        "attendus": [
+            "deux lectures concurrentes ne font qu'une requete",
+            "un echec est partage avec les lecteurs concurrents",
+        ],
+    },
+    {
+        # Le cache est remplace **avant** l'ecriture. Le cœur s'affiche rempli, le serveur n'a
+        # rien recu, et il se videra au prochain affichage sans que l'echec ait ete signale. Le
+        # test qui tombe compte les lectures : le cache doit porter l'ancienne liste.
+        "nom": "fiche : le cache des favoris est rempli avant l'ecriture",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/DailyContentFavoritesRepository.kt",
+        "avant": "        val next = DailyContentFavorites.toggled(idsFor(owner), id, enabled)",
+        "apres": (
+            "        val next = DailyContentFavorites.toggled(idsFor(owner), id, enabled)\n"
+            "        cache[keyOf(owner)] = Entry(next, now())"
+        ),
+        "tache": ":core:data:testDebugUnitTest --tests *DailyContentFavoritesRepositoryTest*",
+        "attendus": ["un echec d'ecriture laisse le cache inchange"],
+    },
+    {
+        # Le visiteur passe par le serveur. Or `anon` n'a **aucun** `grant` sur
+        # `content_favorites` : la requete est refusee, le geste echoue, et le cœur d'un visiteur
+        # ne se remplit jamais. C'est le defaut le plus silencieux de la tranche, puisqu'il ne se
+        # produit que sans compte.
+        "nom": "fiche : la liste du visiteur est demandee au serveur",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/DailyContentFavoritesRepository.kt",
+        "avant": "            val ids = if (owner == null) guest.current() else sourceFor(owner).list(owner)",
+        "apres": '            val ids = sourceFor(owner ?: "guest").list(owner ?: "guest")',
+        "tache": ":core:data:testDebugUnitTest --tests *DailyContentFavoritesRepositoryTest*",
+        "attendus": [
+            "un visiteur lit sa liste locale",
+            "un visiteur travaille sans projet configure",
+        ],
+    },
+    {
+        # La cle du cache ne distingue plus les comptes : le premier compte lu sert sa liste au
+        # second. Le defaut serait invisible a l'ecran tant qu'une seule personne utilise
+        # l'appareil, et se produirait exactement quand deux personnes se le relaient.
+        "nom": "fiche : la cle du cache des favoris ne distingue plus les comptes",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/DailyContentFavoritesRepository.kt",
+        "avant": "        fun keyOf(owner: String?): String = owner ?: GUEST_KEY",
+        "apres": "        fun keyOf(owner: String?): String = GUEST_KEY",
+        "tache": ":core:data:testDebugUnitTest --tests *DailyContentFavoritesRepositoryTest*",
+        "attendus": [
+            "deux comptes ne partagent pas leurs favoris",
+            "le geste d'un compte ne touche pas la liste du visiteur",
+        ],
+    },
+    {
+        # Le `@SerialName` de la lecture disparait. PostgREST rend bien la colonne demandee, le
+        # champ `contentId` ne la reconnait plus, `AppJson` ignore la cle inconnue, et la
+        # deserialisation leve — parce que le champ n'a pas de valeur par defaut. C'est la meme
+        # faute qui, sur un champ a defaut, ferait disparaitre des favoris en silence.
+        "nom": "fiche : la colonne des favoris perd son nom a la lecture",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/remote/DailyContentFavoriteSource.kt",
+        "avant": (
+            "internal data class FavoriteReadRow(\n"
+            '    @SerialName("content_id") val contentId: String,\n'
+            ")"
+        ),
+        "apres": (
+            "internal data class FavoriteReadRow(\n"
+            "    val contentId: String,\n"
+            ")"
+        ),
+        "tache": ":core:data:testDebugUnitTest --tests *DailyContentSourceShapeTest*",
+        "attendus": ["une ligne de content_favorites se lit dans le modele"],
+    },
+    {
+        # Le `@SerialName` de l'ecriture disparait. Le corps part avec `userId` et `contentId`,
+        # PostgREST repond « colonne inexistante », et le geste echoue — bruyamment, mais apres un
+        # aller-retour, et seulement sur un appareil connecte. Le test compare le corps ecrit, ce
+        # qui le dit sans reseau.
+        "nom": "fiche : la colonne des favoris perd son nom a l'ecriture",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/remote/DailyContentFavoriteSource.kt",
+        "avant": (
+            "internal data class FavoriteWriteRow(\n"
+            '    @SerialName("user_id") val userId: String,\n'
+            '    @SerialName("content_id") val contentId: String,\n'
+            ")"
+        ),
+        "apres": (
+            "internal data class FavoriteWriteRow(\n"
+            "    val userId: String,\n"
+            "    val contentId: String,\n"
+            ")"
+        ),
+        "tache": ":core:data:testDebugUnitTest --tests *DailyContentSourceShapeTest*",
+        "attendus": ["une ligne de favori s'ecrit avec les noms de colonnes"],
+    },
 ]
 
 

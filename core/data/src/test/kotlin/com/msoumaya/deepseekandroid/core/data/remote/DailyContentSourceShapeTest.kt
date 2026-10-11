@@ -140,4 +140,34 @@ class DailyContentSourceShapeTest {
         assertEquals(0, categorie.displayOrder)
         assertEquals(true, categorie.isActive)
     }
+
+    // ------------------------------------------------------------------ les favoris
+
+    @Test
+    fun `une ligne de content_favorites se lit dans le modele`() {
+        // **Le defaut que ce controle tient, et il est plus silencieux que les autres.** Une cle
+        // `content_id` ecrite `contentId` serait rendue par le serveur — la requete demande bien
+        // la colonne —, ignoree par `AppJson`, et la propriete tomberait sur sa valeur par
+        // defaut. Ici il n'y en a pas, donc la deserialisation leverait ; mais c'est la meme faute
+        // qui, sur un champ a defaut, ferait disparaitre des favoris en silence.
+        val json = """{"content_id": "c-1"}"""
+
+        val ligne = AppJson.decodeFromString<FavoriteReadRow>(json)
+
+        assertEquals("c-1", ligne.contentId)
+    }
+
+    @Test
+    fun `une ligne de favori s'ecrit avec les noms de colonnes`() {
+        // Le controle de l'**ecriture**, qui manque aux autres lignes de ce fichier : un
+        // `@SerialName` oublie y produirait un corps `{"userId": …}`, et PostgREST repondrait
+        // « colonne inexistante » — un refus bruyant, mais apres un aller-retour, et seulement sur
+        // un appareil connecte. Le comparer ici le dit sans reseau.
+        val corps = AppJson.encodeToString(
+            FavoriteWriteRow.serializer(),
+            FavoriteWriteRow(userId = "aaaa", contentId = "c-1"),
+        )
+
+        assertEquals("""{"user_id":"aaaa","content_id":"c-1"}""", corps)
+    }
 }

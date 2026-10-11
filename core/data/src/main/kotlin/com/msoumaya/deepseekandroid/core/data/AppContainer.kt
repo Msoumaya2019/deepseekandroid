@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
 import com.msoumaya.deepseekandroid.core.data.local.BlobFile
 import com.msoumaya.deepseekandroid.core.data.local.DailyContentCacheStore
+import com.msoumaya.deepseekandroid.core.data.local.GuestFavoritesStore
 import com.msoumaya.deepseekandroid.core.data.local.HttpArchiveTransport
 import com.msoumaya.deepseekandroid.core.data.local.JsonFileStore
 import com.msoumaya.deepseekandroid.core.data.local.LocalStateStore
@@ -25,6 +26,8 @@ import com.msoumaya.deepseekandroid.core.data.remote.RemoteStateSource
 import com.msoumaya.deepseekandroid.core.data.remote.SessionPreferences
 import com.msoumaya.deepseekandroid.core.data.remote.SupabaseAuthGateway
 import com.msoumaya.deepseekandroid.core.data.remote.SupabaseConfig
+import com.msoumaya.deepseekandroid.core.data.remote.SupabaseDailyContentFavoriteSource
+import com.msoumaya.deepseekandroid.core.data.remote.SupabaseDailyContentMediaSource
 import com.msoumaya.deepseekandroid.core.data.remote.SupabaseDailyContentSource
 import com.msoumaya.deepseekandroid.core.data.remote.SupabaseProvider
 import com.msoumaya.deepseekandroid.core.data.remote.SupabaseProblemReportSender
@@ -37,6 +40,8 @@ import com.msoumaya.deepseekandroid.core.data.remote.UnavailableAuthGateway
 import com.msoumaya.deepseekandroid.core.data.remote.VaultSessionManager
 import com.msoumaya.deepseekandroid.core.data.repository.AudioSettingsRepository
 import com.msoumaya.deepseekandroid.core.data.repository.AuthRepository
+import com.msoumaya.deepseekandroid.core.data.repository.DailyContentFavoritesRepository
+import com.msoumaya.deepseekandroid.core.data.repository.DailyContentMediaRepository
 import com.msoumaya.deepseekandroid.core.data.repository.DailyContentRepository
 import com.msoumaya.deepseekandroid.core.data.repository.ProblemReportRepository
 import com.msoumaya.deepseekandroid.core.data.repository.QuizRepository
@@ -402,6 +407,57 @@ class AppContainer(
         source = supabaseClient?.let { SupabaseDailyContentSource(it) },
         cache = DailyContentCacheStore(root),
         scope = scope,
+    )
+
+    /**
+     * Les médias des contenus du jour : une vignette ou une écoute, signée puis retenue.
+     *
+     * Construit **sans source** quand aucun projet n'est configuré, comme le dépôt ci-dessus, et
+     * avec la même conséquence : `resolve` rend alors chaque adresse **telle quelle**. C'est le
+     * bon repli — sans projet il n'y a pas de racine pour reconnaître le compartiment, et refuser
+     * une adresse retirerait de l'écran une vignette que l'original aurait gardée.
+     *
+     * **L'adresse passée est `supabase.url`, celle avec laquelle le client a été construit** — et
+     * non `SupabaseConfig.PROJECT_URL`. Les deux valent la même chose sur une compilation
+     * ordinaire, et c'est précisément ce qui rendrait la confusion invisible : `PROJECT_URL` est
+     * le **repli** de `BuildConfig.SUPABASE_URL`, pas sa source. Composer la racine du
+     * compartiment sur la constante ferait, sur une compilation pointée ailleurs, échouer la
+     * reconnaissance de **toutes** les adresses ; l'adresse serait rendue telle quelle, la
+     * vignette demanderait un objet privé sans signature, et l'écran montrerait une case vide sans
+     * qu'aucune erreur n'ait été levée. Voir `DailyContentMedia` pour la règle complète.
+     *
+     * **Il ne reçoit pas la session**, comme le dépôt des contenus : les médias éditoriaux
+     * n'appartiennent à personne, et `daily_media_active_read` ouvre leur lecture à `anon` tant
+     * qu'un contenu actif cite l'objet. Un compte n'y changerait donc rien.
+     */
+    val dailyContentMedia: DailyContentMediaRepository = DailyContentMediaRepository(
+        source = supabaseClient?.let { SupabaseDailyContentMediaSource(it, supabase.url) },
+    )
+
+    /**
+     * Les favoris des contenus du jour, **par compte** — et par appareil pour un visiteur.
+     *
+     * **C'est le seul objet des contenus du jour qui reçoit la session, et c'est tout son objet.**
+     * `content_favorites` est la seule table de cette fonctionnalité qui soit propre à un compte :
+     * `supabase/daily-contents.sql` accorde `select,insert,update,delete` à `authenticated` et
+     * **rien** à `anon`, et sa politique `favorites_own` compare `user_id` à `auth.uid()`. Le
+     * dépôt a donc besoin de savoir **qui** lit, et c'est `session` qui le lui dit — relu à chaque
+     * appel, sans observation de fond : rien n'est publié ici, et l'écran tient son propre état.
+     *
+     * **Le document du visiteur vit à la racine de l'état**, à côté de `daily-content.json`, et
+     * non sous un dossier de compte : le visiteur n'a pas de compte, et c'est justement pour cela
+     * que sa liste ne peut pas être serveur. La nommer d'après un propriétaire serait lui en
+     * inventer un.
+     *
+     * Il ne rejoint pas la reprise du premier plan ni celle du réseau : l'original relit ses
+     * favoris **à l'ouverture d'un écran** et au changement de compte, pas à un réveil de fond.
+     * Un `refresh` ici demanderait une méthode qui n'existe pas dans l'original, et la fenêtre de
+     * trente secondes rend la question sans objet pour un écran qui se rouvre.
+     */
+    val dailyContentFavorites: DailyContentFavoritesRepository = DailyContentFavoritesRepository(
+        source = supabaseClient?.let { SupabaseDailyContentFavoriteSource(it) },
+        guest = GuestFavoritesStore(root),
+        session = session,
     )
 
     /**

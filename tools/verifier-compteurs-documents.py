@@ -19,6 +19,11 @@ sur le total annonce : c'est la seule preuve qu'aucun module n'a ete oublie.
 Le **troisieme** endroit est tenu par `verifier_compte_des_cas` : il compare la phrase du `README`
 au nombre de cas que `falsifier.py` porte reellement, au lieu de le croire.
 
+Un **quatrieme** endroit — le chiffre de l'**addition brute**, celui que produirait un comptage
+naif — vivait dans **deux** documents et avait diverge (le `README` annoncait 3329 quand
+`ARCHITECTURE.md` annoncait 3367, pour le meme banc) : `verifier_addition_brute` le compare au
+banc, dans les deux.
+
 Usage :
     python tools/verifier-compteurs-documents.py          # depuis la racine du depot
 """
@@ -68,6 +73,21 @@ def lancer_compter_tests() -> dict:
 # La phrase du `README` qui annonce le nombre de cas du falsifier. Elle est ecrite a la main, dans
 # une phrase : rien ne la relie a la liste des cas — c'est le troisieme endroit de la docstring.
 MOTIF_CAS_FALSIFIER = re.compile(r"\*\*(?P<cas>\d+)\*\* cas sont encore jouables")
+
+
+# Le chiffre de l'**addition brute** — le nombre faux que produirait `**/build/test-results/**`
+# sans dedoublonnage. Deux documents le portent, avec deux formulations, et ils ont **diverge**
+# (le `README` annoncait **3329** quand `ARCHITECTURE.md` annoncait **3367**, pour le meme banc)
+# sans que rien ne le dise. `compter-tests.py` le mesure desormais (`addition_brute`).
+MOTIFS_ADDITION = {
+    "README.md": re.compile(
+        r"Mesuré : \*\*(?P<brut>\d+)\*\* en addition brute, \*\*(?P<classe>\d+)\*\* par classe"
+    ),
+    "ARCHITECTURE.md": re.compile(
+        r"l'addition brute de \*\*tous\*\* les fichiers XML annonce\s+\*\*(?P<brut>\d+)\*\* tests "
+        r"là où une variante par classe en compte \*\*(?P<classe>\d+)\*\*"
+    ),
+}
 
 
 def compter_cas_du_banc() -> int:
@@ -130,6 +150,41 @@ def verifier_compte_des_cas(soucis: list[str]) -> None:
     print(f"  ok  {annonce} cas")
 
 
+def verifier_addition_brute(soucis: list[str], rapport: dict) -> None:
+    """Le quatrieme endroit : le chiffre de l'addition brute, dans **deux** documents.
+
+    Il a deja derive — le `README` annoncait **3329** quand `ARCHITECTURE.md` annoncait **3367**,
+    pour le meme banc —, et rien ne les tenait ensemble. Le nombre est desormais mesure par
+    `compter-tests.py` (`addition_brute`) et compare ici, avec le nombre **par classe** qui doit
+    valoir le total du banc.
+    """
+    brut = rapport["addition_brute"]
+    total = rapport["total"]
+
+    print("=== addition brute ===")
+    for document, motif in MOTIFS_ADDITION.items():
+        with open(document, encoding="utf-8", newline="") as flux:
+            contenu = flux.read()
+
+        trouve = motif.search(contenu)
+        if not trouve:
+            soucis.append(f"{document} : la phrase de l'addition brute est introuvable")
+            print(f"  {document} : PHRASE INTROUVABLE")
+            continue
+
+        annonce_brut = int(trouve.group("brut"))
+        annonce_classe = int(trouve.group("classe"))
+        if annonce_brut != brut:
+            soucis.append(f"{document} : annonce {annonce_brut} en addition brute, le banc {brut}")
+            print(f"  {document} : NON brut {annonce_brut}, banc {brut}")
+        elif annonce_classe != total:
+            soucis.append(f"{document} : annonce {annonce_classe} par classe, le banc {total}")
+            print(f"  {document} : NON par classe {annonce_classe}, banc {total}")
+        else:
+            print(f"  ok  {document} : {annonce_brut} brut, {annonce_classe} par classe")
+    print()
+
+
 def main() -> int:
     rapport = lancer_compter_tests()
     modules_banc: dict[str, int] = {
@@ -146,6 +201,7 @@ def main() -> int:
     soucis: list[str] = []
 
     verifier_compte_des_cas(soucis)
+    verifier_addition_brute(soucis, rapport)
 
     for document, motif_phrase in DOCUMENTS.items():
         with open(document, encoding="utf-8", newline="") as flux:

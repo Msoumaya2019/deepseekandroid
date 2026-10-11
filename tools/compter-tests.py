@@ -85,6 +85,24 @@ def rapports() -> dict[str, dict[str, dict[str, int]]]:
     return trouves
 
 
+def addition_brute(trouves: dict[str, dict[str, dict[str, int]]]) -> int:
+    """L'addition **naive** de tous les rapports, sans dedoublonnage de variante.
+
+    C'est le chiffre **faux** que produirait `glob('**/build/test-results/**')` : chaque test
+    Android y figure deux fois (debug **et** release) et les modules JVM purs une seule. La
+    documentation le cite pour rendre le piege mesurable au lieu de l'affirmer — il a donc sa
+    place ici, ou il est lu sur le disque, et non recopie a la main.
+
+    Il depend de ce qui est **present sur le disque** (une machine qui n'a joue que `debug`
+    n'aura pas les rapports `release`) : c'est une mesure de ce depot-ci, pas une constante.
+    """
+    return sum(
+        valeurs["tests"]
+        for variantes in trouves.values()
+        for valeurs in variantes.values()
+    )
+
+
 def executions(releves: list[dict]) -> list[list[dict]]:
     """Groupe les rapports retenus par execution, du plus ancien au plus recent.
 
@@ -140,6 +158,8 @@ def main() -> int:
     if not trouves:
         sys.exit("Aucun rapport de test trouve. Lancez d'abord une execution des tests.")
 
+    brut = addition_brute(trouves)
+
     par_module: dict[str, list[int]] = defaultdict(lambda: [0, 0, 0])
     incoherences = []
     classes = []
@@ -186,6 +206,7 @@ def main() -> int:
                 "echecs": echecs,
                 "ignores": ignores,
                 "rapports": len(classes),
+                "addition_brute": brut,
                 "ecrit_entre": [horodate(plus_ancien), horodate(plus_recent)] if classes else [],
                 "executions": len(groupes),
                 "hors_derniere_execution": [c["classe"] for c in hors_derniere],
@@ -207,6 +228,7 @@ def main() -> int:
 
     print(f"Variante comptee : {args.variante}")
     print(f"Classes de test  : {len(classes)}")
+    print(f"Addition brute   : {brut}  (toutes variantes, sans dedoublonnage)")
     if classes:
         print(f"Rapports ecrits  : du {horodate(plus_ancien)} au {horodate(plus_recent)}")
     print()

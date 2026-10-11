@@ -134,6 +134,74 @@ class AppContainerWiringTest {
         )
     }
 
+    // ---------------------------------------------------------------- les contenus du jour
+
+    @Test
+    fun `le conteneur resout les medias sur l'adresse reellement configuree`() {
+        // **Le defaut le plus silencieux de cette tranche.** Ecrire
+        // `SupabaseDailyContentMediaSource(it, SupabaseConfig.PROJECT_URL)` compilerait, et
+        // marcherait sur toute compilation ordinaire — puisque `PROJECT_URL` est le **repli** de
+        // `BuildConfig.SUPABASE_URL`. Sur une compilation pointee ailleurs, la racine du
+        // compartiment ne correspondrait plus a celle des adresses rangees en base : `pathOf`
+        // refuserait **toutes** les adresses, chacune serait rendue telle quelle, et l'ecran
+        // demanderait un objet prive sans signature. Une vignette absente, aucune erreur levee, et
+        // rien qui nomme la cause.
+        //
+        // Le controle epingle donc l'argument, et non le nom du constructeur : c'est l'adresse
+        // passee qui doit etre celle du client.
+        val source = sourceDuConteneur()
+
+        assertTrue(
+            source.contains("SupabaseDailyContentMediaSource(it, supabase.url)"),
+            "Le depot des medias doit etre construit sur l'adresse avec laquelle le client a ete " +
+                "construit (`supabase.url`), et non sur la constante du projet : sur une " +
+                "compilation pointee ailleurs, toutes les adresses du compartiment seraient " +
+                "refusees sans qu'aucune erreur ne le dise.",
+        )
+    }
+
+    @Test
+    fun `le conteneur donne la session aux favoris et range leur document hors des comptes`() {
+        // Les favoris sont le **seul** objet des contenus du jour qui soit propre a un compte :
+        // `content_favorites` n'accorde rien a `anon` et sa politique compare `user_id` a
+        // `auth.uid()`. Sans la session, le depot ne saurait pas qui lit — et rendrait la liste
+        // du visiteur a un compte ouverte, ou l'inverse.
+        //
+        // Le second point est l'emplacement du document : `GuestFavoritesStore(root)` le pose a la
+        // **racine de l'etat**. Un chemin sous un dossier de compte compilerait aussi, et
+        // rangerait la liste d'un visiteur sous un proprietaire qu'il n'a pas.
+        val bloc = blocDeLaDeclarationDesFavoris()
+
+        assertTrue(
+            bloc.contains("session = session"),
+            "Le depot des favoris ne recoit plus la session : il ne peut plus distinguer le " +
+                "compte du visiteur, alors que la table les separe.",
+        )
+        assertTrue(
+            bloc.contains("GuestFavoritesStore(root)"),
+            "Le document des favoris du visiteur doit vivre a la racine de l'etat : un chemin " +
+                "sous un dossier de compte lui inventerait un proprietaire.",
+        )
+    }
+
+    /**
+     * La déclaration du dépôt des favoris, bornée à la suivante.
+     *
+     * La borne est nécessaire parce que `session = session` figure aussi dans les constructeurs du
+     * Quiz, de l'espace social, des récitations et de l'état — une assertion écrite sur le fichier
+     * entier serait satisfaite par **l'un de ces autres**. Le `check` refuse de mesurer tout le
+     * fichier quand la borne n'a pas mordu : sans lui, une déclaration déplacée rendrait le
+     * contrôle vert pour la mauvaise raison.
+     */
+    private fun blocDeLaDeclarationDesFavoris(): String {
+        val bloc = sourceDuConteneur().substringAfter("val dailyContentFavorites").take(FENETRE_DECLARATION)
+        check(bloc.contains("GuestFavoritesStore")) {
+            "La declaration de `dailyContentFavorites` est introuvable, ou la fenetre de lecture ne " +
+                "la delimite plus : une assertion ecrite dessus mesurerait autre chose."
+        }
+        return bloc
+    }
+
     // ---------------------------------------------------------------- le retour au premier plan
 
     @Test
@@ -348,5 +416,15 @@ class AppContainerWiringTest {
          * conteneur. C'est la borne qui fait que les assertions portent sur **ce** bloc.
          */
         const val FENETRE_REPRISE = 400
+
+        /**
+         * La fenêtre de lecture d'une déclaration de dépôt, en caractères.
+         *
+         * Mesurée à moins de 250 caractères pour `dailyContentFavorites` — nom du champ, type,
+         * constructeur et ses trois arguments. Assez large pour la contenir entière, assez courte
+         * pour ne pas atteindre les arguments de la déclaration suivante, qui porte elle aussi
+         * `session = session`.
+         */
+        const val FENETRE_DECLARATION = 400
     }
 }
