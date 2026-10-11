@@ -69,9 +69,9 @@ import com.msoumaya.deepseekandroid.core.model.Range
  * @param share propose la récitation à un ami. Reçoit la récitation **inscrite**, donc son
  *   identifiant, qui est ce que le partage transmet. **Facultatif**, comme le `onShare?` de
  *   l'original : un écran qui n'a pas de quoi partir vers le partage retire le geste au lieu de
- *   l'offrir sans effet — et c'est exactement ce que fait le lecteur aujourd'hui, dont le partage
- *   quitte l'écran pour la liste des récitations, une sortie que sa route ne sait pas encore
- *   demander. Voir la note du lecteur, à l'endroit où la capacité est construite.
+ *   l'offrir sans effet. Le lecteur, lui, **le fournit** : le partage quitte l'écran pour la liste
+ *   des récitations, et sa route porte désormais cette sortie — l'identifiant est signalé, puis la
+ *   sortie ordinaire l'emporte, et la coquille ouvre la liste sur lui.
  */
 class RecitationRecorderCapability(
     val recorder: AudioRecorder,

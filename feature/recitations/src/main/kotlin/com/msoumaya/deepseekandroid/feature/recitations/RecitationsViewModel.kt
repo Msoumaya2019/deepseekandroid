@@ -12,6 +12,7 @@ import com.msoumaya.deepseekandroid.core.data.repository.SocialRepository
 import com.msoumaya.deepseekandroid.core.domain.RecitationText
 import com.msoumaya.deepseekandroid.core.domain.RecitationsList
 import com.msoumaya.deepseekandroid.core.domain.Social
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -83,11 +84,16 @@ private data class Sources(
  *   le geste mort que ce dépôt s'interdit.
  * @param social la couche sociale, d'où viennent les **destinataires** et par où part le partage.
  *   Nulle, l'écran n'offre aucun bouton de partage — même raison, et même garde que [player].
+ * @param initialSharingId la récitation **à partager**, venue du lecteur, ou `null`. C'est
+ *   l'`initialRecitationId` de l'original : quand elle arrive dans la liste distante, la ligne
+ *   s'ouvre **et** son choix d'ami s'ouvre avec elle ; tant qu'elle n'y est pas, la liste est
+ *   relue jusqu'à [RecitationsArrival.MAX_ATTEMPTS] fois.
  */
 class RecitationsViewModel(
     private val repository: RecitationRepository,
     private val player: RecitationPlayer? = null,
     private val social: SocialRepository? = null,
+    private val initialSharingId: String? = null,
 ) : ViewModel() {
 
     /** Les saisies, qui entrent dans le calcul. */
@@ -195,6 +201,13 @@ class RecitationsViewModel(
                     )
                 }
         }
+
+        // La récitation qu'on est venu partager. Lancé **après** la collecte : l'ouverture et le
+        // partage passent par les mêmes `MutableStateFlow`, et les poser avant que le rendu ne les
+        // lise ferait publier un état calculé sur des saisies déjà remplacées.
+        initialSharingId?.let { id ->
+            viewModelScope.launch { suivreLArrivee(id) }
+        }
     }
 
     /**
@@ -213,6 +226,53 @@ class RecitationsViewModel(
     /** Relit à la demande : c'est le geste « Rafraîchir » de l'écran, et il n'a pas de garde. */
     fun onRefresh() {
         viewModelScope.launch { repository.refresh() }
+    }
+
+    /**
+     * Suit l'arrivée de la récitation qu'on est venu partager.
+     *
+     * Deux règles, et ce sont celles de l'original (`RecitationsScreen.tsx:34-35`) :
+     *
+     *  - quand l'identifiant attendu est dans la liste **distante**, la ligne s'ouvre **puis** son
+     *    choix d'ami s'ouvre — dans cet ordre, parce que `onOpen` remet `sharingId` à `null` ;
+     *  - tant qu'il n'y est pas, la liste est **relue** jusqu'à [RecitationsArrival.MAX_ATTEMPTS]
+     *    fois, à [RecitationsArrival.INTERVAL_MS] d'intervalle, puis on renonce **sans rien dire**.
+     *
+     * L'attente n'est pas une précaution : la récitation vient d'être inscrite au registre local,
+     * et son dépôt est un autre geste — la ligne peut n'être **pas encore** sur le serveur, et le
+     * partage ne s'ouvre que sur une récitation distante, parce que c'est ce que la fonction
+     * `can_play_shared_recitation` exige.
+     *
+     * La **décision** vit dans [RecitationsArrival], où elle s'éprouve sans horloge ; ici il n'y a
+     * que l'attente et la relecture. Un échec de relecture ne s'annonce pas : la personne n'a rien
+     * demandé à cet instant, et le message appartient au geste, pas à une tentative de fond.
+     */
+    private suspend fun suivreLArrivee(id: String) {
+        var essais = 0
+        while (true) {
+            val decision = RecitationsArrival.decide(
+                pendingId = id,
+                remoteIds = repository.state.value.remote.map { it.id },
+                openId = inputs.value.openId,
+                attempts = essais,
+            )
+            when (decision) {
+                RecitationsArrival.Decision.IDLE -> return
+                RecitationsArrival.Decision.GIVE_UP -> return
+
+                RecitationsArrival.Decision.OPEN -> {
+                    onOpen(id)
+                    onShare(id)
+                    return
+                }
+
+                RecitationsArrival.Decision.RETRY -> {
+                    essais++
+                    delay(RecitationsArrival.INTERVAL_MS)
+                    repository.refresh()
+                }
+            }
+        }
     }
 
     /**
@@ -480,8 +540,17 @@ class RecitationsViewModel(
     }
 
     companion object {
-        /** Fabrique rattachée au conteneur, pour que l'écran n'ait pas à le connaître. */
-        fun factory(container: AppContainer): ViewModelProvider.Factory =
+        /**
+         * Fabrique rattachée au conteneur, pour que l'écran n'ait pas à le connaître.
+         *
+         * [initialSharingId] est passé **à la construction**, et non posé après coup : c'est un
+         * point de départ, et la navigation met le `ViewModel` en cache — une valeur qui changerait
+         * ensuite ne serait jamais relue, et l'annoncer autrement serait mentir.
+         */
+        fun factory(
+            container: AppContainer,
+            initialSharingId: String? = null,
+        ): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
                     @Suppress("UNCHECKED_CAST")
@@ -489,6 +558,7 @@ class RecitationsViewModel(
                         repository = container.recitations,
                         player = container.recitationPlayer,
                         social = container.social,
+                        initialSharingId = initialSharingId,
                     ) as T
                 }
             }

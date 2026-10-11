@@ -9,6 +9,9 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
@@ -309,8 +312,27 @@ private fun AppNavHost(
         // `launchSingleTop` : deux appuis sur le bouton du tableau de bord ne doivent pas empiler
         // deux fois le même écran, sans quoi le retour ramènerait sur une copie de l'écran qu'on
         // vient de quitter.
-        composable(AppRoutes.RECITATIONS) {
-            RecitationsScreen(onClose = { navController.popBackStack() })
+        composable(
+            route = AppRoutes.RECITATIONS_PATTERN,
+            arguments = listOf(
+                navArgument(AppRoutes.RECITATIONS_SHARE) {
+                    type = NavType.StringType
+                    defaultValue = ""
+                },
+            ),
+        ) { entry ->
+            // Le motif, et non la route nue : sans lui, « ouvrir la liste » et « ouvrir la liste
+            // **sur** une récitation à partager » seraient la même destination, et la seconde
+            // promesse ne serait jamais tenue. La valeur vide tient lieu de sentinelle — aucun
+            // identifiant n'est vide —, donc `recitations` seul reste une route valide.
+            val aPartager = entry.arguments
+                ?.getString(AppRoutes.RECITATIONS_SHARE)
+                ?.takeIf { it.isNotEmpty() }
+
+            RecitationsScreen(
+                onClose = { navController.popBackStack() },
+                initialSharingId = aPartager,
+            )
         }
 
         // Le lecteur ne connaît pas la navigation : il demande à fermer, et c'est la coquille
@@ -366,6 +388,17 @@ private fun AppNavHost(
             val tache = entry.arguments?.getString(AppRoutes.READER_TASK)?.takeIf { it.isNotEmpty() }
             val categorie = entry.arguments?.getString(AppRoutes.READER_CATEGORY)?.takeIf { it.isNotEmpty() }
 
+            // L'identifiant de la récitation que le lecteur vient de faire enregistrer et qu'on
+            // veut partager, ou `null`. C'est le `pendingRecitationId` de l'original, posé **au
+            // même endroit** : au niveau de l'application, et non dans l'écran qui le recevra —
+            // c'est la sortie du lecteur qui le pose, et c'est la liste qui le consomme.
+            //
+            // Il n'est **pas** lu pendant la composition : seule la sortie du lecteur le lit, au
+            // moment du geste. Il n'a donc pas besoin d'être sauvegardé — une rotation pendant
+            // qu'un partage est en route le perd, et le pire qui en résulte est une liste ouverte
+            // sans le choix d'ami.
+            var aPartager by remember { mutableStateOf<String?>(null) }
+
             ReaderRoute(
                 startVerse = entry.arguments?.getInt(AppRoutes.READER_VERSE)?.takeIf { it > 0 },
                 session = if (debut != null && fin != null) {
@@ -396,7 +429,26 @@ private fun AppNavHost(
                 } else {
                     null
                 },
-                onClose = { navController.popBackStack() },
+                // La sortie du lecteur décide aussi de la **destination**, et c'est la coquille
+                // qui la connaît : `setReader(null)` puis `setRecitationsOpen(true)` de
+                // l'original, dans cet ordre. Le lecteur **cède la place** au lieu de rester sous
+                // la liste — sans quoi le retour depuis la liste ramènerait sur l'écran qu'on
+                // vient de quitter, ce que l'original ne fait jamais.
+                onClose = {
+                    val cible = aPartager
+                    aPartager = null
+                    navController.popBackStack()
+                    if (cible != null) {
+                        navController.navigate(AppRoutes.recitationsRoute(cible)) {
+                            launchSingleTop = true
+                        }
+                    }
+                },
+                // Le lecteur **signale** la récitation à partager, puis sort par la sortie
+                // ordinaire : il n'écrit pas la mémoire lui-même. Deux sorties qui écriraient
+                // chacune la leur finiraient par diverger, et c'est la copie qu'on ne relit pas
+                // qui resterait — une position perdue ne se voit pas.
+                onShareRecitation = { id -> aPartager = id },
             )
         }
         // Le Quiz s'ouvre de trois façons : depuis l'accueil — rien à préciser —, depuis le bouton

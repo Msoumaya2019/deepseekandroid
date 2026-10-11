@@ -89,10 +89,14 @@ class AppScaffoldReviewEntryTest {
         // les deux moitiés doivent être là — la route **servie** et le rappel **nommé** : servir
         // la route sans brancher le rappel laisserait le bouton de la carte « Suivi » mort, et
         // brancher le rappel sans servir la route ferait planter l'appui.
+        //
+        // La route est servie par son **motif** depuis que le lecteur peut y mener en emportant
+        // une récitation à partager : servir la route nue laisserait cet argument sans effet. Le
+        // tableau de bord, lui, navigue toujours vers la route **nue** — il n'a rien à partager.
         val coquille = sourceDeLaCoquille()
 
         assertTrue(
-            coquille.contains("composable(AppRoutes.RECITATIONS) {"),
+            coquille.contains("route = AppRoutes.RECITATIONS_PATTERN,"),
             "La route des récitations n'est plus servie : le premier appui sur le bouton de la " +
                 "carte « Suivi » ferait planter l'application.",
         )
@@ -102,10 +106,13 @@ class AppScaffoldReviewEntryTest {
             "Le tableau de bord n'ouvre plus les récitations : le bouton de la carte « Suivi » " +
                 "serait un bouton mort, et rien d'autre ne le dirait.",
         )
+        val recitations = recitationsDeLaCoquille()
         assertTrue(
-            coquille.contains("RecitationsScreen(onClose = { navController.popBackStack() })"),
-            "La route des récitations est servie mais ne rend plus l'écran : l'appui ouvrirait " +
-                "une page vide, et « la route est servie » ne prouverait rien à lui seul.",
+            recitations.contains("RecitationsScreen(") &&
+                recitations.contains("onClose = { navController.popBackStack() },"),
+            "La route des récitations est servie mais ne rend plus l'écran, ou ne le laisse plus " +
+                "se fermer : l'appui ouvrirait une page vide ou sans retour, et « la route est " +
+                "servie » ne prouverait rien à lui seul.",
         )
     }
 

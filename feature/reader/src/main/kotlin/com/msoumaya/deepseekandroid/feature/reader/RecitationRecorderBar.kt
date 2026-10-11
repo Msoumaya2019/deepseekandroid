@@ -311,9 +311,9 @@ internal fun RecitationRecorderBar(
         liveMs = liveMs,
         itemMs = item?.durationMs,
         // Les deux conditions de l'original — `item && onShare` —, et il faut bien les deux. La
-        // seconde n'est pas décorative : le lecteur n'a pas encore de sortie vers le partage, donc
-        // la capacité qu'il reçoit porte `share = null`, et le geste **disparaît** au lieu
-        // d'apparaître sans effet. C'est la règle du dépôt, et c'est la seule façon de l'écrire.
+        // seconde n'est pas décorative : une capacité **sans** partage doit faire **disparaître**
+        // le geste au lieu de l'afficher sans effet — c'est ce que fait un écran qui n'a pas de
+        // quoi partir vers la liste. C'est la règle du dépôt, et c'est la seule façon de l'écrire.
         canShare = item != null && capability.share != null,
         message = message,
     )

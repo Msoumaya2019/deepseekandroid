@@ -173,6 +173,20 @@ internal fun amisDeLaCoquille(): String =
 internal fun quizDeLaCoquille(): String =
     sansCommentaires(blocApres("route = AppRoutes.QUIZ_PATTERN,"))
 
+/**
+ * Le bloc de l'écran « Récitations » seul, **commentaires retirés**.
+ *
+ * Le retrait sert ici pour la même raison qu'au Quiz : le bloc explique en commentaire pourquoi la
+ * route est servie par son **motif** et non par la route nue, et il nomme l'argument qu'on y
+ * attend. Un contrôle écrit sur le texte brut y trouverait sa propre documentation — il
+ * vérifierait ce qu'on **attend** de la route au lieu de ce qu'elle **fait**.
+ *
+ * La borne de [blocApres] s'applique : le `composable(` du lecteur suit celui des récitations, donc
+ * le bloc est délimité et une assertion ne peut pas être satisfaite par la porte voisine.
+ */
+internal fun recitationsDeLaCoquille(): String =
+    sansCommentaires(blocApres("route = AppRoutes.RECITATIONS_PATTERN,"))
+
 /** Le texte privé de ses lignes de commentaire — celles qui commencent par `//`. */
 internal fun sansCommentaires(texte: String): String =
     texte.lines().filterNot { it.trimStart().startsWith("//") }.joinToString("\n")

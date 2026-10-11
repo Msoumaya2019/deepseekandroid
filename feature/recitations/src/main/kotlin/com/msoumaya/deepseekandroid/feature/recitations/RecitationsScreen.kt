@@ -69,14 +69,18 @@ internal val SCREEN_PADDING = 18.dp
  * de retour, et c'est la coquille qui décide où l'on retourne.
  *
  * @param onClose fermeture de l'écran. La coquille y branche son retour.
+ * @param initialSharingId la récitation **à partager**, venue du lecteur, ou `null`. C'est
+ *   l'`initialRecitationId` de l'original : quand elle arrive dans la liste, la ligne s'ouvre et
+ *   le choix d'ami s'ouvre avec elle.
  * @param viewModel état de l'écran. Par défaut, celui du conteneur applicatif.
  */
 @Composable
 fun RecitationsScreen(
     modifier: Modifier = Modifier,
     onClose: () -> Unit = {},
+    initialSharingId: String? = null,
     viewModel: RecitationsViewModel = viewModel(
-        factory = RecitationsViewModel.factory(LocalAppContainer.current),
+        factory = RecitationsViewModel.factory(LocalAppContainer.current, initialSharingId),
     ),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()

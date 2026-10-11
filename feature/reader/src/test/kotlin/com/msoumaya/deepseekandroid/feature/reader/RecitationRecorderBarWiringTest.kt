@@ -137,9 +137,9 @@ class RecitationRecorderBarWiringTest {
         assertTrue(
             sourceDeLaBarre().contains("canShare = item != null && capability.share != null,"),
             "Le partage ne réclame plus ses deux conditions. La seconde n'est pas décorative : " +
-                "la route du lecteur ne sait pas encore où partager, donc sa capacité porte " +
-                "`share = null` — et sans cette condition, le geste « Partager » apparaîtrait " +
-                "dans la barre sans rien faire.",
+                "une capacité **sans** partage — un écran qui n'a pas de quoi partir vers la " +
+                "liste — doit faire disparaître le geste, et sans cette condition « Partager » " +
+                "apparaîtrait dans la barre sans rien faire.",
         )
     }
 

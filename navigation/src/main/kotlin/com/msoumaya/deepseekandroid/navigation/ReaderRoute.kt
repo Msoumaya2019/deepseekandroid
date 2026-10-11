@@ -141,6 +141,10 @@ import kotlinx.coroutines.launch
  *   progression à écrire — et sa plage sert de repli tant que l'état du compte n'est pas arrivé.
  * @param onClose ferme le lecteur. La route ne décide pas où l'on retourne : elle le demande à
  *   la coquille, qui seule connaît la pile.
+ * @param onShareRecitation signale la récitation que la personne veut partager, **juste avant**
+ *   que le lecteur ne sorte. L'identifiant est posé par la coquille, et c'est la liste des
+ *   récitations qui le consomme : le partage depuis le lecteur **quitte l'écran**, comme dans
+ *   l'original, où `setReader(null)` précède l'ouverture de la liste.
  */
 @Composable
 fun ReaderRoute(
@@ -149,6 +153,14 @@ fun ReaderRoute(
     // lecture libre n'a ni tâche ni progression, et c'est ce que le type dit.
     session: StudySession.Request? = null,
     onClose: () -> Unit,
+    // La récitation à partager, **signalée** avant de sortir. Obligatoire, et non facultative :
+    // c'est elle qui décide si la barre d'enregistrement offre « Partager ». Un défaut vide
+    // laisserait un geste qui mène nulle part, ce que le dépôt refuse partout ailleurs.
+    //
+    // Le lecteur ne **navigue pas** : il signale, puis sort par `quitter`, et c'est la coquille
+    // qui décide de la destination. Un écran qui connaîtrait la pile ne pourrait plus être ouvert
+    // autrement que depuis elle.
+    onShareRecitation: (String) -> Unit,
     container: AppContainer = LocalAppContainer.current,
     // La fabrique reçoit **le paramètre** `container`, pas `LocalAppContainer.current` : les deux
     // valent la même chose par défaut, mais un appelant qui en passerait un autre verrait sinon
@@ -319,6 +331,21 @@ fun ReaderRoute(
         }
     }
 
+    // La sortie de partage : **signaler, puis sortir par `quitter`**.
+    //
+    // L'écriture de la mémoire n'est donc pas répétée ici. Elle vit dans `quitter`, et les deux
+    // chemins y passent — c'est ce qui garantit que partager depuis le lecteur enregistre aussi la
+    // position. Deux copies d'un même fait finiraient par diverger, et c'est la copie qu'on ne
+    // relit pas qui resterait : une position perdue ne se voit pas.
+    //
+    // L'ordre est celui de l'original — `setPendingRecitationId(id)` **avant** `setReader(null)` —
+    // et il compte : la coquille lit l'identifiant dans la sortie, donc le poser après ne
+    // mènerait à rien.
+    val partager: (String) -> Unit = { id ->
+        onShareRecitation(id)
+        quitter()
+    }
+
     // Le retour système est une sortie comme une autre : sans ce branchement, quitter au geste
     // n'écrirait rien, et la position serait perdue précisément quand on quitte vite.
     //
@@ -381,6 +408,11 @@ fun ReaderRoute(
     // récitation sous un compte qui n'est plus le sien — ou sous aucun, ce que le domaine refuse
     // déjà (`RecitationStartProblem.OWNER_MISSING`).
     val proprietaireCourant = rememberUpdatedState(userState?.userId)
+    // `partager` est **relu à chaque image** : il capture la page affichée par `quitter`, donc une
+    // valeur figée à la construction de la capacité enregistrerait une position périmée. C'est le
+    // même motif que `proprietaireCourant`, et pour la même raison — la capacité n'est construite
+    // qu'une fois, mais ce qu'elle déclenche doit lire l'état du moment.
+    val partagerCourant = rememberUpdatedState(partager)
     val enregistreur = container.recorder
     val lecteurDeRecitation = container.recitationPlayer
     val capaciteDEnregistrement: RecitationRecorderCapability? =
@@ -400,14 +432,13 @@ fun ReaderRoute(
                     save = { chemin, duree, plage ->
                         container.recitations.save(chemin, plage.start, plage.end, duree)
                     },
-                    // **Pas encore de partage depuis le lecteur.** L'original quitte l'écran pour
-                    // la liste des récitations, où la feuille du geste s'ouvre sur la ligne
-                    // attendue ; notre route n'a qu'une sortie, `onClose`, et la liste ne reçoit
-                    // pas d'identifiant en attente. Tant que ce chemin n'existe pas, le geste
-                    // « Partager » **disparaît** de la barre au lieu d'y figurer sans effet —
-                    // c'est la règle du dépôt, et elle est tenue par `canShare`, jamais par une
-                    // lambda vide.
-                    share = null,
+                    // **Le partage existe maintenant.** L'original quitte l'écran pour la liste des
+                    // récitations, où le choix d'ami s'ouvre sur la ligne attendue ; la route le
+                    // fait en deux temps — l'identifiant est signalé, la sortie l'emporte, et la
+                    // coquille ouvre la liste sur lui. La barre n'a donc plus à retirer le geste,
+                    // et c'est `canShare` qui continue de décider de l'afficher : la règle du
+                    // dépôt est tenue par une condition, jamais par une lambda vide.
+                    share = { recitation -> partagerCourant.value(recitation.id) },
                 )
             }
         }

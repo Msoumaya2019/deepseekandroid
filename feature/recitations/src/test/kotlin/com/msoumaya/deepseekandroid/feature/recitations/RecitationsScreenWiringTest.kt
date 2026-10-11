@@ -41,10 +41,16 @@ class RecitationsScreenWiringTest {
 
     @Test
     fun `l'ecran construit son ViewModel depuis le conteneur applicatif`() {
+        // Les **deux** arguments comptent : le conteneur donne le dépôt, et l'identifiant donne à
+        // la liste la récitation qu'on est venu partager. Perdre le second ferait ouvrir la liste
+        // sur elle-même — un partage qui n'a pas lieu, sans une seule erreur.
         assertTrue(
-            sourceDeLEcran().contains("RecitationsViewModel.factory(LocalAppContainer.current)"),
-            "L'écran ne construit plus son ViewModel depuis le conteneur : il n'aurait plus de " +
-                "dépôt, et la liste resterait vide.",
+            sourceDeLEcran().contains(
+                "RecitationsViewModel.factory(LocalAppContainer.current, initialSharingId)",
+            ),
+            "L'écran ne construit plus son ViewModel depuis le conteneur, ou ne lui transmet plus " +
+                "la récitation à partager : il n'aurait plus de dépôt, ou la liste resterait " +
+                "muette sur le geste qui l'a ouverte.",
         )
     }
 

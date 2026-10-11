@@ -264,6 +264,35 @@ object AppRoutes {
     /** Les récitations partagées avec les amis. */
     const val RECITATIONS = "recitations"
 
+    /**
+     * La récitation **à partager**, en argument **facultatif** de la route des récitations.
+     *
+     * Elle vient du lecteur : après un enregistrement, l'original quitte l'écran pour la liste, où
+     * le choix d'ami s'ouvre **sur la ligne attendue** (`App.tsx`, `onShareRecitation`). Sans cet
+     * argument, la liste s'ouvrirait sur elle-même et personne ne saurait quelle récitation on
+     * venait de partager — le geste mènerait quelque part, mais pas là où il promettait.
+     */
+    const val RECITATIONS_SHARE = "partage"
+
+    /**
+     * Le motif de la route des récitations, argument compris.
+     *
+     * L'argument est **facultatif**, comme ceux du lecteur et du Quiz : `recitations` seul reste
+     * une route valide, et c'est ce qui permet d'ouvrir la liste depuis le tableau de bord sans
+     * avoir rien à partager. [baseRoute] en rend `recitations`, qui reste donc dans [fullScreen].
+     */
+    val RECITATIONS_PATTERN: String = "$RECITATIONS?$RECITATIONS_SHARE={$RECITATIONS_SHARE}"
+
+    /**
+     * La route des récitations, ouverte sur la ligne à partager, ou sur rien.
+     *
+     * Construite ici, et non recollée chez l'appelant : c'est la règle déjà écrite pour [quizRoute]
+     * et [readerRoute], et la divergence serait **muette** — la navigation n'échouerait pas, elle
+     * ouvrirait la liste sans ouvrir le choix d'ami.
+     */
+    fun recitationsRoute(shareId: String? = null): String =
+        if (shareId == null) RECITATIONS else "$RECITATIONS?$RECITATIONS_SHARE=$shareId"
+
     /** Le tableau de bord des révisions. */
     const val REVIEW = "revision"
 

@@ -4095,9 +4095,14 @@ CAS: list[dict] = [
         # La route est servie mais ne rend plus l'ecran : `composable(...) { }` compile, et la
         # route reste « servie ». L'appui ouvrirait une page vide — c'est pourquoi le controle
         # exige aussi que l'ecran soit rendu, et pas seulement la route declaree.
+        #
+        # L'ancre a ete **reprise** quand la route est passee a son motif : l'appel est devenu
+        # multiligne, et l'ancienne ligne unique avait disparu. Un cas dont l'ancre meurt est
+        # signale par `--verifier`, et il faut la reparer plutot que le retirer — c'est la garde
+        # qu'il porte qui compte, pas la forme du texte.
         "nom": "recitation : la route sert bien l'ecran",
         "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/AppScaffold.kt",
-        "avant": "            RecitationsScreen(onClose = { navController.popBackStack() })\n",
+        "avant": "            RecitationsScreen(\n                onClose = { navController.popBackStack() },\n                initialSharingId = aPartager,\n            )\n",
         "apres": "            // mutation : la route ne rend plus l'ecran\n",
         "tache": ":navigation:testDebugUnitTest",
         "attendus": ["les recitations sont servies et branchees"],
@@ -4615,16 +4620,21 @@ CAS: list[dict] = [
     # Le controle est `ReaderRouteRecorderTest`, dans `navigation`. Il regarde le seul endroit ou
     # les trois autres suites ne regardent pas : entre le conteneur et le lecteur.
     {
-        # La route n'a qu'une sortie, `onClose` : l'original, lui, quitte le lecteur pour la liste
-        # des recitations. Le partage est donc **retire** plutot que rendu inerte. En fournissant
-        # une lambda vide, le geste apparaitrait dans la barre et ne ferait rien — exactement ce
-        # que la regle du depot interdit.
+        # La route doit fournir un partage **reel** : la capacite recoit une lambda qui signale la
+        # recitation puis sort. Une lambda vide ferait apparaitre le geste dans la barre sans rien
+        # faire — exactement ce que la regle du depot interdit : un geste sans destination est
+        # **retire**, pas rendu inerte.
+        #
+        # L'ancre et le temoin ont ete repris quand le lecteur a gagne sa sortie de partage : ce
+        # cas visait `share = null,` et le test « le partage est retire faute de sortie », la
+        # valeur et le nom d'alors. La mutation, elle, n'a pas change de sens — seul le chemin
+        # par lequel elle se voit a change.
         "nom": "enregistreur : la route fournit un partage vide",
         "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/ReaderRoute.kt",
-        "avant": "                    share = null,",
+        "avant": "                    share = { recitation -> partagerCourant.value(recitation.id) },",
         "apres": "                    share = { _ -> },",
         "tache": ":navigation:testDebugUnitTest",
-        "attendus": ["le partage est retire faute de sortie"],
+        "attendus": ["le partage est branche sur la sortie du lecteur"],
     },
     {
         # Les deux portes du panneau disparaitraient d'un coup — la barre de la coquille et
@@ -5531,6 +5541,226 @@ CAS: list[dict] = [
         "apres": "        _state.value = _state.value.copy(busy = false)",
         "tache": ":core:data:testDebugUnitTest --tests *ProblemReportRepositoryTest*",
         "attendus": ["la remise a zero efface ce que le dernier geste a laisse"],
+    },
+    # -----------------------------------------------------------------------------------------
+    # ------------------------------------------- le partage depuis le lecteur
+    # -----------------------------------------------------------------------------------------
+    # Dix-huit mutations, en cinq groupes : la **regle pure** de l'arrivee, son **branchement**
+    # dans le `ViewModel`, les **routes**, la **coquille** qui porte l'identifiant, et les deux
+    # bouts du chemin — la barre du lecteur, et la sortie qui signale.
+    #
+    # Le chemin traverse **quatre** pieces que rien, a l'execution, ne relie visiblement : le
+    # lecteur signale la recitation, la coquille retient l'identifiant, la sortie du lecteur
+    # l'emporte, et la liste le consomme. Un groupe de cas par piece, plus la regle qui decide.
+    #
+    # Une mutation a ete ecartee apres examen : retirer le `return` du cas « arrivee » ferait
+    # **boucler** la coroutine, et un cas qui pend n'est pas un cas — il n'apprend rien sur la
+    # garde et bloque la campagne.
+    {
+        # Le dernier essai est encore un essai : reculer la borne d'un cran ferait renoncer sur une
+        # recitation qui serait arrivee a la dixieme relecture. Un partage qui n'a pas lieu, sans
+        # une seule erreur.
+        "nom": "partage : la borne des essais recule d'un cran",
+        "fichier": "feature/recitations/src/main/kotlin/com/msoumaya/deepseekandroid/feature/recitations/RecitationsArrival.kt",
+        "avant": "        return if (attempts >= MAX_ATTEMPTS) Decision.GIVE_UP else Decision.RETRY",
+        "apres": "        return if (attempts > MAX_ATTEMPTS) Decision.GIVE_UP else Decision.RETRY",
+        "tache": ":feature:recitations:testDebugUnitTest --tests *RecitationsArrivalTest*",
+        "attendus": ["les essais sont bornes"],
+    },
+    {
+        # La ligne deja ouverte se rouvre. `onOpen` **bascule** : le partage refermerait la
+        # recitation qu'on venait de partager, et le choix d'ami s'ouvrirait sous une ligne
+        # repliee — un ecran qui a l'air juste.
+        "nom": "partage : la ligne deja ouverte se rouvre",
+        "fichier": "feature/recitations/src/main/kotlin/com/msoumaya/deepseekandroid/feature/recitations/RecitationsArrival.kt",
+        "avant": "            return if (openId == pendingId) Decision.IDLE else Decision.OPEN",
+        "apres": "            return Decision.OPEN",
+        "tache": ":feature:recitations:testDebugUnitTest --tests *RecitationsArrivalTest*",
+        "attendus": ["la ligne deja ouverte ne se rouvre pas"],
+    },
+    {
+        # L'intervalle de relecture n'est plus celui de l'original : l'attente totale n'est plus de
+        # trente secondes, et la liste renonce plus tot — ou plus tard — que la source.
+        "nom": "partage : l'intervalle de relecture n'est plus celui de l'original",
+        "fichier": "feature/recitations/src/main/kotlin/com/msoumaya/deepseekandroid/feature/recitations/RecitationsArrival.kt",
+        "avant": "    const val INTERVAL_MS: Long = 3_000L",
+        "apres": "    const val INTERVAL_MS: Long = 1_000L",
+        "tache": ":feature:recitations:testDebugUnitTest --tests *RecitationsArrivalTest*",
+        "attendus": ["la borne et l'intervalle sont ceux de l'original", "l'attente totale ne depasse pas trente secondes"],
+    },
+    {
+        # L'arrivee perd contre les essais epuises : l'ordre des deux regles est inverse, et une
+        # recitation **presente** est abandonnee parce que la borne est atteinte. La liste reste
+        # ouverte sur elle-meme, alors que la ligne etait la.
+        "nom": "partage : l'arrivee perd contre les essais epuises",
+        "fichier": "feature/recitations/src/main/kotlin/com/msoumaya/deepseekandroid/feature/recitations/RecitationsArrival.kt",
+        "avant": "        if (pendingId in remoteIds) {",
+        "apres": "        if (attempts >= MAX_ATTEMPTS) return Decision.GIVE_UP\n        if (pendingId in remoteIds) {",
+        "tache": ":feature:recitations:testDebugUnitTest --tests *RecitationsArrivalTest*",
+        "attendus": ["la recitation arrivee gagne sur les essais epuises"],
+    },
+    {
+        # La decision lit la liste **locale** au lieu de la distante. Le registre vient d'inscrire
+        # la recitation, donc elle y est : la regle croit qu'elle est arrivee, ouvre le choix
+        # d'ami, et le serveur refuse — c'est la fonction `can_play_shared_recitation` qui decide,
+        # et elle ne connait que ce qui est depose.
+        "nom": "partage : la decision lit la liste locale au lieu de la distante",
+        "fichier": "feature/recitations/src/main/kotlin/com/msoumaya/deepseekandroid/feature/recitations/RecitationsViewModel.kt",
+        "avant": "                remoteIds = repository.state.value.remote.map { it.id },",
+        "apres": "                remoteIds = repository.state.value.items.map { it.id },",
+        "tache": ":feature:recitations:testDebugUnitTest --tests *RecitationsArrivalWiringTest*",
+        "attendus": ["la decision passe par la regle pure"],
+    },
+    {
+        # Le choix d'ami s'ouvre **avant** la ligne. `onOpen` remet `sharingId` a `null` : le choix
+        # est donc referme aussitot ouvert, et la ligne s'affiche depliee sans lui. Rien ne le dit.
+        "nom": "partage : le choix d'ami s'ouvre avant la ligne",
+        "fichier": "feature/recitations/src/main/kotlin/com/msoumaya/deepseekandroid/feature/recitations/RecitationsViewModel.kt",
+        "avant": "                    onOpen(id)\n                    onShare(id)",
+        "apres": "                    onShare(id)\n                    onOpen(id)",
+        "tache": ":feature:recitations:testDebugUnitTest --tests *RecitationsArrivalWiringTest*",
+        "attendus": ["la ligne s'ouvre avant que le choix d'ami ne s'ouvre"],
+    },
+    {
+        # La relecture ne relit plus rien : la boucle attend dix fois en lisant le **meme** etat,
+        # et renonce toujours. Le partage depuis le lecteur ne marcherait jamais, sans une erreur.
+        #
+        # Ce cas a servi : a sa premiere campagne il est sorti **FAUX** — aucun test ne tombait.
+        # Le test cherchait `repository.refresh()` dans le fichier **entier**, or le `ViewModel` en
+        # porte trois (`onVisible`, `onRefresh`, la relecture). Il est desormais borne au cas
+        # `RETRY`, comme celui de l'ordre l'est au cas `OPEN`.
+        "nom": "partage : la relecture ne relit plus la liste",
+        "fichier": "feature/recitations/src/main/kotlin/com/msoumaya/deepseekandroid/feature/recitations/RecitationsViewModel.kt",
+        "avant": "                    repository.refresh()\n",
+        "apres": "                    // mutation : la liste n'est plus relue\n",
+        "tache": ":feature:recitations:testDebugUnitTest --tests *RecitationsArrivalWiringTest*",
+        "attendus": ["la relecture passe par l'attente et par le depot"],
+    },
+    {
+        # L'attente disparait : la boucle relirait dix fois **d'affilee**, sans laisser au depot le
+        # temps d'aboutir. La recitation arriverait une seconde trop tard, et le partage echouerait
+        # sur une ligne qui etait en chemin — sans une erreur, et sans que rien ne le dise.
+        "nom": "partage : la relecture n'attend plus entre deux essais",
+        "fichier": "feature/recitations/src/main/kotlin/com/msoumaya/deepseekandroid/feature/recitations/RecitationsViewModel.kt",
+        "avant": "                    delay(RecitationsArrival.INTERVAL_MS)\n",
+        "apres": "                    // mutation : plus d'attente entre deux essais\n",
+        "tache": ":feature:recitations:testDebugUnitTest --tests *RecitationsArrivalWiringTest*",
+        "attendus": ["la relecture passe par l'attente et par le depot"],
+    },
+    {
+        # L'identifiant est recu par la fabrique et jamais transmis : le parametre existe, il est
+        # donc lu par un relecteur presse, et le `ViewModel` ne suit rien du tout.
+        "nom": "partage : l'identifiant n'est plus transmis a la fabrique",
+        "fichier": "feature/recitations/src/main/kotlin/com/msoumaya/deepseekandroid/feature/recitations/RecitationsViewModel.kt",
+        "avant": "                        initialSharingId = initialSharingId,",
+        "apres": "                        initialSharingId = null,",
+        "tache": ":feature:recitations:testDebugUnitTest --tests *RecitationsArrivalWiringTest*",
+        "attendus": ["l'identifiant traverse la fabrique jusqu'a l'ecran"],
+    },
+    {
+        # Le motif perd son argument : la navigation l'ignore, et la liste s'ouvre sur elle-meme.
+        # C'est le defaut le plus silencieux du chemin — le geste mene quelque part, mais pas la ou
+        # il promettait.
+        "nom": "partage : le motif des recitations perd son argument",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/AppDestination.kt",
+        "avant": "    val RECITATIONS_PATTERN: String = \"$RECITATIONS?$RECITATIONS_SHARE={$RECITATIONS_SHARE}\"",
+        "apres": "    val RECITATIONS_PATTERN: String = RECITATIONS",
+        "tache": ":navigation:testDebugUnitTest --tests *AppRoutesRecitationsTest*",
+        "attendus": ["le motif des recitations declare l'argument facultatif"],
+    },
+    {
+        # La route rend toujours la route nue : l'argument est accepte puis jete. Meme consequence
+        # que le cas precedent, et le meme silence.
+        "nom": "partage : la route des recitations rend toujours la route nue",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/AppDestination.kt",
+        "avant": "        if (shareId == null) RECITATIONS else \"$RECITATIONS?$RECITATIONS_SHARE=$shareId\"",
+        "apres": "        RECITATIONS",
+        "tache": ":navigation:testDebugUnitTest --tests *AppRoutesRecitationsTest*",
+        "attendus": ["la route des recitations porte la recitation a partager"],
+    },
+    {
+        # La liste n'est plus servie par son **motif** : l'argument declare ne correspond plus a la
+        # route servie, et la recitation a partager n'atteint jamais l'ecran.
+        "nom": "partage : la liste n'est plus servie par son motif",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/AppScaffold.kt",
+        "avant": "            route = AppRoutes.RECITATIONS_PATTERN,",
+        "apres": "            route = AppRoutes.RECITATIONS,",
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["la route des recitations est servie par son motif"],
+    },
+    {
+        # La liste lit son argument, puis n'en fait rien : le parametre est recu et jamais
+        # transmis. Le lecteur a signale, la coquille a retenu, et l'ecran laisse tomber.
+        "nom": "partage : la liste perd la recitation a partager",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/AppScaffold.kt",
+        "avant": "                initialSharingId = aPartager,",
+        "apres": "                initialSharingId = null,",
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["la liste recoit la recitation a partager"],
+    },
+    {
+        # La sentinelle disparait : un argument **absent** arrive en chaine vide et passe pour un
+        # identifiant. La liste cherche alors une recitation qui n'existe pas, pendant trente
+        # secondes, avant de renoncer — et rien ne le dit.
+        "nom": "partage : la sentinelle de l'argument disparait",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/AppScaffold.kt",
+        "avant": "                ?.takeIf { it.isNotEmpty() }\n",
+        "apres": "                ?.takeIf { true }\n",
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["la liste recoit la recitation a partager"],
+    },
+    {
+        # Le lecteur signale dans le vide : la coquille ne retient rien, donc la sortie n'emporte
+        # aucun identifiant, et la liste s'ouvre sans le choix d'ami. Le geste « Partager » de la
+        # barre existe toujours — il ne fait simplement plus rien.
+        "nom": "partage : le lecteur ne retient plus la recitation signalee",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/AppScaffold.kt",
+        "avant": "                onShareRecitation = { id -> aPartager = id },",
+        "apres": "                onShareRecitation = {},",
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["le lecteur signale la recitation a partager"],
+    },
+    {
+        # La sortie du lecteur ouvre la liste **sans** la recitation : la route est recollee a la
+        # main, et l'identifiant retenu n'est jamais emporte. Deux sources pour la meme route, et
+        # c'est celle qu'on ne relit pas qui reste.
+        "nom": "partage : le lecteur n'ouvre plus la liste sur la recitation",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/AppScaffold.kt",
+        "avant": "                        navController.navigate(AppRoutes.recitationsRoute(cible)) {",
+        "apres": "                        navController.navigate(AppRoutes.RECITATIONS) {",
+        "tache": ":navigation:testDebugUnitTest",
+        "attendus": ["le lecteur cede la place a la liste"],
+    },
+    {
+        # La barre offre le partage sans destination : le geste apparait, et ne fait rien. C'est
+        # exactement ce que la regle du depot interdit — un geste sans destination est **retire**,
+        # pas rendu inerte.
+        "nom": "partage : la barre offre le partage sans destination",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/RecitationRecorderBar.kt",
+        "avant": "        canShare = item != null && capability.share != null,",
+        "apres": "        canShare = item != null,",
+        "tache": ":feature:reader:testDebugUnitTest --tests *RecitationRecorderBarWiringTest*",
+        "attendus": ["le partage exige la recitation et sa destination"],
+    },
+    {
+        # Le lecteur sort sans signaler : l'identifiant n'est jamais pose, donc la coquille n'a
+        # rien a emporter. Le geste « Partager » sort de l'ecran — et la liste s'ouvre pour rien.
+        "nom": "partage : le lecteur sort sans signaler la recitation",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/ReaderRoute.kt",
+        "avant": "        onShareRecitation(id)\n        quitter()",
+        "apres": "        quitter()",
+        "tache": ":navigation:testDebugUnitTest --tests *ReaderRouteRecorderTest*",
+        "attendus": ["le partage signale avant de sortir"],
+    },
+    {
+        # La capacite du lecteur retire de nouveau le partage : le geste **disparait** de la barre,
+        # et c'est le comportement d'avant la tranche — le defaut que celle-ci existe pour lever.
+        "nom": "partage : la capacite du lecteur retire le partage",
+        "fichier": "navigation/src/main/kotlin/com/msoumaya/deepseekandroid/navigation/ReaderRoute.kt",
+        "avant": "                    share = { recitation -> partagerCourant.value(recitation.id) },",
+        "apres": "                    share = null,",
+        "tache": ":navigation:testDebugUnitTest --tests *ReaderRouteRecorderTest*",
+        "attendus": ["le partage est branche sur la sortie du lecteur"],
     },
 ]
 

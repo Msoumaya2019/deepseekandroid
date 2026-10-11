@@ -33,10 +33,11 @@ import kotlin.test.assertTrue
  *  - **le compte est lu au moment du geste** — il peut s'ouvrir ou se fermer sans que le lecteur
  *    soit reconstruit, et une valeur figée à la composition enregistrerait une récitation sous un
  *    compte qui n'est plus le sien ;
- *  - **le partage est retiré faute de sortie** — l'original quitte le lecteur pour la liste des
- *    récitations ; cette route n'a qu'une sortie, `onClose`. Tant que le chemin n'existe pas, la
- *    capacité porte `share = null`, et le geste « Partager » **disparaît** au lieu de figurer
- *    sans effet. C'est la règle du dépôt, et une lambda vide la romprait sans rien casser.
+ *  - **le partage est branché sur la sortie** — l'original quitte le lecteur pour la liste des
+ *    récitations, où le choix d'ami s'ouvre sur la ligne attendue. La route porte désormais cette
+ *    sortie : l'identifiant est signalé, puis `quitter` l'emporte, et la coquille ouvre la liste
+ *    sur lui. Le geste « Partager » **existe** donc, et c'est `canShare` qui continue de décider
+ *    de l'afficher.
  *
  * ## Ce qu'il prouve, et ce qu'il ne prouve pas
  *
@@ -101,20 +102,66 @@ class ReaderRouteRecorderTest {
     }
 
     @Test
-    fun `le partage est retire faute de sortie`() {
+    fun `le partage est branche sur la sortie du lecteur`() {
         val bloc = blocDeLaCapacite()
         assertTrue(
-            bloc.contains("share = null,"),
-            "La route fournit désormais une destination de partage, ou n'en fournit plus aucune " +
-                "trace. Si le chemin vers la liste des récitations existe, il faut le nommer ici " +
-                "et retirer cette attente ; s'il n'existe pas, la capacité doit porter `null` pour " +
-                "que le geste disparaisse.",
+            bloc.contains("share = { recitation -> partagerCourant.value(recitation.id) },"),
+            "La route ne branche plus le partage : le geste « Partager » **disparaîtrait** de la " +
+                "barre au lieu de mener à la liste des récitations.",
         )
         assertFalse(
-            bloc.contains("share = {"),
-            "La route fournit une lambda de partage vide : le geste « Partager » apparaîtrait " +
-                "dans la barre et ne ferait rien. C'est exactement ce que la règle du dépôt " +
-                "interdit — un geste sans destination est retiré, pas rendu inerte.",
+            bloc.contains("share = null,"),
+            "La route retire de nouveau le partage alors qu'elle porte la sortie qui le rend " +
+                "possible : le geste disparaîtrait sans que rien ne le dise.",
+        )
+    }
+
+    /**
+     * Le partage est **relu à chaque image**, comme le compte.
+     *
+     * `partager` capture la page affichée — c'est `quitter` qui l'écrit —, donc une valeur figée à
+     * la construction de la capacité enregistrerait une position périmée : la personne
+     * reprendrait sa lecture un verset plus haut, et rien ne le dirait.
+     */
+    @Test
+    fun `le partage est relu a chaque image`() {
+        assertTrue(
+            sourceDeLaRoute().contains("val partagerCourant = rememberUpdatedState(partager)"),
+            "Le partage n'est plus tenu à jour : il capturerait la page affichée au moment de la " +
+                "construction de la capacité, et enregistrerait une position périmée.",
+        )
+    }
+
+    /**
+     * Le partage **emprunte la sortie ordinaire**, au lieu d'écrire la mémoire lui-même.
+     *
+     * Deux sorties qui écriraient chacune la leur finiraient par diverger, et c'est la copie qu'on
+     * ne relit pas qui resterait. L'ordre compte aussi : l'identifiant est signalé **avant** de
+     * sortir, parce que c'est la sortie qui l'emporte.
+     */
+    @Test
+    fun `le partage signale avant de sortir`() {
+        val source = sourceDeLaRoute()
+        val marqueur = "    val partager: (String) -> Unit = { id ->"
+        assertTrue(
+            source.contains(marqueur),
+            "La route ne déclare plus la sortie de partage : le lecteur n'aurait aucun moyen de " +
+                "signaler la récitation à partager.",
+        )
+        val bloc = source.substringAfter(marqueur).substringBefore("\n    }")
+        assertTrue(
+            bloc.length < source.length,
+            "La borne de la sortie de partage n'a pas mordu : le bloc lu est le fichier entier.",
+        )
+        assertTrue(
+            bloc.contains("onShareRecitation(id)"),
+            "Le partage n'est plus signalé : la coquille n'aurait aucun identifiant à ouvrir, et " +
+                "la liste s'ouvrirait sur elle-même.",
+        )
+        assertTrue(
+            bloc.contains("quitter()"),
+            "Le partage n'emprunte plus la sortie ordinaire : la position ne serait pas écrite, " +
+                "et c'est exactement ce qu'une seconde écriture finirait par manquer.",
         )
     }
 
