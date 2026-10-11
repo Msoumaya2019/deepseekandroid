@@ -164,7 +164,14 @@ class ReaderRouteReciterTest {
             "La route n'a plus d'effet sur la décision du récitateur : ni l'appareil ni le compte " +
                 "n'apprendraient plus rien.",
         )
-        return source.substringAfter(marqueur).substringBefore("\n    }")
+        val reste = source.substringAfter(marqueur)
+        val bloc = reste.substringBefore("\n    }")
+        assertTrue(
+            bloc.length < reste.length,
+            "La borne de la résolution n'a pas mordu : le bloc va jusqu'à la fin du fichier, et " +
+                "le contrôle lirait un `mutate` étranger — celui du signet ou du marquage.",
+        )
+        return bloc
     }
 
     /**
@@ -181,7 +188,14 @@ class ReaderRouteReciterTest {
             "La route n'enregistre plus les réglages d'écoute : ni l'appareil ni le compte ne " +
                 "retiendraient un changement.",
         )
-        return source.substringAfter(marqueur).substringBefore("\n        },")
+        val reste = source.substringAfter(marqueur)
+        val bloc = reste.substringBefore("\n        },")
+        assertTrue(
+            bloc.length < reste.length,
+            "La borne du changement n'a pas mordu : le bloc va jusqu'à la fin du fichier, et le " +
+                "contrôle lirait un `mutate` étranger — celui du signet ou du marquage.",
+        )
+        return bloc
     }
 
     /**

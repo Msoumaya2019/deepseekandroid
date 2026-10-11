@@ -133,9 +133,10 @@ class SocialSourceShapeTest {
         val ancre = "private fun describe(error: Throwable): String"
         val debut = source.indexOf(ancre)
         check(debut >= 0) { "l'ancre de `describe` est introuvable dans SocialRepository.kt" }
-        val bloc = source.substring(debut).take(FENETRE_DESCRIBE).substringBefore("\n}")
-        check(bloc.length < source.length) {
-            "la borne n'a pas mordu : le bloc couvre tout le fichier, donc le controle ne " +
+        val reste = source.substring(debut)
+        val bloc = reste.substringBefore("\n}").take(FENETRE_DESCRIBE)
+        check(bloc.length < reste.length) {
+            "la borne n'a pas mordu : le bloc va jusqu'a la fin du fichier, donc le controle ne " +
                 "distingue plus l'appel de `describe` d'une occurrence ailleurs."
         }
         return bloc

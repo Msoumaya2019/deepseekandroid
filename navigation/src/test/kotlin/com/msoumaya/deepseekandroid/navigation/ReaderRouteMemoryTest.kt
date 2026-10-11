@@ -177,10 +177,11 @@ class ReaderRouteMemoryTest {
             "La route ne déclare plus la sortie du lecteur : la position ne serait plus " +
                 "enregistrée en quittant.",
         )
-        val bloc = source.substringAfter(marqueur).substringBefore("\n    }")
+        val reste = source.substringAfter(marqueur)
+        val bloc = reste.substringBefore("\n    }")
         assertTrue(
-            bloc.length < source.length,
-            "La borne de la sortie n'a pas mordu : le bloc lu est le fichier entier, et " +
+            bloc.length < reste.length,
+            "La borne de la sortie n'a pas mordu : le bloc va jusqu'à la fin du fichier, et " +
                 "l'ordre mesuré ne serait pas celui de la sortie.",
         )
         return bloc

@@ -100,8 +100,14 @@ class RecitationRecorderBarWiringTest {
             "L'annulation n'efface plus la prise : elle laisse son fichier dans le cache du " +
                 "système, et l'on annule souvent plusieurs prises d'affilée.",
         )
+        val avantRetour = abandon.substringBefore("return@launch")
+        assertTrue(
+            avantRetour.length < abandon.length,
+            "La borne « return@launch » n'a pas mordu : le bloc va jusqu'à la fin de la branche " +
+                "d'annulation, et le `stop()` trouvé pourrait être celui de la garde.",
+        )
         assertFalse(
-            abandon.substringBefore("return@launch").contains("capability.recorder.stop()"),
+            avantRetour.contains("capability.recorder.stop()"),
             "L'annulation arrête l'enregistreur au lieu de l'effacer : `stop()` rend une prise et " +
                 "peut lever quand rien n'a été capté — c'est le chemin de la garde, pas celui-ci.",
         )

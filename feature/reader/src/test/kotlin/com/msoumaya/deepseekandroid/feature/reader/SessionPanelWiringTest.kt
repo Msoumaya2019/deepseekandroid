@@ -146,7 +146,13 @@ class SessionPanelWiringTest {
             "La notation ne jette plus son grade : elle écrit peut-être une note que la personne " +
                 "n'a pas confirmée — ou elle n'écrit plus rien.",
         )
-        val notation = panneau.substringAfter("onGrade = { _ ->").substringBefore("},")
+        val reste = panneau.substringAfter("onGrade = { _ ->")
+        val notation = reste.substringBefore("},")
+        assertTrue(
+            notation.length < reste.length,
+            "La borne de la notation n'a pas mordu : le bloc va jusqu'à la fin du panneau, et le " +
+                "`completionOpen` trouvé serait celui d'un autre geste.",
+        )
         assertTrue(
             notation.contains("completionOpen = true"),
             "La notation n'ouvre plus la feuille de validation : les trois notes de la barre " +
@@ -280,10 +286,11 @@ class SessionPanelWiringTest {
         val source = sourceDuLecteur()
         val debut = "val openRecord: (() -> Unit)? ="
         assertTrue(source.contains(debut), "Le lecteur n'a plus de porte vers l'enregistrement.")
-        val porte = source.substringAfter(debut).substringBefore("\n    } else {\n        null\n    }\n")
+        val reste = source.substringAfter(debut)
+        val porte = reste.substringBefore("\n    } else {\n        null\n    }\n")
         assertTrue(
-            porte.length < source.length,
-            "La borne de la porte n'a pas mordu : le bloc lu est le fichier entier, et le " +
+            porte.length < reste.length,
+            "La borne de la porte n'a pas mordu : le bloc va jusqu'à la fin du fichier, et le " +
                 "`playback?.close()` trouvé serait celui du sélecteur de sourate.",
         )
         return porte
@@ -301,13 +308,12 @@ class SessionPanelWiringTest {
         val source = sourceDuLecteur()
         val marqueur = "ReaderChrome("
         assertTrue(source.contains(marqueur), "Le lecteur n'appelle plus la coquille.")
-        val appel = source
-            .substringAfter(marqueur)
-            .substringBefore("\n                bookmarkActive = bookmarkMode,")
+        val reste = source.substringAfter(marqueur)
+        val appel = reste.substringBefore("\n                bookmarkActive = bookmarkMode,")
         assertTrue(
-            appel.length < source.length,
-            "La borne de la coquille n'a pas mordu : le bloc lu est le fichier entier, et le " +
-                "`onRecord` trouvé serait celui de la feuille de séance.",
+            appel.length < reste.length,
+            "La borne de la coquille n'a pas mordu : le bloc va jusqu'à la fin du fichier, et " +
+                "le `onRecord` trouvé serait celui de la feuille de séance.",
         )
         return appel
     }
@@ -328,10 +334,11 @@ class SessionPanelWiringTest {
         val source = sourceDuLecteur()
         val marqueur = "SessionPanelSheet("
         assertTrue(source.contains(marqueur), "Le lecteur n'ouvre plus le panneau de séance.")
-        val appel = source.substringAfter(marqueur).substringBefore("\n        }\n\n        ReaderPanel.SURAH")
+        val reste = source.substringAfter(marqueur)
+        val appel = reste.substringBefore("\n        }\n\n        ReaderPanel.SURAH")
         assertTrue(
-            appel.length < source.length,
-            "La borne du panneau n'a pas mordu : le bloc lu est le fichier entier, et le " +
+            appel.length < reste.length,
+            "La borne du panneau n'a pas mordu : le bloc va jusqu'à la fin du fichier, et le " +
                 "`completionOpen` trouvé serait celui du bandeau.",
         )
         return appel

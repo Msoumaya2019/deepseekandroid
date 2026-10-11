@@ -86,11 +86,12 @@ class RecitationsArrivalWiringTest {
             vm.contains(marqueur),
             "Le `ViewModel` ne traite plus le cas où la récitation est arrivée.",
         )
-        val bloc = vm.substringAfter(marqueur).substringBefore("\n                }")
+        val reste = vm.substringAfter(marqueur)
+        val bloc = reste.substringBefore("\n                }")
         assertTrue(
-            bloc.length < vm.length,
-            "La borne du cas « arrivée » n'a pas mordu : le bloc lu est le fichier entier, et " +
-                "l'ordre mesuré ne serait pas celui du cas.",
+            bloc.length < reste.length,
+            "La borne du cas « arrivée » n'a pas mordu : le bloc va jusqu'à la fin du fichier, " +
+                "et l'ordre mesuré ne serait pas celui du cas.",
         )
         val ouverture = bloc.indexOf("onOpen(id)")
         val partage = bloc.indexOf("onShare(id)")
@@ -121,11 +122,12 @@ class RecitationsArrivalWiringTest {
             "Le `ViewModel` ne traite plus le cas où la récitation n'est pas encore arrivée : la " +
                 "liste ne serait jamais relue, et le partage depuis le lecteur ne s'ouvrirait pas.",
         )
-        val bloc = vm.substringAfter(marqueur).substringBefore("\n                }")
+        val reste = vm.substringAfter(marqueur)
+        val bloc = reste.substringBefore("\n                }")
         assertTrue(
-            bloc.length < vm.length,
-            "La borne du cas « réessayer » n'a pas mordu : le bloc lu est le fichier entier, et " +
-                "la relecture mesurée ne serait pas celle du cas.",
+            bloc.length < reste.length,
+            "La borne du cas « réessayer » n'a pas mordu : le bloc va jusqu'à la fin du fichier, " +
+                "et la relecture mesurée ne serait pas celle du cas.",
         )
         assertTrue(
             bloc.contains("delay(RecitationsArrival.INTERVAL_MS)"),

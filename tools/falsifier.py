@@ -5863,6 +5863,50 @@ CAS: list[dict] = [
         "tache": ":core:data:testDebugUnitTest --tests *SocialSourceShapeTest*",
         "attendus": ["le message d'erreur lit le champ du serveur, pas le bloc de debogage"],
     },
+    # ------------------------------------------------------------------ les bornes qui peuvent tomber
+    #
+    # Trois cas pour une tranche qui rend **jouables** des gardes qui ne pouvaient pas tomber :
+    # quatorze comparaient le bloc a `source.length` — toujours vrai des que le marqueur est
+    # present, puisque `substringAfter` a deja raccourci la chaine —, et cinq n'avaient aucun
+    # garde. Chaque mutation **retire le delimiteur** d'un bloc par un simple remaniement
+    # d'indentation, c'est-a-dire exactement ce qui perime une borne. Le garde renforce tombe ;
+    # l'ancien, tautologique, serait reste vert.
+    {
+        # La borne de la coquille vise un argument nomme a seize espaces. Le remanier a douze ne
+        # change rien au comportement — Kotlin ignore l'indentation —, mais la borne ne trouve
+        # plus sa fin, et le bloc lu devient tout le reste du fichier.
+        "nom": "bornes : le delimiteur de la coquille disparait",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/ReaderScreen.kt",
+        "avant": "\n                bookmarkActive = bookmarkMode,",
+        "apres": "\n            bookmarkActive = bookmarkMode,",
+        "tache": ":feature:reader:testDebugUnitTest --tests *SessionPanelWiringTest*",
+        "attendus": ["l'enregistrement a deux portes"],
+    },
+    {
+        # La borne du panneau est un `}` suivi d'une ligne vide. Retirer la ligne vide suffit :
+        # le controle lirait alors le panneau de seance et le selecteur de sourate ensemble, et
+        # le `completionOpen` trouve serait celui du bandeau.
+        "nom": "bornes : le delimiteur du panneau disparait",
+        "fichier": "feature/reader/src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/ReaderScreen.kt",
+        "avant": "\n        }\n\n        ReaderPanel.SURAH",
+        "apres": "\n        }\n        ReaderPanel.SURAH",
+        "tache": ":feature:reader:testDebugUnitTest --tests *SessionPanelWiringTest*",
+        "attendus": [
+            "le panneau recoit la requete et l'etape de consolidation",
+            "l'enregistrement a deux portes",
+        ],
+    },
+    {
+        # La borne du message d'erreur est la fermeture de classe de `SocialRepository`. La
+        # renfoncer ne change rien au comportement, mais `substringBefore` ne trouve plus sa fin :
+        # le bloc va jusqu'a la fin du fichier, et `error.message` serait trouve ailleurs.
+        "nom": "bornes : la fermeture de la classe de SocialRepository disparait",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/SocialRepository.kt",
+        "avant": "\n}",
+        "apres": "\n  }",
+        "tache": ":core:data:testDebugUnitTest --tests *SocialSourceShapeTest*",
+        "attendus": ["le message d'erreur lit le champ du serveur"],
+    },
 ]
 
 

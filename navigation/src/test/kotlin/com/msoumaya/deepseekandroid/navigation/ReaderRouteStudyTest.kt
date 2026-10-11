@@ -153,7 +153,13 @@ class ReaderRouteStudyTest {
             "La garde a disparu : la validation ne peut plus être appelée sans séance, ou bien " +
                 "elle écrit une progression sur une plage inventée.",
         )
-        val garde = rappel.substringAfter("if (requete == null) {").substringBefore("} else {")
+        val reste = rappel.substringAfter("if (requete == null) {")
+        val garde = reste.substringBefore("} else {")
+        assertTrue(
+            garde.length < reste.length,
+            "La borne de la garde n'a pas mordu : le bloc va jusqu'à la fin du rappel, et " +
+                "`StudySession.validate(` pourrait être celui de la branche qui écrit.",
+        )
         assertTrue(
             garde.contains("quitter()"),
             "Valider sans séance ne referme plus le lecteur : l'écran resterait ouvert.",
@@ -173,10 +179,12 @@ class ReaderRouteStudyTest {
             source.contains(marqueur),
             "La route ne branche plus la validation : une séance ne peut plus être validée.",
         )
-        val rappel = source.substringAfter(marqueur).substringBefore("\n        },")
+        val reste = source.substringAfter(marqueur)
+        val rappel = reste.substringBefore("\n        },")
         assertTrue(
-            rappel.length < source.length,
-            "La borne du rappel n'a pas mordu : le bloc lu est le fichier entier.",
+            rappel.length < reste.length,
+            "La borne du rappel n'a pas mordu : le bloc va jusqu'à la fin du fichier, et le " +
+                "contrôle lirait une garde étrangère.",
         )
         return rappel
     }
@@ -192,9 +200,13 @@ class ReaderRouteStudyTest {
      *    celui-là et déclarait l'ordre inversé : c'est ainsi que ce contrôle est tombé la
      *    première fois, **sur un code juste**. Un contrôle de forme mesure ce qu'il trouve, pas
      *    ce qu'il vise.
-     *  - `\n        },` referme le rappel. `quitter()` vit aussi ailleurs — le retour système
-     *    l'appelle, et la sortie le passe en `onClose` — donc une recherche sans borne resterait
-     *    verte si la validation perdait sa propre ligne.
+     *  - `\n                }` referme la **portée**, et c'est le seul délimiteur qui mord. La
+     *    version précédente visait `\n        },` — la fermeture du **rappel**, qui vit *après* la
+     *    borne déjà posée par `rappelDeLaValidation`, donc **absente** de ce bloc : le contrôle
+     *    lisait tout le reste du rappel, et le garde d'alors (`bloc.length < rappel.length`) était
+     *    une **tautologie**, qui ne pouvait pas le dire. `quitter()` vit aussi ailleurs — le retour
+     *    système l'appelle, et la sortie le passe en `onClose` — donc une recherche sans borne
+     *    resterait verte si la validation perdait sa propre ligne.
      *
      * La borne est accompagnée de son propre contrôle : `substringAfter` **sans repli** rend la
      * chaîne entière quand le délimiteur est absent, et le bloc lu serait alors le fichier, où
@@ -207,11 +219,12 @@ class ReaderRouteStudyTest {
             rappel.contains(lancement),
             "La validation n'écrit plus dans une portée : elle n'enregistrerait plus rien.",
         )
-        val bloc = rappel.substringAfter(lancement).substringBefore("\n        },")
+        val reste = rappel.substringAfter(lancement)
+        val bloc = reste.substringBefore("\n                }")
         assertTrue(
-            bloc.length < rappel.length,
-            "La borne de l'écriture n'a pas mordu : le bloc lu est le rappel entier, et l'ordre " +
-                "mesuré serait celui de la garde.",
+            bloc.length < reste.length,
+            "La borne de l'écriture n'a pas mordu : le bloc va jusqu'à la fin de la portée, et " +
+                "l'ordre mesuré serait celui de la garde.",
         )
         return bloc
     }

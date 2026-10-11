@@ -225,10 +225,12 @@ class ReaderRouteSessionTest {
     private fun rappel(marqueur: String): String {
         val source = sourceDeLaRoute()
         assertTrue(source.contains(marqueur), "La route ne branche plus `$marqueur`.")
-        val bloc = source.substringAfter(marqueur).substringBefore("\n        },")
+        val reste = source.substringAfter(marqueur)
+        val bloc = reste.substringBefore("\n        },")
         assertTrue(
-            bloc.length < source.length,
-            "La borne de `$marqueur` n'a pas mordu : le bloc lu est le fichier entier.",
+            bloc.length < reste.length,
+            "La borne de `$marqueur` n'a pas mordu : le bloc va jusqu'à la fin du fichier, et le " +
+                "contrôle lirait le `quitter()` d'un autre rappel.",
         )
         return bloc
     }

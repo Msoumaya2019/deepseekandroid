@@ -100,7 +100,14 @@ class ReaderScreenResumeTest {
             "Le lecteur n'a plus d'effet sur `initialVerse` : le verset d'une reprise ne serait " +
                 "plus désigné, et le panneau quitté resterait ouvert.",
         )
-        return source.substringAfter(marqueur).substringBefore("\n    }")
+        val reste = source.substringAfter(marqueur)
+        val bloc = reste.substringBefore("\n    }")
+        assertTrue(
+            bloc.length < reste.length,
+            "La borne de la reprise n'a pas mordu : le bloc va jusqu'à la fin du fichier, et le " +
+                "contrôle lirait une occurrence étrangère.",
+        )
+        return bloc
     }
 
     /**

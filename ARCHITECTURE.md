@@ -684,7 +684,7 @@ annoncé : c'est la seule preuve qu'aucun module n'a été oublié. Un compteur 
 nommer sa ligne, au lieu d'être publié.
 
 **Un test vert ne dit pas qu'il détecte quoi que ce soit.** `tools/falsifier.py` casse
-volontairement une règle — **cinq cent dix-neuf fois**, chacune sur une règle différente —
+volontairement une règle — **cinq cent vingt-deux fois**, chacune sur une règle différente —
 relance la suite, et vérifie que les tests qui tombent sont **ceux qui devaient tomber**. Il
 restaure ensuite le fichier et le prouve par empreinte, pas par la bonne volonté d'un `finally`.
 Trois pièges y sont traités nommément : les rapports XML restent sur le disque d'une exécution à

@@ -123,10 +123,11 @@ class StudyChromeWiringTest {
         val marqueur = "onPress = {"
         val debut = source.indexOf(marqueur)
         assertTrue(debut >= 0, "Le bandeau n'a plus de geste.")
-        val bloc = source.substring(debut).substringBefore("\n            )")
+        val reste = source.substring(debut)
+        val bloc = reste.substringBefore("\n            )")
         assertTrue(
-            bloc.length < source.length,
-            "La borne du geste n'a pas mordu : le bloc lu est le fichier entier, et le " +
+            bloc.length < reste.length,
+            "La borne du geste n'a pas mordu : le bloc va jusqu'à la fin du fichier, et le " +
                 "`completionOpen` trouvé serait celui du panneau de séance.",
         )
         return bloc
@@ -168,10 +169,11 @@ class StudyChromeWiringTest {
             source.contains(marqueur),
             "Le lecteur n'ouvre plus la feuille de validation.",
         )
-        val appel = source.substringAfter(marqueur).substringBefore("\n    }")
+        val reste = source.substringAfter(marqueur)
+        val appel = reste.substringBefore("\n    }")
         assertTrue(
-            appel.length < source.length,
-            "La borne de la feuille n'a pas mordu : le bloc lu est le fichier entier, et le " +
+            appel.length < reste.length,
+            "La borne de la feuille n'a pas mordu : le bloc va jusqu'à la fin du fichier, et le " +
                 "`currentPage` trouvé serait celui du sélecteur de sourate.",
         )
         return appel

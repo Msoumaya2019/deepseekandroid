@@ -106,9 +106,13 @@ class ReaderRouteBookmarksScreenTest {
         // L'écran est appelé **après** `ReaderScreen`, et sans `return` entre les deux : c'est
         // ce qui en fait une fenêtre par-dessus un lecteur vivant, et non un remplacement qui
         // le démonterait — en libérant au passage le lecteur audio, donc en arrêtant l'écoute.
-        val entre = sourceDeLaRoute()
-            .substringAfter("ReaderScreen(")
-            .substringBefore("BookmarksScreen(")
+        val reste = sourceDeLaRoute().substringAfter("ReaderScreen(")
+        val entre = reste.substringBefore("BookmarksScreen(")
+        assertTrue(
+            entre.length < reste.length,
+            "La borne de l'écran n'a pas mordu : le bloc va jusqu'à la fin du fichier, et le " +
+                "`return` trouvé pourrait être celui d'une autre branche.",
+        )
         assertFalse(
             entre.contains("return"),
             "La route quitte avant d'afficher l'écran des marques-pages : le lecteur est alors " +
