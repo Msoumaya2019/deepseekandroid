@@ -77,7 +77,10 @@ class ProblemReportScreenWiringTest {
     @Test
     fun `la feuille efface ce que le depot a garde du geste precedent`() {
         assertTrue(
-            sourceDeLEcran().contains("repository.reset()"),
+            // `repository.reset()` vit **deux** fois dans la feuille : dans l'effet
+            // d'ouverture, et dans `nouveauGeste`. Cherché nu, le contrôle resterait vert si
+            // l'effet d'ouverture disparaissait — la seconde occurrence le satisferait.
+            sourceDeLEcran().contains("LaunchedEffect(Unit) { repository.reset() }"),
             "La feuille n'efface plus l'état du dépôt à l'ouverture : une feuille rouverte " +
                 "montrerait la confirmation du signalement précédent.",
         )

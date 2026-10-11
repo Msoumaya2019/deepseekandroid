@@ -110,7 +110,7 @@ class QuizScreenWiringTest {
             "L'écran n'affiche plus l'avis du dépôt : une action qui échoue ne dirait plus rien.",
         )
         assertTrue(
-            source.contains("text = QuizText.REFRESH"),
+            blocDeLaCarteDAvis(source).contains("text = QuizText.REFRESH"),
             "La carte d'avis n'a plus son bouton « Actualiser » : l'avis nommerait la panne sans " +
                 "offrir de réessayer.",
         )
@@ -156,7 +156,8 @@ class QuizScreenWiringTest {
         // Le dépôt relit quand le compte change. Il ne sait pas quand l'écran s'ouvre : c'est la
         // seule chose que le ViewModel lui apprend, et sans elle l'instantané vieillit en silence.
         assertTrue(
-            sourceDuViewModel().contains("viewModelScope.launch { repository.refresh() }"),
+            blocDeLInitialisation(sourceDuViewModel())
+                .contains("viewModelScope.launch { repository.refresh() }"),
             "Le ViewModel ne relit plus à l'ouverture : l'écran afficherait l'instantané lu au " +
                 "changement de compte, et ne se relirait plus jamais.",
         )
@@ -182,5 +183,44 @@ class QuizScreenWiringTest {
 
     private fun sourceDeLEcran(): String = source("QuizScreen.kt")
 
+    /**
+     * Le bloc `init` du ViewModel, et rien d'autre.
+     *
+     * `viewModelScope.launch { repository.refresh() }` vit **deux** fois dans
+     * `QuizViewModel.kt` : dans `init`, et dans `onRefresh`. Cherché sur le fichier entier,
+     * le contrôle resterait vert si la relecture d'ouverture disparaissait — celle
+     * d'`onRefresh` le satisferait.
+     */
+    private fun blocDeLInitialisation(vm: String): String {
+        val reste = vm.substringAfter("init {")
+        val bloc = reste.substringBefore("\n    }")
+        assertTrue(
+            bloc.length < reste.length,
+            "La borne de l'initialisation n'a pas mordu : le bloc va jusqu'à la fin du " +
+                "fichier, et la relecture trouvée pourrait être celle d'`onRefresh`.",
+        )
+        return bloc
+    }
+
     private fun sourceDuViewModel(): String = source("QuizViewModel.kt")
+
+    /**
+     * Le corps de `NoticeCard`, et rien d'autre.
+     *
+     * `text = QuizText.REFRESH` vit **deux** fois dans `QuizScreen.kt` : dans la carte
+     * d'avis, et dans celle du défi manquant. Cherché sur le fichier entier, le contrôle
+     * resterait vert si la carte d'avis perdait son bouton — la seconde occurrence le
+     * satisferait.
+     */
+    private fun blocDeLaCarteDAvis(source: String): String {
+        val ancre = "private fun NoticeCard(notice: String, onRefresh: () -> Unit) {"
+        val reste = source.substringAfter(ancre)
+        val bloc = reste.substringBefore("\n@Composable")
+        assertTrue(
+            bloc.length < reste.length,
+            "La borne de la carte d'avis n'a pas mordu : le bloc va jusqu'à la fin du " +
+                "fichier, et le bouton trouvé pourrait être celui du défi manquant.",
+        )
+        return bloc
+    }
 }

@@ -151,12 +151,12 @@ class RecitationsArrivalWiringTest {
     @Test
     fun `l'identifiant traverse la fabrique jusqu'a l'ecran`() {
         assertTrue(
-            sourceDuViewModel().contains("initialSharingId: String? = null,"),
+            blocDeLaFabrique(sourceDuViewModel()).contains("initialSharingId: String? = null,"),
             "La fabrique ne reçoit plus l'identifiant attendu : la liste s'ouvrirait sur " +
                 "elle-même, et personne ne saurait quelle récitation on venait de partager.",
         )
         assertTrue(
-            sourceDuViewModel().contains("initialSharingId = initialSharingId,"),
+            blocDeLaFabrique(sourceDuViewModel()).contains("initialSharingId = initialSharingId,"),
             "La fabrique n'annonce plus l'identifiant au `ViewModel` : le paramètre serait reçu " +
                 "et jamais transmis.",
         )
@@ -193,6 +193,25 @@ class RecitationsArrivalWiringTest {
     }
 
     private fun sourceDuViewModel(): String = sourceDe("RecitationsViewModel.kt")
+
+    /**
+     * Le corps de `factory`, et rien d'autre.
+     *
+     * `initialSharingId: String? = null,` vit **deux** fois dans `RecitationsViewModel.kt` :
+     * sur le constructeur, et sur la fabrique. Cherché sur le fichier entier, le contrôle
+     * resterait vert si la fabrique cessait de recevoir l'identifiant — le constructeur le
+     * satisferait.
+     */
+    private fun blocDeLaFabrique(vm: String): String {
+        val reste = vm.substringAfter("fun factory(")
+        val bloc = reste.substringBefore("\n    }")
+        assertTrue(
+            bloc.length < reste.length,
+            "La borne de la fabrique n'a pas mordu : le bloc va jusqu'à la fin du fichier, et " +
+                "le paramètre trouvé pourrait être celui du constructeur.",
+        )
+        return bloc
+    }
 
     private fun sourceDeLEcran(): String = sourceDe("RecitationsScreen.kt")
 }

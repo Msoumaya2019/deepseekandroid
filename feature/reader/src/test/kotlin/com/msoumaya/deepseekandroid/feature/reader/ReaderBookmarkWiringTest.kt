@@ -145,7 +145,7 @@ class ReaderBookmarkWiringTest {
         // lirait comme un verset faux, pas comme une erreur de calcul.
         val source = sourceDuLecteur()
         assertTrue(
-            source.contains("ReaderTouch.verseAt("),
+            blocDuModeDePose(source).contains("ReaderTouch.verseAt("),
             "La conversion écran → verset n'est plus confiée à la règle partagée : l'appui long " +
                 "et le mode de pose peuvent désormais diverger.",
         )
@@ -189,6 +189,26 @@ class ReaderBookmarkWiringTest {
     private fun sourceDuLecteur(): String = sourceDe(
         "src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/ReaderScreen.kt",
     )
+
+    /**
+     * La branche du **mode de pose**, et rien d'autre.
+     *
+     * `ReaderTouch.verseAt(` vit **deux** fois dans `ReaderScreen.kt` : dans le mode de
+     * pose, et dans l'appui long. Cherché sur le fichier entier, le contrôle resterait vert
+     * si le mode de pose cessait de partager la règle — l'appui long le satisferait, et
+     * c'est exactement la divergence que ce fichier existe pour attraper.
+     */
+    private fun blocDuModeDePose(source: String): String {
+        val ancre = "bookmarkMode && save != null -> {"
+        val reste = source.substringAfter(ancre)
+        val bloc = reste.substringBefore("onLongPress = { position ->")
+        assertTrue(
+            bloc.length < reste.length,
+            "La borne du mode de pose n'a pas mordu : le bloc va jusqu'à la fin du fichier, " +
+                "et la conversion trouvée pourrait être celle de l'appui long.",
+        )
+        return bloc
+    }
 
     private fun sourceDeChrome(): String = sourceDe(
         "src/main/kotlin/com/msoumaya/deepseekandroid/feature/reader/ReaderChrome.kt",

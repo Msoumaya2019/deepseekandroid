@@ -46,7 +46,7 @@ class ReaderRouteBookmarkTest {
     @Test
     fun `la route passe par le magasin de l'etat, et non par une copie`() {
         assertTrue(
-            sourceDeLaRoute().contains("container.userState.mutate { state ->"),
+            blocDuSignet().contains("container.userState.mutate { state ->"),
             "Le signet n'est plus écrit dans le magasin de l'état : il serait perdu au premier " +
                 "redémarrage, ou écrit dans une copie que personne ne relit.",
         )
@@ -66,7 +66,7 @@ class ReaderRouteBookmarkTest {
     @Test
     fun `un echec d'ecriture n'emporte pas le lecteur`() {
         assertTrue(
-            sourceDeLaRoute().contains("runCatching {"),
+            blocDuSignet().contains("runCatching {"),
             "L'écriture n'est plus protégée : un disque plein ferait tomber le lecteur, alors " +
                 "que la lecture, elle, n'a besoin de rien.",
         )
@@ -91,6 +91,26 @@ class ReaderRouteBookmarkTest {
      * dossier **du module**, alors qu'un contrôle joué à la main depuis la racine du dépôt part
      * de là.
      */
+    /**
+     * Le bloc de pose du signet, et rien d'autre.
+     *
+     * `runCatching {` vit **dix-sept** fois dans `ReaderRoute.kt` et
+     * `container.userState.mutate { state ->` **douze** fois. Cherchés nus, les deux
+     * contrôles resteraient verts si la pose du signet perdait sa protection ou son magasin
+     * — une autre écriture les satisferait.
+     */
+    private fun blocDuSignet(): String {
+        val marqueur = "onSaveBookmark = { verseId ->"
+        val reste = sourceDeLaRoute().substringAfter(marqueur)
+        val bloc = reste.substringBefore("\n        bookmarkIds = bookmarkIds,")
+        assertTrue(
+            bloc.length < reste.length,
+            "La borne du signet n'a pas mordu : le bloc va jusqu'à la fin de la route, et " +
+                "l'écriture trouvée pourrait être celle d'un autre geste.",
+        )
+        return bloc
+    }
+
     private fun sourceDeLaRoute(): String {
         val relatif = "src/main/kotlin/com/msoumaya/deepseekandroid/navigation/ReaderRoute.kt"
         val candidats = listOf(File(relatif), File("navigation/$relatif"))
