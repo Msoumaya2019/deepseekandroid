@@ -32,6 +32,11 @@
 # **Ce qui ne doit jamais arriver ici : la clé `service_role`.** Elle contourne les politiques RLS
 # et donnerait à quiconque l'extrait de l'APK un accès total aux données de tous les comptes.
 # Seule la clé publiable est lue.
+#
+# Les actions sont en **Node 24** : `checkout@v5`, `setup-java@v5`, `upload-artifact@v6` et
+# `setup-android@v4` sont les **premières** versions de chaque action à tourner sur ce
+# runtime. Rester en `v4`/`v3` les faisait tourner de force sur Node 24, en annonçant une
+# dépréciation à chaque exécution.
 # ---------------------------------------------------------------------------
 
 name: Android
@@ -65,10 +70,10 @@ jobs:
 
     steps:
       - name: Récupérer le dépôt
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Installer le JDK
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           # Le projet cible Java 17, mais AGP 8.13 est plus confortable sous 21. C'est la
@@ -77,15 +82,18 @@ jobs:
           cache: gradle
 
       - name: Préparer le SDK Android
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
         with:
-          # `packages` est **obligatoire** ici, et pas pour la raison habituelle.
-          # L'action installe par défaut `tools platform-tools` ; or le paquet `tools` n'existe
-          # plus dans le dépôt SDK — il a été remplacé par `cmdline-tools`. L'action échoue donc
-          # sur « Warning: Failed to find package 'tools' » puis « exit code 1 », **avant** que
-          # Gradle ne soit appelé : le journal ne parle ni de tests, ni de lint, ni de code.
-          # On demande exactement ce que le projet cible — compileSdk 36, build-tools 36 — et
-          # surtout pas `tools`.
+          # `packages` reste nécessaire, mais la raison a **changé avec `v4`**.
+          #
+          # En `v3`, le défaut était `tools platform-tools`, et le paquet `tools` n'existe plus
+          # dans le dépôt SDK — remplacé par `cmdline-tools`. L'action échouait donc sur
+          # « Warning: Failed to find package 'tools' » puis « exit code 1 », **avant** que
+          # Gradle ne soit appelé : le journal ne parlait ni de tests, ni de lint, ni de code.
+          #
+          # En `v4`, le défaut est `platform-tools` **seul** : l'échec ci-dessus ne peut plus se
+          # produire. On demande donc ce que le projet **cible** — compileSdk 36, build-tools
+          # 36 — au lieu de compter sur un défaut qui ne les installe pas.
           packages: "platform-tools platforms;android-36 build-tools;36.0.0"
 
       - name: Rendre le lanceur exécutable
@@ -112,7 +120,7 @@ jobs:
         run: ./gradlew :app:assembleDebug --console=plain
 
       - name: Publier l'APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: apk-debug
           path: app/build/outputs/apk/debug/*.apk
@@ -122,7 +130,7 @@ jobs:
         # Toujours, et pas seulement en cas d'échec : c'est le rapport du coureur qui dit
         # combien de tests ont réellement tourné, et un total vert sans rapport ne prouve rien.
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: rapports-tests
           path: "**/build/test-results/**/*.xml"
