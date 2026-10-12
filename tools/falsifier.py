@@ -6118,10 +6118,21 @@ CAS: list[dict] = [
         # Le filtre du repli est retire : une reference absente laisse un separateur orphelin —
         # « Sahih al-Bukhari · » —, qui se lit comme une donnee manquante plutot que comme une
         # absence normale.
-        "nom": "carrousel : la ligne de provenance laisse un separateur orphelin",
+        # **Ce cas a ete repris, et il etait mort.** Son ancre d'origine etait le `listOfNotNull(…)`
+        # ecrit dans ce fichier ; la regle a ete deplacee vers `DailyContentsText.sourceLine`, et
+        # l'ancre est restee a zero occurrence — un cas qui ne falsifie plus rien, et que seul
+        # `--verifier` montre. Le defaut qu'il vise n'a pas disparu pour autant : il a change de
+        # forme. Ce qui se mesure ici est la **delegation** du carrousel, et non plus la regle
+        # elle-meme — celle-ci est tenue par le cas « libelles : la provenance garde un separateur
+        # orphelin », dans le domaine.
+        #
+        # La mutation remet exactement l'ancienne implementation : un `listOfNotNull` sans filtre.
+        # Avec une reference **vide** — `null` n'est pas `""` —, la ligne se termine par un
+        # separateur orphelin, que le test attrape.
+        "nom": "carrousel : la ligne de provenance est reconstruite hors du domaine",
         "fichier": "feature/home/src/main/kotlin/com/msoumaya/deepseekandroid/feature/home/HomeRenderer.kt",
-        "avant": "        listOfNotNull(\n            content.source.takeIf { it.isNotEmpty() },\n            content.reference?.takeIf { it.isNotEmpty() },\n        ).joinToString(\" · \")",
-        "apres": "        listOfNotNull(content.source, content.reference).joinToString(\" · \")",
+        "avant": "    private fun sourceLine(content: DailyContent): String =\n        DailyContentsText.sourceLine(content.source, content.reference)",
+        "apres": '    private fun sourceLine(content: DailyContent): String =\n        listOfNotNull(content.source, content.reference).joinToString(" · ")',
         "tache": ":feature:home:testDebugUnitTest --tests *HomeDailyCarouselTest*",
         "attendus": ["la ligne de provenance ne laisse pas de separateur orphelin"],
     },
@@ -6436,6 +6447,240 @@ CAS: list[dict] = [
         ),
         "tache": ":core:data:testDebugUnitTest --tests *DailyContentSourceShapeTest*",
         "attendus": ["une ligne de favori s'ecrit avec les noms de colonnes"],
+    },
+    {
+        # La page annonce toujours une suite : le bouton « Afficher la suite » ne disparait jamais.
+        # Le defaut est muet a l'oeil — le bouton est la, il ne ramene simplement rien —, et c'est
+        # exactement ce que `pageComplete` existe pour empecher.
+        #
+        # Deux cas pour la meme ligne, et ce n'est pas un doublon : celui-ci couvre la branche
+        # « faux » de l'egalite, l'autre la branche « vrai ». Une mutation qui ne va que dans un
+        # sens laisserait la moitie de la regle sans preuve.
+        "nom": "liste : une page annonce toujours une suite",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/DailyContents.kt",
+        "avant": "fun pageComplete(rows: List<DailyContent>): Boolean = rows.size == PAGE_SIZE",
+        "apres": "fun pageComplete(rows: List<DailyContent>): Boolean = true",
+        "tache": ":core:domain:test --tests *DailyContentsTest*",
+        "attendus": [
+            "une page d'une entree de moins est la derniere",
+            "une page vide n'a pas de suite",
+            "le seuil est une egalite",
+        ],
+    },
+    {
+        # L'autre sens : plus aucune page n'annonce de suite. Le bouton disparait partout, et la
+        # liste s'arrete a la premiere page sans que rien ne le dise.
+        "nom": "liste : plus aucune page n'annonce de suite",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/DailyContents.kt",
+        "avant": "fun pageComplete(rows: List<DailyContent>): Boolean = rows.size == PAGE_SIZE",
+        "apres": "fun pageComplete(rows: List<DailyContent>): Boolean = false",
+        "tache": ":core:domain:test --tests *DailyContentsTest*",
+        "attendus": ["une page pleine annonce une suite"],
+    },
+    {
+        # Le repli du libelle d'ouverture nomme le **type** au lieu du contenu : un lecteur d'ecran
+        # annonce « Ouvrir Rappel » la ou la personne entend un contenu. C'est le croisement exact
+        # des deux chemins — `cardTitle` se replie sur le type, `openLabel` non —, et rien a
+        # l'ecran ne distingue les deux.
+        "nom": "libelles : l'ouverture nomme le type au lieu du contenu",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/DailyContentsText.kt",
+        "avant": '"Ouvrir " + (title?.takeIf { it.isNotEmpty() } ?: CARD_FALLBACK)',
+        "apres": '"Ouvrir " + (title?.takeIf { it.isNotEmpty() } ?: CARD_REMINDER)',
+        "tache": ":core:domain:test --tests *DailyContentsTextTest*",
+        "attendus": ["le libelle d'ouverture nomme le contenu, et jamais son type"],
+    },
+    {
+        # Un titre **vide** n'est plus replie : la carte affiche un en-tete sans rien dedans. La
+        # base interdit un titre vide, mais un jeu d'essai peut en porter, et l'original ecrit
+        # `takeIf { it.isNotEmpty() }` pour cette raison.
+        "nom": "libelles : un titre vide n'est plus replie sur le nom du type",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/DailyContentsText.kt",
+        "avant": "title?.takeIf { it.isNotEmpty() } ?: cardTypeName(type)",
+        "apres": "title ?: cardTypeName(type)",
+        "tache": ":core:domain:test --tests *DailyContentsTextTest*",
+        "attendus": ["un titre vide se replie comme un titre absent"],
+    },
+    {
+        # Les deux phrases d'etat vide sont echangees : l'onglet des rappels annonce « Aucune
+        # invocation disponible. » et l'inverse. Le defaut ne leve rien, et il est pire qu'un texte
+        # generique : il nomme le **mauvais** type, donc il affirme quelque chose de faux sur
+        # l'autre onglet.
+        "nom": "libelles : les deux phrases d'etat vide sont echangees",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/DailyContentsText.kt",
+        "avant": "if (type == DailyContentType.INVOCATION) EMPTY_INVOCATION else EMPTY_REMINDER",
+        "apres": "if (type == DailyContentType.INVOCATION) EMPTY_REMINDER else EMPTY_INVOCATION",
+        "tache": ":core:domain:test --tests *DailyContentsTextTest*",
+        "attendus": ["les deux phrases de liste vide nomment le type filtre"],
+    },
+    {
+        # Le filtre de la ligne de provenance ne porte plus sur la source : une source vide produit
+        # un separateur orphelin — « · 1:1 » —, qui se lit comme une donnee manquante.
+        "nom": "libelles : la provenance garde un separateur orphelin",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/DailyContentsText.kt",
+        "avant": "            source.takeIf { it.isNotEmpty() },",
+        "apres": "            source,",
+        "tache": ":core:domain:test --tests *DailyContentsTextTest*",
+        "attendus": ["la ligne de provenance ecarte une partie absente ou vide"],
+    },
+    {
+        # Le pied de liste reprend la phrase du carrousel : il annonce charger « le contenu du
+        # jour » alors qu'il charge une page **filtree**. Deux textes pour deux contextes, et les
+        # confondre ne se voit qu'en lisant l'ecran.
+        "nom": "libelles : le chargement de la liste devient celui du carrousel",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/DailyContentsText.kt",
+        "avant": 'const val LIST_LOADING: String = "Chargement…"',
+        "apres": "const val LIST_LOADING: String = HOME_LOADING",
+        "tache": ":core:domain:test --tests *DailyContentsTextTest*",
+        "attendus": ["le chargement de la liste n'est pas celui du carrousel"],
+    },
+    {
+        # Le prefixe de provenance perd son espace : la fiche ecrit `SOURCE_PREFIX + sourceLine(…)`
+        # sans separateur, donc « Source :Sahih » se lira comme une faute de frappe plutot que
+        # comme un prefixe.
+        "nom": "libelles : le prefixe de provenance perd son espace",
+        "fichier": "core/domain/src/main/kotlin/com/msoumaya/deepseekandroid/core/domain/DailyContentsText.kt",
+        "avant": 'const val SOURCE_PREFIX: String = "Source : "',
+        "apres": 'const val SOURCE_PREFIX: String = "Source :"',
+        "tache": ":core:domain:test --tests *DailyContentsTextTest*",
+        "attendus": ["le prefixe de provenance porte son espace"],
+    },
+    {
+        # La page de favoris filtre sur `is_active` : c'est la divergence de l'original, et elle est
+        # **reproduite**. Un contenu desactive apres avoir ete mis en favori doit rester dans les
+        # favoris de qui l'avait garde ; le filtrer ferait disparaitre une entree que la personne a
+        # explicitement gardee, et la liste serait simplement plus courte.
+        #
+        # L'ancre est multi-ligne parce que `eq("is_active", true)` existe deja deux fois ailleurs
+        # dans le fichier — dans `categories` et dans `contents` —, ou il est **legitime**. C'est
+        # `isIn("id", ids)` qui rend le bloc unique.
+        "nom": "fiche : la page de favoris filtre sur is_active",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/remote/SupabaseDailyContentSource.kt",
+        "avant": '                    isIn("id", ids)\n                    eq("type", type.key)',
+        "apres": '                    isIn("id", ids)\n                    eq("type", type.key)\n                    eq("is_active", true)',
+        "tache": ":core:data:testDebugUnitTest --tests *DailyContentQueryShapeTest*",
+        "attendus": ["la page de favoris ne filtre pas sur is_active"],
+    },
+    {
+        # La fenetre des favoris n'est plus lue au domaine : la source recopie la taille de page.
+        # La requete et `pageComplete` divergent alors en silence, et le bouton « Afficher la
+        # suite » apparait ou disparait au mauvais moment.
+        #
+        # L'ancre est multi-ligne **sans commentaire** : la ligne `range(...)` est identique dans
+        # `contents` et dans `favoriteContents`, donc une ancre d'une ligne apparaitrait deux fois.
+        # La borne est la methode suivante, `content`, qui clot le bloc.
+        "nom": "fiche : la fenetre des favoris n'est plus lue au domaine",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/remote/SupabaseDailyContentSource.kt",
+        "avant": (
+            '                order("created_at", Order.DESCENDING)\n'
+            "                range(offset.toLong(), (offset + DailyContents.PAGE_SIZE - 1).toLong())\n"
+            "            }\n"
+            "            .decodeList<DailyContentRow>()\n"
+            "            .map { it.toModel() }\n"
+            "\n"
+            "    override suspend fun content(id: String): DailyContent? ="
+        ),
+        "apres": (
+            '                order("created_at", Order.DESCENDING)\n'
+            "                range(offset.toLong(), (offset + 30 - 1).toLong())\n"
+            "            }\n"
+            "            .decodeList<DailyContentRow>()\n"
+            "            .map { it.toModel() }\n"
+            "\n"
+            "    override suspend fun content(id: String): DailyContent? ="
+        ),
+        "tache": ":core:data:testDebugUnitTest --tests *DailyContentQueryShapeTest*",
+        "attendus": ["la fenetre d'une page de favoris est lue au domaine"],
+    },
+    {
+        # La garde des identifiants vides disparait : la requete part avec un `in.()` vide, que
+        # PostgREST refuse. L'onglet « Mes favoris » d'une personne qui n'a rien garde annonce
+        # alors une panne la ou il n'y a rien a montrer.
+        #
+        # Le temoin du test — le meme appel avec un identifiant, qui **doit** atteindre la source —
+        # est ce qui empeche ce controle d'etre vert pour la mauvaise raison.
+        "nom": "fiche : la garde des identifiants vides disparait",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/DailyContentRepository.kt",
+        "avant": "        if (ids.isEmpty()) return emptyList()",
+        "apres": "        if (false) return emptyList()",
+        "tache": ":core:data:testDebugUnitTest --tests *DailyContentRepositoryTest*",
+        "attendus": ["une liste d'identifiants vide ne demande rien"],
+    },
+    {
+        # `readable` ne passe plus par la conversion du depot : l'ecran de liste lirait
+        # `error.message`, qui accole au texte du serveur un bloc de debogage et l'adresse du
+        # projet. Le controle compare la sortie de `readable` a ce que le depot **publie** pour la
+        # meme instance d'erreur, donc il tombe des que les deux chemins divergent.
+        "nom": "fiche : le texte lisible d'une erreur n'est plus celui du depot",
+        "fichier": "core/data/src/main/kotlin/com/msoumaya/deepseekandroid/core/data/repository/DailyContentRepository.kt",
+        "avant": "    fun readable(error: Throwable): String = describe(error)",
+        "apres": "    fun readable(error: Throwable): String = error.message.orEmpty()",
+        "tache": ":core:data:testDebugUnitTest --tests *DailyContentRepositoryTest*",
+        "attendus": ["le texte lisible d'une erreur est celui que le depot publie"],
+    },
+    {
+        # Le pied de liste redevient solidaire du corps : il disparait des que la liste est vide.
+        # C'est l'inverse de l'original, dont le `ListFooterComponent` ne depend pas des lignes —
+        # une liste vide qui charge affiche « Chargement… » **deux fois**, et le pied est justement
+        # l'endroit ou la personne voit qu'il se passe quelque chose.
+        "nom": "liste : le pied redevient solidaire du corps",
+        "fichier": "feature/dailycontents/src/main/kotlin/com/msoumaya/deepseekandroid/feature/dailycontents/DailyContentsListRenderer.kt",
+        "avant": "        !state.more -> null",
+        "apres": "        !state.more || state.items.isEmpty() -> null",
+        "tache": ":feature:dailycontents:testDebugUnitTest --tests *DailyContentsListRendererTest*",
+        "attendus": ["le pied de liste double la phrase de chargement d'une liste vide"],
+    },
+    {
+        # Le retour de la fiche sort toujours de l'ecran : une fiche ouverte **depuis la liste**
+        # fait quitter l'ecran au lieu d'y revenir, et la personne perd sa place dans la liste.
+        "nom": "liste : le retour de la fiche sort toujours de l'ecran",
+        "fichier": "feature/dailycontents/src/main/kotlin/com/msoumaya/deepseekandroid/feature/dailycontents/DailyContentsListRenderer.kt",
+        "avant": "    internal fun detailBackExits(initialId: String?): Boolean = initialId != null",
+        "apres": "    internal fun detailBackExits(initialId: String?): Boolean = true",
+        "tache": ":feature:dailycontents:testDebugUnitTest --tests *DailyContentsListRendererTest*",
+        "attendus": ["le retour de la fiche sort de l'ecran quand la fiche vient d'un identifiant"],
+    },
+    {
+        # L'ouverture d'une fiche passe le **titre** au lieu de l'identifiant : le ViewModel ne
+        # retrouve plus le contenu, et la fiche ne s'ouvre pas. Le geste a une valeur par defaut,
+        # donc rien ne leve — la carte est simplement morte.
+        "nom": "liste : l'ouverture d'une fiche passe le titre au lieu de l'identifiant",
+        "fichier": "feature/dailycontents/src/main/kotlin/com/msoumaya/deepseekandroid/feature/dailycontents/DailyContentsScreen.kt",
+        "avant": "                    onOpen = { onOpen(row.id) },",
+        "apres": "                    onOpen = { onOpen(row.card.title) },",
+        "tache": ":feature:dailycontents:testDebugUnitTest --tests *DailyContentsScreenWiringTest*",
+        "attendus": ["l'ouverture d'une fiche passe un identifiant, et non un contenu"],
+    },
+    {
+        # Le bouton du pied n'est plus desactive pendant une lecture : deux appuis empilent deux
+        # fois la meme page, et le doublon ne se voit qu'a l'ecran.
+        "nom": "liste : le bouton du pied reste actif pendant une lecture",
+        "fichier": "feature/dailycontents/src/main/kotlin/com/msoumaya/deepseekandroid/feature/dailycontents/DailyContentsScreen.kt",
+        "avant": "                enabled = !state.busy,",
+        "apres": "                enabled = true,",
+        "tache": ":feature:dailycontents:testDebugUnitTest --tests *DailyContentsScreenWiringTest*",
+        "attendus": ["le pied est inactif pendant une lecture"],
+    },
+    {
+        # Le depot des medias n'est plus branche : `resolve` retombe sur sa valeur par defaut,
+        # l'identite. Les illustrations dont l'adresse est signee restent brutes, donc invisibles —
+        # et rien ne le dit, puisque le defaut est exactement ce que fait le depot hors
+        # configuration.
+        "nom": "liste : le depot des medias n'est plus branche sur les cartes",
+        "fichier": "feature/dailycontents/src/main/kotlin/com/msoumaya/deepseekandroid/feature/dailycontents/DailyContentsScreen.kt",
+        "avant": "        resolve = viewModel.media::resolve,",
+        "apres": "        resolve = { it },",
+        "tache": ":feature:dailycontents:testDebugUnitTest --tests *DailyContentsScreenWiringTest*",
+        "attendus": ["le depot des medias est passe par sa fonction"],
+    },
+    {
+        # Le partage donne un titre au selecteur du systeme. C'est un ecart avec l'original, qui
+        # n'en passe aucun — et c'est le genre d'ecart qu'un portage introduit sans le vouloir.
+        "nom": "liste : le selecteur de partage recoit un titre",
+        "fichier": "feature/dailycontents/src/main/kotlin/com/msoumaya/deepseekandroid/feature/dailycontents/DailyContentsScreen.kt",
+        "avant": "    context.startActivity(Intent.createChooser(send, null))",
+        "apres": '    context.startActivity(Intent.createChooser(send, "Partager"))',
+        "tache": ":feature:dailycontents:testDebugUnitTest --tests *DailyContentsScreenWiringTest*",
+        "attendus": ["le partage passe par le selecteur du systeme"],
     },
 ]
 

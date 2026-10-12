@@ -134,6 +134,32 @@ class SupabaseDailyContentSource(private val client: SupabaseClient) : DailyCont
             .decodeList<DailyContentRow>()
             .map { it.toModel() }
 
+    override suspend fun favoriteContents(
+        ids: List<String>,
+        type: DailyContentType,
+        categoryId: String?,
+        offset: Int,
+    ): List<DailyContent> =
+        client.postgrest.from(TABLE_CONTENTS)
+            .select(COLONNES_CONTENU) {
+                filter {
+                    // **`isIn`, et non un `eq` par identifiant.** PostgREST rend `id=in.(…)` en une
+                    // seule requête ; boucler donnerait trente appels pour une page, et l'ordre
+                    // `created_at` ne serait plus celui du serveur.
+                    isIn("id", ids)
+                    eq("type", type.key)
+                    // **Aucun `eq("is_active", true)` ici, contrairement à `contents`.** C'est la
+                    // divergence de l'original, reproduite : un contenu désactivé après avoir été
+                    // mis en favori reste dans les favoris de qui l'avait gardé. Le KDoc de
+                    // l'interface dit pourquoi, et un test de forme tient l'absence.
+                    if (categoryId != null) eq("category_id", categoryId)
+                }
+                order("created_at", Order.DESCENDING)
+                range(offset.toLong(), (offset + DailyContents.PAGE_SIZE - 1).toLong())
+            }
+            .decodeList<DailyContentRow>()
+            .map { it.toModel() }
+
     override suspend fun content(id: String): DailyContent? =
         client.postgrest.from(TABLE_CONTENTS)
             .select(COLONNES_CONTENU) { filter { eq("id", id) } }

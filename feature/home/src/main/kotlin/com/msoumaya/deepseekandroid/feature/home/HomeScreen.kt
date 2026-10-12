@@ -88,8 +88,8 @@ import com.msoumaya.deepseekandroid.core.domain.StudySession
  * @param onOpenDaily ouverture de l'écran de liste des contenus du jour, **sur un contenu
  *   précis**. C'est le geste du carrousel de l'accueil : l'original y branche `openDaily(id)`,
  *   qui ouvre la liste avec un identifiant initial — et non une fiche, qui n'existe pas sur
- *   l'accueil. Le repli est vide : l'écran de liste n'est pas encore porté, et un geste sans
- *   destination doit rester inerte plutôt que de mener ailleurs.
+ *   l'accueil. La coquille y branche la route des contenus du jour ; la valeur par défaut ne
+ *   sert donc plus qu'à une prévisualisation de l'écran, où le geste n'a personne à qui parler.
  * @param viewModel état de l'écran. Par défaut, celui du conteneur applicatif.
  */
 @Composable

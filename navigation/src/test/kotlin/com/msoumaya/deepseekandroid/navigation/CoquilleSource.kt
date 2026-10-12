@@ -187,6 +187,21 @@ internal fun quizDeLaCoquille(): String =
 internal fun recitationsDeLaCoquille(): String =
     sansCommentaires(blocApres("route = AppRoutes.RECITATIONS_PATTERN,"))
 
+/**
+ * Le bloc de l'écran « Contenus du jour » seul, **commentaires retirés**.
+ *
+ * Le retrait sert ici pour la même raison qu'au Quiz et aux récitations : le bloc explique en
+ * commentaire pourquoi la route est servie par son **motif** et non par la route nue, et il nomme
+ * l'argument qu'on y attend. Un contrôle écrit sur le texte brut y trouverait sa propre
+ * documentation — il vérifierait ce qu'on **attend** de la route au lieu de ce qu'elle **fait**.
+ *
+ * La borne de [blocApres] s'applique : le `composable(` du lecteur suit celui des contenus du
+ * jour, donc le bloc est délimité et une assertion ne peut pas être satisfaite par la porte
+ * voisine.
+ */
+internal fun quotidienDeLaCoquille(): String =
+    sansCommentaires(blocApres("route = AppRoutes.DAILY_PATTERN,"))
+
 /** Le texte privé de ses lignes de commentaire — celles qui commencent par `//`. */
 internal fun sansCommentaires(texte: String): String =
     texte.lines().filterNot { it.trimStart().startsWith("//") }.joinToString("\n")

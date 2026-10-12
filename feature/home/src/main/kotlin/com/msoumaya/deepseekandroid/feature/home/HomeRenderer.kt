@@ -201,16 +201,14 @@ internal object HomeRenderer {
     /**
      * La ligne de provenance d'une vignette : `source`, ou `source · référence`.
      *
-     * C'est `[item.source, item.reference].filter(Boolean).join(' · ')` de l'original. Le filtre
-     * n'est pas décoratif : sans lui, une référence absente laisserait un **séparateur orphelin** —
-     * « Sahih · » —, qui se lit comme une donnée manquante plutôt que comme une absence normale.
-     * Le séparateur est le point médian entouré d'espaces, celui de la source.
+     * **La règle est dans le domaine, et pas ici.** Elle a été écrite d'abord dans ce fichier ; la
+     * fiche de l'écran de liste et le texte partagé la veulent aussi, et trois copies auraient fini
+     * par diverger sur ce qui se voit — un séparateur orphelin, ou une référence perdue. C'est
+     * désormais [DailyContentsText.sourceLine], et ce relais est ce qui garde le nom court dans ce
+     * fichier sans garder la règle en double.
      */
     private fun sourceLine(content: DailyContent): String =
-        listOfNotNull(
-            content.source.takeIf { it.isNotEmpty() },
-            content.reference?.takeIf { it.isNotEmpty() },
-        ).joinToString(" · ")
+        DailyContentsText.sourceLine(content.source, content.reference)
 
     /**
      * Les deux cartes de quiz de l'accueil.

@@ -26,6 +26,7 @@ import com.msoumaya.deepseekandroid.core.domain.StudySession
 import com.msoumaya.deepseekandroid.core.model.Range
 import com.msoumaya.deepseekandroid.core.model.ReviewCategory
 import com.msoumaya.deepseekandroid.core.design.theme.AppTheme
+import com.msoumaya.deepseekandroid.feature.dailycontents.DailyContentsScreen
 import com.msoumaya.deepseekandroid.feature.home.HomeScreen
 import com.msoumaya.deepseekandroid.feature.profile.GoalScreen
 import com.msoumaya.deepseekandroid.feature.profile.ProfileMode
@@ -162,14 +163,15 @@ fun AppScaffold(
  *
  * Les cinq onglets sont branchés sur leur écran, et les écrans plein écran construits le sont
  * aussi. Les routes **sans écran** ne sont pas déclarées ici : une route déclarée mais non servie
- * planterait à la première navigation. C'est pourquoi `DAILY` et `ADMIN` — déjà nommées dans
- * [AppRoutes] — n'apparaissent pas ci-dessous. Elles attendent leur écran, et les rappels qui y
- * mèneraient restent à leur valeur par défaut : un appui ferait planter l'application, ce qui est
- * pire qu'un bouton sans effet.
+ * planterait à la première navigation. C'est pourquoi `ADMIN` — déjà nommée dans [AppRoutes] —
+ * n'apparaît pas ci-dessous. Elle attend son écran, et les rappels qui y mèneraient restent à leur
+ * valeur par défaut : un appui ferait planter l'application, ce qui est pire qu'un bouton sans
+ * effet.
  *
- * `RECITATIONS` a quitté cette liste avec l'écran de la liste des récitations : la route est
- * servie, et le rappel du tableau de bord la nomme. C'est le couple qui compte — servir la route
- * **et** brancher le rappel —, et `AppScaffoldReviewEntryTest` tient les deux.
+ * `RECITATIONS` puis `DAILY` ont quitté cette liste avec leur écran : la route est servie, et le
+ * rappel qui la nomme est branché. C'est le couple qui compte — servir la route **et** brancher le
+ * rappel —, et `AppScaffoldRecitationsEntryTest` tient le premier, `AppScaffoldDailyEntryTest` le
+ * second.
  */
 @Composable
 private fun AppNavHost(
@@ -217,6 +219,17 @@ private fun AppNavHost(
                 // La carte « Amis » **bascule** vers l'onglet au lieu d'empiler un écran : c'est
                 // le geste de la barre basse, et l'original écrit `setTab('Amis')`.
                 onOpenFriends = { navController.navigateToTab(AppDestination.FRIENDS) },
+                // Le carrousel des contenus du jour ouvre la **liste**, sur une fiche. C'était le
+                // dernier rappel inerte de l'accueil : l'écran de liste n'existait pas, et le
+                // geste restait sans destination plutôt que de mener ailleurs. La route est
+                // servie juste en dessous.
+                //
+                // `launchSingleTop` comme pour le Quiz et les récitations : appuyer deux fois ne
+                // doit pas empiler deux listes, sans quoi le retour ramènerait sur une copie de
+                // l'écran qu'on vient de quitter.
+                onOpenDaily = { id ->
+                    navController.navigate(AppRoutes.dailyRoute(id)) { launchSingleTop = true }
+                },
             )
         }
         // L'écran « Coran » : la liste des sourates, celle des Juz', celle des Hizb. Il est porté
@@ -332,6 +345,38 @@ private fun AppNavHost(
             RecitationsScreen(
                 onClose = { navController.popBackStack() },
                 initialSharingId = aPartager,
+            )
+        }
+
+        // Les contenus du jour : la liste, et la fiche qu'elle ouvre. Écran **plein écran**, comme
+        // le tableau de bord et les récitations — l'original le posait par-dessus tout, et sa
+        // condition d'en-tête le nommait (`!dailyOpen`) —, donc il porte lui-même son bouton de
+        // retour, et c'est la coquille qui décide où l'on retourne : un écran qui appellerait
+        // `popBackStack` lui-même ne pourrait plus être ouvert autrement que depuis la pile.
+        //
+        // C'est le **motif** qui est déclaré, et non la route nue : sans lui, « ouvrir la liste »
+        // et « ouvrir la liste **sur** un contenu » seraient la même destination, et le geste du
+        // carrousel de l'accueil n'ouvrirait jamais la fiche qu'il vise. La valeur vide tient lieu
+        // de sentinelle — aucun identifiant n'est vide —, donc `quotidien` seul reste une route
+        // valide, et c'est ce qui permet d'ouvrir la liste sans rien avoir à ouvrir.
+        composable(
+            route = AppRoutes.DAILY_PATTERN,
+            arguments = listOf(
+                navArgument(AppRoutes.DAILY_CONTENT) {
+                    type = NavType.StringType
+                    defaultValue = ""
+                },
+            ),
+        ) { entry ->
+            DailyContentsScreen(
+                onClose = { navController.popBackStack() },
+                // `takeIf { it.isNotEmpty() }` : un argument absent n'arrive pas en `null` mais en
+                // chaîne vide, et une chaîne vide n'est pas un identifiant. La laisser passer
+                // ferait chercher un contenu qui n'existe pas — l'écran s'ouvrirait normalement,
+                // ce qui est le propre d'un défaut muet.
+                initialId = entry.arguments
+                    ?.getString(AppRoutes.DAILY_CONTENT)
+                    ?.takeIf { it.isNotEmpty() },
             )
         }
 

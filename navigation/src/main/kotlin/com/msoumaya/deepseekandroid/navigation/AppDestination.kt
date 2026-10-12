@@ -261,6 +261,36 @@ object AppRoutes {
     /** Les contenus du jour : invocation, hadith, verset à méditer. */
     const val DAILY = "quotidien"
 
+    /**
+     * Le contenu **à ouvrir** en arrivant, en argument **facultatif** de la route.
+     *
+     * Il vient du carrousel de l'accueil : l'original y branche `openDaily(id)`, qui ouvre la
+     * liste **sur une fiche**. C'est donc la même route que « ouvrir la liste », avec un argument
+     * de plus — et cet argument décide aussi de ce que fait le bouton « Retour » de la fiche : une
+     * fiche ouverte par son identifiant ressort de l'écran entier, une fiche ouverte depuis la
+     * liste y ramène. Voir `DailyContentsListRenderer.detailBackExits`.
+     */
+    const val DAILY_CONTENT = "contenu"
+
+    /**
+     * Le motif de la route des contenus du jour, argument compris.
+     *
+     * L'argument est **facultatif**, comme ceux du lecteur, du Quiz et des récitations :
+     * `quotidien` seul reste une route valide, et c'est ce qui permet d'ouvrir la liste sans rien
+     * avoir à ouvrir. [baseRoute] en rend `quotidien`, qui reste donc dans [fullScreen].
+     */
+    val DAILY_PATTERN: String = "$DAILY?$DAILY_CONTENT={$DAILY_CONTENT}"
+
+    /**
+     * La route des contenus du jour, ouverte sur une fiche, ou sur la liste seule.
+     *
+     * Construite ici, et non recollée chez l'appelant : c'est la règle déjà écrite pour
+     * [quizRoute], [readerRoute] et [recitationsRoute], et la divergence serait **muette** — la
+     * navigation n'échouerait pas, elle ouvrirait la liste au lieu de la fiche visée.
+     */
+    fun dailyRoute(contentId: String? = null): String =
+        if (contentId == null) DAILY else "$DAILY?$DAILY_CONTENT=$contentId"
+
     /** Les récitations partagées avec les amis. */
     const val RECITATIONS = "recitations"
 

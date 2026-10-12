@@ -36,8 +36,8 @@ class AppScaffoldReviewEntryTest {
     @Test
     fun `la route du tableau de bord est servie`() {
         // Une route nommée mais non servie ferait planter la première navigation. C'est
-        // exactement ce que la coquille s'interdit, et la raison pour laquelle `DAILY` et `ADMIN`
-        // n'y figurent pas — `RECITATIONS` en est sortie avec son écran.
+        // exactement ce que la coquille s'interdit, et la raison pour laquelle `ADMIN` n'y figure
+        // pas — `RECITATIONS` puis `DAILY` en sont sorties avec leur écran.
         assertTrue(
             sourceDeLaCoquille().contains("composable(AppRoutes.REVIEW) {"),
             "La route du tableau de bord n'est plus servie : la première navigation vers elle " +

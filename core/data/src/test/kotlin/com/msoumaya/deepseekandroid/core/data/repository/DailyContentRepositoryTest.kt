@@ -472,6 +472,167 @@ class DailyContentRepositoryTest {
         assertEquals(avant, depot.state.value)
     }
 
+    // ------------------------------------------------------------------ la page de favoris
+
+    @Test
+    fun `une liste d'identifiants vide ne demande rien`() = runTest {
+        // La garde compte plus qu'elle n'en a l'air : `favoritePage` rend `[]` **avant** d'appeler
+        // la source, donc l'onglet « Mes favoris » d'un appareil sans projet — ou d'une personne
+        // qui n'a rien mis en favori — affiche son etat vide au lieu d'une erreur. Sans elle, la
+        // requete partirait avec un `in.()` vide, que PostgREST refuse.
+        val source = FakeDailyContentSource()
+        source.favoritePage = listOf(contenu("f-1", DailyContentType.INVOCATION))
+
+        val depot = nouveauDepot(source)
+        settle(depot)
+
+        val vide = depot.favoritePage(emptySet(), DailyContentType.INVOCATION)
+
+        assertTrue(vide.isEmpty(), "Une liste d'identifiants vide doit rendre une liste vide.")
+        assertTrue(
+            source.favoritesAsked.isEmpty(),
+            "La source a ete interrogee avec une liste d'identifiants vide : PostgREST refuse un " +
+                "`in.()` vide, et l'onglet « Mes favoris » annoncerait une panne la ou il n'y a " +
+                "rien a montrer.",
+        )
+
+        // **Le temoin.** Sans lui, le controle precedent serait vrai meme si `favoritePage`
+        // n'appelait jamais la source — il serait vert pour la mauvaise raison. Le meme appel avec
+        // un identifiant **doit** l'atteindre.
+        depot.favoritePage(setOf("f-1"), DailyContentType.INVOCATION)
+        assertEquals(
+            listOf("f-1"),
+            source.favoritesAsked.map { it.ids.single() },
+            "Le temoin a echoue : ce banc ne mesure pas ce qu'il croit mesurer.",
+        )
+    }
+
+    @Test
+    fun `la page de favoris transmet les identifiants et le filtre`() = runTest {
+        val source = FakeDailyContentSource()
+        source.favoritePage = listOf(contenu("f-1", DailyContentType.INVOCATION))
+
+        val depot = nouveauDepot(source)
+        settle(depot)
+        source.favoritesAsked.clear()
+
+        val page = depot.favoritePage(
+            ids = setOf("f-1", "f-2"),
+            type = DailyContentType.INVOCATION,
+            categoryId = "cat-9",
+            offset = 30,
+        )
+
+        assertEquals(listOf("f-1"), page.map { it.id })
+
+        // Les identifiants sont compares en **ensemble** : l'ordre d'un `in.()` est sans effet sur
+        // la reponse, et dependre ici de l'ordre d'iteration d'un `setOf` ferait echouer ce banc
+        // sur une implementation voisine mais correcte. Le reste est compare tel quel — c'est lui
+        // qui decide de la fenetre et du filtre.
+        val appel = source.favoritesAsked.single()
+        assertEquals(setOf("f-1", "f-2"), appel.ids.toSet())
+        assertEquals(DailyContentType.INVOCATION, appel.type)
+        assertEquals("cat-9", appel.categoryId)
+        assertEquals(30, appel.offset)
+    }
+
+    @Test
+    fun `sans projet configure la page de favoris est vide`() = runTest {
+        // Meme regle que pour la page publique : hors configuration, l'ecran doit pouvoir afficher
+        // son etat vide plutot que d'echouer une lecture qu'il n'a pas les moyens de faire.
+        val depot = nouveauDepot(source = null)
+        settle(depot)
+
+        assertTrue(
+            depot.favoritePage(setOf("f-1"), DailyContentType.REMINDER).isEmpty(),
+            "Sans projet configure, une page de favoris doit etre vide, et non lever.",
+        )
+    }
+
+    @Test
+    fun `une page de favoris en echec leve, et l'etat publie reste intact`() = runTest {
+        // Meme partage que pour la page publique : l'ecran de liste porte son propre message
+        // d'erreur, parce que lui seul sait ce qu'il avait a l'ecran. Le depot ne publie donc rien.
+        val source = FakeDailyContentSource()
+        source.dayEntries = listOf(contenu("serveur-1"))
+        source.failFavoritePage = RuntimeException("favoris indisponibles")
+
+        val depot = nouveauDepot(source)
+        settle(depot)
+        val avant = depot.state.value
+
+        val leve = runCatching<List<DailyContent>> {
+            depot.favoritePage(setOf("f-1"), DailyContentType.REMINDER)
+        }
+
+        assertTrue(
+            leve.isFailure,
+            "Une page de favoris en echec doit lever : l'ecran decide de son message.",
+        )
+        assertEquals(avant, depot.state.value)
+    }
+
+    // ------------------------------------------------------------------ le texte lisible
+
+    @Test
+    fun `le texte lisible d'une erreur est celui que le depot publie`() = runTest {
+        // `readable` existe pour que l'ecran de liste n'invente pas sa propre conversion : deux
+        // ecrans pourraient sinon montrer deux textes pour la **meme** panne — l'un le message du
+        // serveur, l'autre un `toString()` d'exception.
+        //
+        // Le controle passe par le chemin **reel** : la meme instance d'erreur, publiee par une
+        // lecture du jour en echec, est ensuite relue par `readable`. Comparer `readable` avec
+        // elle-meme serait vrai quoi qu'il arrive.
+        //
+        // **Le cas decisif est le message BLANC, et pas le message ordinaire.** Pour une exception
+        // ordinaire, `restMessage()` retombe sur `message` — donc `describe` et une lecture
+        // directe de `message` rendent la **meme** chose, et un controle qui s'y limiterait serait
+        // vert meme si `readable` cessait de passer par le depot. C'est le piege que
+        // `SocialSourceShapeTest` decrit deja pour `restMessage`. Ce qui separe les deux chemins
+        // est le **filtre du blanc**, et il ne s'observe que sur un message qui n'en porte pas.
+        // La campagne de falsification a rendu ce test FAUX avant qu'il ne soit ecrit ainsi.
+
+        // --- le message ordinaire : les deux chemins se confondent, et c'est normal ---
+        val ordinaire = RuntimeException("jour indisponible")
+        val sourceOrdinaire = FakeDailyContentSource()
+        sourceOrdinaire.failDay = ordinaire
+
+        val premier = nouveauDepot(sourceOrdinaire)
+        settle(premier)
+
+        assertNotNull(
+            premier.state.value.failure,
+            "Une lecture du jour en echec doit publier un message.",
+        )
+        assertEquals(
+            premier.state.value.failure,
+            premier.readable(ordinaire),
+            "`readable` ne dit pas la meme chose que ce que le depot publie : deux ecrans " +
+                "montreraient deux textes pour la meme panne.",
+        )
+
+        // --- le message blanc : le seul cas ou les deux chemins divergent ---
+        val blanc = RuntimeException("   ")
+        val sourceBlanche = FakeDailyContentSource()
+        sourceBlanche.failDay = blanc
+
+        val second = nouveauDepot(sourceBlanche)
+        settle(second)
+
+        assertEquals(
+            DailyContentsText.GENERIC_FAILURE,
+            second.state.value.failure,
+            "Un message fait d'espaces doit etre remplace par le repli du domaine.",
+        )
+        assertEquals(
+            second.state.value.failure,
+            second.readable(blanc),
+            "`readable` doit retomber sur le repli du domaine pour un message blanc : une lecture " +
+                "directe de `message` rendrait les espaces tels quels, et l'ecran afficherait un " +
+                "cadre vide la ou le depot publie le repli.",
+        )
+    }
+
     private companion object {
         /** Délai de garde de [settle], en nanosecondes. Le meme que les autres bancs du depot. */
         const val DELAI_DE_GARDE_NANOS = 5_000_000_000L

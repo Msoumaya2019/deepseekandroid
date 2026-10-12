@@ -69,10 +69,19 @@ fun AppCard(
      * rétrécirait la carte au lieu de son contenu, ce qui n'est pas la même chose.
      */
     padding: Dp = AppTheme.spacing.lg,
+    /**
+     * Rayon de la carte.
+     *
+     * Exposé parce qu'un écran de l'original s'en écarte : la fiche d'un contenu du jour porte
+     * **26** là où toutes les autres cartes portent le rayon du thème. C'est une valeur de la
+     * source, et non un arrondi à l'Android — la laisser hors du composant aurait obligé cet
+     * écran à redessiner une carte entière, ombre, bordure et fond compris, pour six pixels de
+     * rayon, et la recette aurait alors divergé de celle-ci au premier changement.
+     */
+    shape: Shape = RoundedCornerShape(AppTheme.radius.card),
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val colors = AppTheme.colors
-    val shape = RoundedCornerShape(AppTheme.radius.card)
 
     val surface = Modifier
         .then(if (spaced) Modifier.padding(bottom = bottomSpacing) else Modifier)

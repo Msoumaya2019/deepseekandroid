@@ -31,15 +31,17 @@ import kotlinx.serialization.Serializable
 // Le paramètre `admin` de `categories()` et `contents()` disparaît avec eux : il ne servait qu'à
 // lever le filtre `is_active`, ce que seul l'écran d'administration demandait.
 //
-// **Les favoris ne sont pas ici non plus.** `content_favorites` est une table **par compte**, et
-// elle porte sa propre règle de cache : une fenêtre de trente secondes et un dédoublonnage des
-// lectures concurrentes. Ils arrivent avec le geste qui les écrit, et non avec la lecture.
+// **Les favoris ne sont pas dans `content_favorites`.** Le **geste** qui les écrit vit dans
+// `DailyContentFavoritesRepository`, avec la table par compte et sa fenêtre de cache ; ici, il n'y
+// a que la **lecture paginée d'une liste d'identifiants** — `favoriteContents`, qui interroge
+// `daily_contents` comme les autres lectures. Les deux ne se confondent pas : l'un dit ce que
+// j'ai mis en favori, l'autre ce que ces identifiants désignent.
 // ---------------------------------------------------------------------------
 
 /**
  * Ce que les écrans demandent au serveur à propos des contenus du jour.
  *
- * Quatre méthodes, et chacune correspond à une fonction exportée de `services/dailyContents.ts`.
+ * Cinq méthodes, et chacune correspond à une fonction exportée de `services/dailyContents.ts`.
  */
 interface DailyContentSource {
 
@@ -75,6 +77,38 @@ interface DailyContentSource {
      * @param offset premier contenu de la page, à partir de zéro.
      */
     suspend fun contents(
+        type: DailyContentType,
+        categoryId: String? = null,
+        offset: Int = 0,
+    ): List<DailyContent>
+
+    /**
+     * Une page de contenus **parmi** [ids], d'un type, de la plus récente à la plus ancienne.
+     *
+     * C'est la lecture de l'onglet « Mes favoris ». Elle interroge `daily_contents` comme
+     * [contents], avec **deux** différences, toutes deux relevées à la source :
+     *
+     *  - **aucun filtre `is_active`.** L'original écrit `favoriteContents` sans lui, là où
+     *    `contents` l'applique. La divergence est reproduite, pas corrigée : un contenu mis en
+     *    favori puis **désactivé** par l'administration reste visible dans les favoris de la
+     *    personne qui l'avait gardé — ce qui se défend, un favori étant un choix de la personne —
+     *    et elle ne se voit qu'en comparant les deux requêtes ;
+     *  - **la fenêtre ne parcourt pas les identifiants dans l'ordre.** Le tri reste `created_at`
+     *    décroissant : une page de favoris mêle donc des contenus dont les identifiants ne sont
+     *    pas contigus, et l'ordre du geste n'est pas celui de la liste.
+     *
+     * **Le cas de la liste vide n'est pas traité ici**, et c'est délibéré : il l'est dans
+     * [com.msoumaya.deepseekandroid.core.data.repository.DailyContentRepository.favoritePage], où
+     * il se mesure sans réseau. L'original rend `[]` **avant** d'appeler `db()`, donc un appareil
+     * sans projet configuré affiche un onglet de favoris vide au lieu d'une erreur — et
+     * [ids] est donc **supposé non vide**.
+     *
+     * @param ids les identifiants retenus. Voir plus haut : la liste vide se traite en amont.
+     * @param categoryId catégorie à filtrer, ou `null` pour toutes.
+     * @param offset premier contenu de la page, à partir de zéro.
+     */
+    suspend fun favoriteContents(
+        ids: List<String>,
         type: DailyContentType,
         categoryId: String? = null,
         offset: Int = 0,

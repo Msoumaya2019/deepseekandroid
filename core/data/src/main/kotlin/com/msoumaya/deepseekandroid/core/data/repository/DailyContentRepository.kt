@@ -65,8 +65,10 @@ import java.util.concurrent.atomic.AtomicInteger
  *
  * **Il n'y a pas d'`ownerId`, et ce n'est pas un oubli.** Les contenus du jour sont **publics** :
  * les politiques de `supabase/daily-contents.sql` ouvrent la lecture à `anon`, et le cache n'est
- * donc pas par compte. L'identifiant du compte n'entrera ici qu'avec les **favoris**, qui sont, eux,
- * une table par compte.
+ * donc pas par compte. **Les favoris ne l'ont pas fait entrer non plus**, et cela se mesure : le
+ * compte est résolu par `DailyContentFavoritesRepository`, et [favoritePage] ne reçoit que des
+ * **identifiants** — ce dépôt ne sait toujours pas pour qui il lit, et c'est précisément ce qui lui
+ * permet de servir les favoris d'un **visiteur** comme ceux d'un compte, sans branche.
  */
 data class DailyContentsState(
 
@@ -243,6 +245,34 @@ class DailyContentRepository(
     ): List<DailyContent> = source?.contents(type, categoryId, offset).orEmpty()
 
     /**
+     * Une page de favoris, telle que le serveur la rend.
+     *
+     * **Une liste d'identifiants vide rend une liste vide, et ne demande rien.** La règle est
+     * celle de l'original, et elle compte plus qu'elle n'en a l'air : `favoriteContents` rend `[]`
+     * **avant** d'appeler `db()`, donc l'onglet « Mes favoris » d'un appareil sans projet
+     * configuré — ou d'une personne qui n'a rien mis en favori — affiche son état vide au lieu
+     * d'une erreur. Sans cette garde, la requête partirait avec un `in.()` vide que PostgREST
+     * refuse, et l'écran annoncerait une panne là où il n'y a rien à montrer. C'est aussi la
+     * raison pour laquelle elle ne peut pas vivre dans la source : c'est ici qu'elle se mesure,
+     * contre une source factice qui compte ses appels.
+     *
+     * Elle **lève** dans les mêmes conditions que [page], et pour la même raison : l'écran de
+     * liste porte son propre message d'erreur, parce que lui seul sait ce qu'il avait à l'écran.
+     *
+     * @param ids les identifiants retenus, **déjà** résolus par
+     *   [DailyContentFavoritesRepository] — ce dépôt ne connaît ni le compte ni sa liste.
+     */
+    suspend fun favoritePage(
+        ids: Set<String>,
+        type: DailyContentType,
+        categoryId: String? = null,
+        offset: Int = 0,
+    ): List<DailyContent> {
+        if (ids.isEmpty()) return emptyList()
+        return source?.favoriteContents(ids.toList(), type, categoryId, offset).orEmpty()
+    }
+
+    /**
      * Un contenu par son identifiant, ou `null` s'il n'existe pas — ou si aucun projet n'est
      * configuré.
      *
@@ -268,6 +298,22 @@ class DailyContentRepository(
             notice = if (empty) null else text,
         )
     }
+
+    /**
+     * Le texte lisible d'une erreur de lecture, pour l'écran qui l'a reçue.
+     *
+     * **Publique parce que [page], [favoritePage] et [content] lèvent.** Elles le font
+     * délibérément — l'écran de liste porte son propre message, parce que lui seul sait ce qu'il
+     * avait à l'écran —, mais elles laissent alors l'appelant convertir une erreur du serveur en
+     * texte affichable. Sans cette porte, chaque écran réinventerait la conversion, et deux écrans
+     * pourraient montrer deux textes différents pour la **même** panne — l'un le message du
+     * serveur, l'autre un `toString()` d'exception qui accole un bloc de débogage et l'adresse du
+     * projet.
+     *
+     * Elle ne dit rien de plus que ce que le dépôt publierait lui-même dans `failure` ou `notice` :
+     * c'est la même fonction qui répond, et c'est ce qui garantit l'accord.
+     */
+    fun readable(error: Throwable): String = describe(error)
 
     /**
      * Message lisible d'une erreur.

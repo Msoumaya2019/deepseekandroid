@@ -12,16 +12,18 @@ import com.msoumaya.deepseekandroid.core.model.DailyContentsSnapshot
  * ici ; ce fichier ne porte que les décisions prises **sur l'appareil**, et il n'en porte que
  * celles dont une erreur ne se verrait pas à l'œil.
  *
- * **Ce qui n'est pas ici, et pourquoi.** La composition du texte partagé, les trois façons
- * d'écrire la ligne de source, le repli du titre sur le nom du type et les quatre phrases de
- * l'écran sont des **libellés** : ils arrivent avec l'écran, comme ceux du Quiz et de l'espace
- * social. Une constante que personne n'affiche est une surface à relire sans preuve.
+ * **Ce qui n'est pas ici, et pourquoi.** La composition du texte partagé, les façons d'écrire la
+ * ligne de source, le repli du titre sur le nom du type et les phrases des deux écrans sont des
+ * **libellés** : ils vivent dans `DailyContentsText`, avec ceux du Quiz et de l'espace social, et
+ * les règles qui les assemblent vivent dans les renderers — `HomeRenderer.dailyCarousel` et
+ * `DailyContentsListRenderer`. Ce fichier ne porte que ce qui se paie en silence quand c'est faux.
  *
- * **Ce qui est ici, et pourquoi.** Trois règles qui ne se voient qu'en les mesurant : la taille
- * d'une page, la validité d'un document mis en cache, et le partage entre « rien à montrer » et
- * « rien n'a pu être lu ». Les trois se paient en silence quand elles sont fausses — une liste
- * qui s'arrête trop tôt, un rappel d'hier affiché comme celui du jour, et un message d'erreur
- * remplacé par une affirmation fausse.
+ * **Ce qui est ici, et pourquoi.** Quatre règles qui ne se voient qu'en les mesurant : la taille
+ * d'une page, la validité d'un document mis en cache, le partage entre « rien à montrer » et
+ * « rien n'a pu être lu », et l'existence d'une suite après une page. Elles se paient en silence
+ * quand elles sont fausses — une liste qui s'arrête trop tôt, un rappel d'hier affiché comme celui
+ * du jour, un message d'erreur remplacé par une affirmation fausse, et un bouton « Afficher la
+ * suite » qui ne ramène jamais rien.
  */
 object DailyContents {
 
@@ -83,6 +85,26 @@ object DailyContents {
      * cette fonction — la même que `Quiz.isEmpty`.
      */
     fun isEmpty(snapshot: DailyContentsSnapshot): Boolean = snapshot.entries.isEmpty()
+
+    /**
+     * Vrai si la page reçue peut avoir une **suite**.
+     *
+     * C'est `setMore(rows.length===30)` de l'original. Le serveur rend **au plus** [PAGE_SIZE]
+     * entrées — `range(offset, offset+29)` —, donc une page pleine est la seule qui puisse être
+     * suivie d'une autre ; une page plus courte est la dernière, et l'écran retire alors son bouton
+     * « Afficher la suite ».
+     *
+     * **La règle vit ici, à côté du nombre qu'elle lit**, et non dans l'écran : c'est le même
+     * nombre qui décide de la fenêtre demandée **et** de l'existence d'une suite, et deux copies
+     * finiraient par diverger. La divergence ne lèverait rien — elle se lirait comme une liste qui
+     * s'arrête au milieu, ou comme un bouton qui ne ramène jamais rien.
+     *
+     * Le test est une **égalité**, et non un `>=` : le serveur ne peut pas rendre plus que
+     * [PAGE_SIZE], et l'égalité dit donc la même chose sans laisser croire à un cas qui n'existe
+     * pas. Une page **vide** rend `false`, ce qui est le comportement voulu — il n'y a pas de suite
+     * après rien.
+     */
+    fun pageComplete(rows: List<DailyContent>): Boolean = rows.size == PAGE_SIZE
 
     /**
      * Les types que le carrousel de l'accueil affiche, **dans cet ordre**.

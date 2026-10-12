@@ -17,8 +17,9 @@ import kotlinx.coroutines.CompletableDeferred
 //
 // **Chaque refus est séparé.** Le contenu du jour et les catégories : un échec de l'un n'a pas les
 // mêmes conséquences que l'échec de l'autre, et une doublure qui refuserait tout d'un bloc ne les
-// distinguerait pas. Les deux lectures d'écran — la page et la fiche — ont chacune la leur, parce
-// qu'elles ne passent pas par l'état publié.
+// distinguerait pas. Les **trois** lectures d'écran — la page, la fiche, la page de favoris — ont
+// chacune la leur, parce qu'elles ne passent pas par l'état publié et que l'écran de liste décide
+// de son message pour chacune.
 //
 // **Deux crochets, et une raison chacun.** [probe] photographie l'état publié au moment précis où
 // le réseau est appelé — c'est la seule façon de mesurer que le **disque** est publié avant le
@@ -26,6 +27,14 @@ import kotlinx.coroutines.CompletableDeferred
 // appels, ce qui permet de tenir un rafraîchissement en cours et d'éprouver ce qui ne se mesure
 // pas avec une doublure qui répond instantanément.
 // ---------------------------------------------------------------------------
+
+/** Un appel de page de favoris, tel que la doublure l'a reçu. */
+internal data class FavoriteCall(
+    val ids: List<String>,
+    val type: DailyContentType,
+    val categoryId: String?,
+    val offset: Int,
+)
 
 /** Doublure en mémoire du service des contenus du jour. */
 internal class FakeDailyContentSource : DailyContentSource {
@@ -39,12 +48,16 @@ internal class FakeDailyContentSource : DailyContentSource {
     /** Ce que le serveur rendra pour une page. */
     var page: List<DailyContent> = emptyList()
 
+    /** Ce que le serveur rendra pour une page de favoris. */
+    var favoritePage: List<DailyContent> = emptyList()
+
     /** Ce que le serveur rendra pour une fiche. */
     var single: DailyContent? = null
 
     var failDay: Throwable? = null
     var failCategories: Throwable? = null
     var failPage: Throwable? = null
+    var failFavoritePage: Throwable? = null
     var failContent: Throwable? = null
 
     /** Les appels, dans leur ordre, sous une forme lisible par un test. */
@@ -61,6 +74,9 @@ internal class FakeDailyContentSource : DailyContentSource {
 
     /** Les pages demandées : type, catégorie, décalage. */
     val pagesAsked = mutableListOf<Triple<DailyContentType, String?, Int>>()
+
+    /** Les pages de favoris demandées, dans l'ordre. */
+    val favoritesAsked = mutableListOf<FavoriteCall>()
 
     /** Les identifiants demandés à la fiche. */
     val idsAsked = mutableListOf<String>()
@@ -91,6 +107,19 @@ internal class FakeDailyContentSource : DailyContentSource {
         gate?.await()
         failPage?.let { throw it }
         return page
+    }
+
+    override suspend fun favoriteContents(
+        ids: List<String>,
+        type: DailyContentType,
+        categoryId: String?,
+        offset: Int,
+    ): List<DailyContent> {
+        calls += "favoris"
+        favoritesAsked += FavoriteCall(ids, type, categoryId, offset)
+        gate?.await()
+        failFavoritePage?.let { throw it }
+        return favoritePage
     }
 
     override suspend fun content(id: String): DailyContent? {
